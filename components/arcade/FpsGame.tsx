@@ -54,7 +54,9 @@ export function FpsGame() {
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   const [best, setBest] = useState(0);
   const [sensitivity, setSensitivityState] = useState(1.5);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
+  const [pseudoFs, setPseudoFs] = useState(false); // CSS fallback (iOS Safari)
+  const fsActive = fullscreen || pseudoFs;
 
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
   const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, throwGrenade } = useFpsLoop(canvasRef, gameRef, mode === 'play', onSnapshot);
@@ -87,20 +89,49 @@ export function FpsGame() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  // Pseudo-fullscreen (iOS fallback): lock page scroll while the CSS overlay is
+  // covering the viewport, and let the hardware Back / Esc key drop out of it.
+  useEffect(() => {
+    if (!pseudoFs) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPseudoFs(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [pseudoFs]);
+
   const toggleFullscreen = useCallback(() => {
     const el = wrapRef.current;
     if (!el) return;
+    // Already in some fullscreen → leave it.
     if (document.fullscreenElement) {
       document.exitFullscreen?.();
-    } else {
-      el.requestFullscreen?.()
+      setPseudoFs(false);
+      return;
+    }
+    if (pseudoFs) {
+      setPseudoFs(false);
+      return;
+    }
+    // Prefer the real API; on iOS Safari (no element fullscreen) or a rejection,
+    // fall back to the CSS pseudo-fullscreen overlay.
+    const canReal = document.fullscreenEnabled && typeof el.requestFullscreen === 'function';
+    if (canReal) {
+      el.requestFullscreen()
         .then(() => {
           // Best-effort landscape lock on phones; ignore where unsupported.
           (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.('landscape').catch(() => {});
         })
-        .catch(() => {});
+        .catch(() => setPseudoFs(true));
+    } else {
+      setPseudoFs(true);
     }
-  }, []);
+  }, [pseudoFs]);
 
   const startLevel = useCallback(
     (level: number, lo: Loadout, maxHp: number) => {
@@ -182,7 +213,11 @@ export function FpsGame() {
   }, [dead]);
 
   return (
-    <div ref={wrapRef} className="flex w-full flex-col items-center gap-4 bg-black">
+    <div
+      ref={wrapRef}
+      className={`flex w-full flex-col items-center gap-4 bg-black ${pseudoFs ? 'fixed inset-0 z-[999] justify-center overflow-auto p-2' : ''}`}
+      style={pseudoFs ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
+    >
       <div className="flex w-full max-w-5xl items-center justify-between px-1">
         <h1 className="font-pixel text-[11px] text-[#7fdfff] sm:text-[13px]">STARSHELL</h1>
         <div className="flex items-center gap-3">
@@ -190,9 +225,9 @@ export function FpsGame() {
             type="button"
             onClick={toggleFullscreen}
             className="min-h-[32px] font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]"
-            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
-            {fullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
+            {fsActive ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
           </button>
           <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
             ◂ EXIT
