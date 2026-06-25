@@ -76,6 +76,7 @@ export function useFpsLoop(
   const lookDY = useRef(0);
   const fireHeld = useRef(false);
   const zoomLevel = useRef(0); // 0 = hip, 1 = zoom, 2 = deep zoom (right-click cycles)
+  const sens = useRef(1); // look-sensitivity multiplier (user-adjustable)
   const reloadReq = useRef(false);
   const throwReq = useRef(false);
   const prevFire = useRef(false);
@@ -93,6 +94,9 @@ export function useFpsLoop(
   }, []);
   const cycleZoom = useCallback(() => {
     zoomLevel.current = (zoomLevel.current + 1) % 3;
+  }, []);
+  const setSensitivity = useCallback((v: number) => {
+    sens.current = v;
   }, []);
   const throwGrenade = useCallback(() => {
     throwReq.current = true;
@@ -282,12 +286,13 @@ export function useFpsLoop(
           prevPos.z = g.player.z;
         }
         const p = g.player;
+        const ls = LOOK_SENS * sens.current;
         if (lookDX.current !== 0) {
-          p.yaw -= lookDX.current * LOOK_SENS;
+          p.yaw -= lookDX.current * ls;
           lookDX.current = 0;
         }
         if (lookDY.current !== 0) {
-          p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch - lookDY.current * LOOK_SENS));
+          p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch - lookDY.current * ls));
           lookDY.current = 0;
         }
         let fwd = touchMove.current.fwd;
@@ -642,5 +647,5 @@ export function useFpsLoop(
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, throwGrenade };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, throwGrenade };
 }

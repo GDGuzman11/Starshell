@@ -41,6 +41,7 @@ function saveBest(level: number) {
  */
 export function FpsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<FpsGameState | null>(null);
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
   const [mode, setMode] = useState<Mode>('menu');
@@ -52,18 +53,54 @@ export function FpsGame() {
   const [run, setRun] = useState({ level: 1, gold: 0, maxHp: 100 });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   const [best, setBest] = useState(0);
+  const [sensitivity, setSensitivityState] = useState(1.5);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, throwGrenade } = useFpsLoop(canvasRef, gameRef, mode === 'play', onSnapshot);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
     try {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
+      const s = Number(localStorage.getItem('starshell.sens'));
+      if (Number.isFinite(s) && s > 0) setSensitivityState(s);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, throwGrenade } = useFpsLoop(canvasRef, gameRef, mode === 'play', onSnapshot);
+  // Keep the loop's look multiplier + the saved value in sync with the slider.
+  useEffect(() => {
+    setSensitivity(sensitivity);
+    try {
+      localStorage.setItem('starshell.sens', String(sensitivity));
+    } catch {
+      /* ignore */
+    }
+  }, [sensitivity, setSensitivity]);
+
+  // Track real fullscreen state (covers the OS/escape exit too).
+  useEffect(() => {
+    const onFs = () => setFullscreen(document.fullscreenElement != null);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      el.requestFullscreen?.()
+        .then(() => {
+          // Best-effort landscape lock on phones; ignore where unsupported.
+          (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.('landscape').catch(() => {});
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const startLevel = useCallback(
     (level: number, lo: Loadout, maxHp: number) => {
@@ -145,12 +182,22 @@ export function FpsGame() {
   }, [dead]);
 
   return (
-    <div className="flex w-full flex-col items-center gap-4">
+    <div ref={wrapRef} className="flex w-full flex-col items-center gap-4 bg-black">
       <div className="flex w-full max-w-5xl items-center justify-between px-1">
         <h1 className="font-pixel text-[11px] text-[#7fdfff] sm:text-[13px]">STARSHELL</h1>
-        <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
-          ◂ EXIT
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="min-h-[32px] font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]"
+            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {fullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
+          </button>
+          <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
+            ◂ EXIT
+          </Link>
+        </div>
       </div>
 
       <CRTFrame>
@@ -211,6 +258,20 @@ export function FpsGame() {
               ))}
             </div>
 
+            <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">
+              LOOK SENSITIVITY · {sensitivity.toFixed(1)}×
+            </p>
+            <input
+              type="range"
+              min={0.3}
+              max={4}
+              step={0.1}
+              value={sensitivity}
+              onChange={(e) => setSensitivityState(Number(e.target.value))}
+              aria-label="Look sensitivity"
+              className="mt-2 h-1.5 w-56 cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
+            />
+
             <button type="button" onClick={() => { setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
               Loadout ▸
             </button>
@@ -240,6 +301,7 @@ export function FpsGame() {
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onNext={() => { const next = run.level + 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp); }}
+            onExit={() => setMode('menu')}
           />
         )}
 
