@@ -121,8 +121,8 @@ export function useFpsLoop(
     let sprites: THREE.Sprite[] = [];
     let barBg: THREE.Sprite[] = [];
     let barFill: THREE.Sprite[] = [];
-    let texA: THREE.CanvasTexture | null = null;
-    let texB: THREE.CanvasTexture | null = null;
+    let enemyTexes: THREE.CanvasTexture[] = []; // [runA, runB, fire, crouch]
+    let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
     const grenades: Grenade[] = [];
@@ -148,12 +148,10 @@ export function useFpsLoop(
       sprites = [];
       barBg = [];
       barFill = [];
-      texA?.dispose();
-      texB?.dispose();
+      for (const t of enemyTexes) t.dispose();
+      enemyTexes = [];
       for (const t of bossTexes) t.dispose();
       bossTexes = [];
-      texA = null;
-      texB = null;
       for (const t of tracers) {
         world?.scene.remove(t.line);
         t.geo.dispose();
@@ -180,11 +178,11 @@ export function useFpsLoop(
         t.minFilter = THREE.NearestFilter;
         return t;
       };
-      texA = mk(enemyTex(0));
-      texB = mk(enemyTex(1));
+      enemyTexes = [0, 1, 2, 3].map((f) => mk(enemyTex(f)));
+      prevEnemyXZ = g.enemies.map((e) => ({ x: e.x, z: e.z }));
       const bossCache: Partial<Record<string, THREE.CanvasTexture>> = {};
       sprites = g.enemies.map((e) => {
-        let map = texA!;
+        let map = enemyTexes[0];
         let sx = 1.7;
         let sy = 2.3;
         if (e.boss) {
@@ -664,6 +662,7 @@ export function useFpsLoop(
           // Status timers + burn damage-over-time.
           for (const e of g.enemies) {
             if (e.health <= 0) continue;
+            if (e.muzzle > 0) e.muzzle -= dt;
             if (e.stunT > 0) e.stunT -= dt;
             if (e.slowT > 0) e.slowT -= dt;
             if (e.blindT > 0) e.blindT -= dt;
@@ -714,12 +713,25 @@ export function useFpsLoop(
           barBg[i].visible = showBar;
           barFill[i].visible = showBar;
           if (!alive) continue;
+          // How fast is this bot actually moving (drives run vs stand pose)?
+          const pe = prevEnemyXZ[i] ?? { x: e.x, z: e.z };
+          const moveSpeed = Math.hypot(e.x - pe.x, e.z - pe.z) / Math.max(dt, 0.001);
+          prevEnemyXZ[i] = { x: e.x, z: e.z };
           const cy = e.boss ? BOSSES[e.boss].scale : 1.15;
-          const bob = Math.abs(Math.sin(e.step * 3.0)) * (e.boss ? 0.3 : 0.14);
+          const moving = moveSpeed > 1.4;
+          // Running bots bob; firing / crouched / standing bots stay steady.
+          const bob = e.boss ? Math.abs(Math.sin(e.step * 3.0)) * 0.3 : moving ? Math.abs(Math.sin(e.step * 3.0)) * 0.14 : 0;
           s.position.set(e.x, e.y + cy + bob, e.z);
           const mat = s.material as THREE.SpriteMaterial;
           if (!e.boss) {
-            const want = Math.floor(e.step * 2.2) % 2 === 0 ? texA : texB;
+            // Pose from behaviour: firing → fire, moving → run cycle, alert and
+            // holding → crouch/peek, otherwise an idle stand.
+            let frame: number;
+            if (e.muzzle > 0) frame = 2;
+            else if (moving) frame = Math.floor(e.step * 2.2) % 2 === 0 ? 0 : 1;
+            else if (e.state === 'alert') frame = 3;
+            else frame = 0;
+            const want = enemyTexes[frame];
             if (mat.map !== want) {
               mat.map = want;
               mat.needsUpdate = true;

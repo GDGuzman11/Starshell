@@ -100,10 +100,10 @@ function shell(boxes: Box[], cx: number, cz: number, half: number, bw: number, y
 
 const FLOOR_H = 3; // height between floors
 
-/** Multi-floor walled building. Each upper floor is a mezzanine over the back
- *  half (the open front is the access shaft + shoot-down). An external ladder
- *  climbs ground→F1, then an interior ladder chains up each remaining floor.
- *  Top deck has rails. `floors` = number of levels (ground counts as one). */
+/** Multi-floor walled building. Every floor is a FULL deck (walls on 3 sides,
+ *  open front −z). A switchback of external front ladders connects each floor to
+ *  the one above it: you reach the next ladder by walking across the floor you
+ *  just climbed onto. Top deck has rails. `floors` = number of levels. */
 function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: number, floors: number): void {
   const half = bw / 2;
   const slab = 0.3;
@@ -111,15 +111,17 @@ function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
   const top = roof + 0.6;
   columns(boxes, cx, cz, half, top);
   for (let f = 0; f < floors - 1; f++) shell(boxes, cx, cz, half, bw, f * FLOOR_H); // story walls
-  // ground floor is the slab at y=0; upper floors are back-half mezzanines
+  // Full floor decks for every upper level (the ground is the world floor).
   for (let f = 1; f < floors; f++) {
-    boxes.push({ x: cx, y: f * FLOOR_H - slab / 2, z: cz + half / 2, sx: bw, sy: slab, sz: half, tex: 3 });
+    boxes.push({ x: cx, y: f * FLOOR_H - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
   }
-  // external ground → 1st floor ladder (front face)
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: FLOOR_H + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
-  // interior ladders chaining each upper floor through the open front shaft
-  for (let f = 1; f < floors - 1; f++) {
-    ladders.push({ x: cx, z: cz - 0.5, y0: f * FLOOR_H, y1: (f + 1) * FLOOR_H + 0.5, sx: 1, sz: 0.9, exX: 0, exZ: 1 });
+  // One ladder per floor transition, staggered across the open front face so the
+  // run is a switchback: climb one, walk to the next, climb again.
+  const span = bw * 0.6;
+  for (let f = 0; f < floors - 1; f++) {
+    const frac = floors - 1 <= 1 ? 0.5 : f / (floors - 2);
+    const lx = cx - span / 2 + frac * span;
+    ladders.push({ x: lx, z: cz - half - 0.35, y0: f * FLOOR_H, y1: (f + 1) * FLOOR_H + 0.5, sx: 0.9, sz: 0.5, exX: 0, exZ: 1 });
   }
   // roof rails (3 sides, open front −z)
   boxes.push({ x: cx - half, y: roof + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });

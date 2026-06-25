@@ -77,12 +77,13 @@ export function groundTex(): Tex {
   return c;
 }
 
-/** A billboard ALIEN sprite (transparent bg). `frame` (0/1) alternates the
- *  limbs for a running gait. Bulbous head, big glowing eyes, thin tentacle
- *  limbs — sickly green/violet void-creature. */
+/** A billboard ALIEN SOLDIER sprite (transparent bg), drawn front-on so it
+ *  reads from any angle. `frame` selects the pose: 0/1 = running stride, 2 =
+ *  firing (gun raised + muzzle flash), 3 = crouched (hunkered, peeking). An
+ *  armoured void-trooper: skull-helm, glowing eyes, chest core, rifle held up. */
 export function enemyTex(frame: number): Tex {
-  const W = 32;
-  const H = 48;
+  const W = 40;
+  const H = 54;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -91,34 +92,79 @@ export function enemyTex(frame: number): Tex {
     x.fillStyle = col;
     x.fillRect(xx, yy, w, h);
   };
-  const body = '#6a9a4a';
-  const head = '#5c8a3e';
-  const dark = '#2a3a22';
+  const skin = '#6a9a4a';
+  const skinD = '#466930';
+  const armor = '#2c3340';
+  const armorH = '#3e4a5e';
+  const dark = '#161b24';
   const eye = '#c8ff5a';
-  const f = frame ? 1 : 0;
+  const core = '#aef5c8';
+  const gun = '#222834';
+  const gunD = '#12151d';
+  const flashO = '#ffae3a';
+  const flashC = '#fff6c8';
 
-  // antennae
-  px(11, 2, 1, 5, dark);
-  px(20, 2, 1, 5, dark);
-  // bulbous head
-  px(9, 6, 14, 12, head);
-  px(7, 9, 18, 7, head);
-  // big glowing eyes
-  px(11, 10, 4, 5, eye);
-  px(17, 10, 4, 5, eye);
-  px(12, 11, 1, 2, '#ffffff');
-  px(18, 11, 1, 2, '#ffffff');
-  // neck + narrow torso
-  px(14, 18, 4, 3, body);
-  px(11, 21, 10, 16, body);
-  // belly glow
-  px(14, 27, 4, 5, '#aef5c8');
-  // tentacle arms (alternate per frame)
-  px(6, 22 + f * 3, 3, 11, dark);
-  px(23, 22 + (1 - f) * 3, 3, 11, dark);
-  // legs (alternate stride per frame)
-  px(11 + (f ? 2 : -1), 37, 3, 10, dark);
-  px(18 + (f ? -1 : 2), 37, 3, 10, dark);
+  const crouch = frame === 3;
+  const fire = frame === 2;
+  const yo = crouch ? 7 : 0; // drop the upper body when crouching
+
+  // head: antennae, skull-helm, glowing eyes, breather
+  px(15, 1 + yo, 1, 4, skinD);
+  px(24, 1 + yo, 1, 4, skinD);
+  px(14, 4 + yo, 12, 9, skin);
+  px(12, 6 + yo, 16, 6, skin);
+  px(13, 12 + yo, 14, 2, skinD);
+  px(15, 8 + yo, 4, 3, eye);
+  px(21, 8 + yo, 4, 3, eye);
+  px(16, 9 + yo, 1, 1, '#ffffff');
+  px(22, 9 + yo, 1, 1, '#ffffff');
+  px(18, 13 + yo, 4, 2, dark);
+
+  // torso: armour, shoulder pads, glowing chest core
+  px(11, 16 + yo, 18, 16, armor);
+  px(11, 16 + yo, 18, 2, armorH);
+  px(8, 16 + yo, 5, 5, armorH);
+  px(27, 16 + yo, 5, 5, armorH);
+  px(18, 22 + yo, 4, 5, core);
+  px(11, 28 + yo, 18, 1, dark);
+
+  // arms + rifle held up across the chest (barrel to the viewer's left)
+  px(8, 21 + yo, 4, 7, skin);
+  px(28, 21 + yo, 4, 7, skin);
+  const gy = 24 + yo;
+  px(24, gy, 7, 5, gunD); // receiver / stock
+  px(12, gy + 1, 14, 4, gun); // body
+  px(3, gy + 2, 11, 2, gunD); // barrel
+  px(18, gy - 2, 2, 2, gun); // sight
+  px(21, gy + 5, 3, 4, gunD); // magazine
+  px(22, gy + 1, 3, 4, skinD); // trigger hand
+  px(11, gy + 1, 3, 4, skinD); // fore hand
+  if (fire) {
+    px(0, gy, 5, 4, flashO);
+    px(1, gy + 1, 3, 2, flashC);
+  }
+
+  // legs: stride / planted / crouched
+  if (crouch) {
+    px(12, 39, 6, 7, skin);
+    px(22, 39, 6, 7, skin);
+    px(11, 45, 6, 4, skinD);
+    px(23, 45, 6, 4, skinD);
+    px(10, 48, 7, 3, dark);
+    px(23, 48, 7, 3, dark);
+  } else if (fire) {
+    px(13, 32, 6, 15, skin);
+    px(21, 32, 6, 15, skin);
+    px(12, 46, 7, 4, dark);
+    px(21, 46, 7, 4, dark);
+  } else {
+    const fwdX = frame ? 6 : -3;
+    const bwdX = frame ? -3 : 6;
+    px(13 + bwdX, 32, 6, 13, skinD); // back leg (behind, darker)
+    px(13 + fwdX, 32, 6, 14, skin); // forward leg
+    px(13 + bwdX, 44, 7, 4, dark);
+    px(12 + fwdX, 45, 7, 4, dark);
+  }
   return c;
 }
 

@@ -30,6 +30,8 @@ export interface Enemy {
   side: 1 | -1; // which way this bot flanks/orbits
   barUntil: number; // show a health bar until this timestamp (set on hit)
   boss: BossKind | null;
+  track: number; // seconds of continuous line-of-sight (accuracy zeroes in)
+  muzzle: number; // seconds left on the firing pose / muzzle flash
   // Throwable-applied status (timers, seconds). Decremented by the game loop.
   stunT: number; // frozen: no move, no fire
   slowT: number; // movement at ~45%
@@ -47,7 +49,6 @@ export type BossKind = 'xeno' | 'warrior' | 'octopus';
 export interface BossDef {
   name: string;
   health: number;
-  speed: number;
   scale: number; // sprite size vs a regular alien (~4×)
   radius: number; // collision/hit radius
   meleeRange: number;
@@ -58,10 +59,12 @@ export interface BossDef {
   acc: number; // hit chance (they barely miss)
   color: number; // ranged tracer colour
 }
+// Damage tuned to ~2× a normal alien hit (~10), scaled per boss for identity;
+// bosses also move at exactly 2× the normal enemy speed (applied below).
 export const BOSSES: Record<BossKind, BossDef> = {
-  xeno: { name: 'XENOMORPH', health: 3500, speed: 9, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 34, meleeRate: 0.7, rangeDmg: 16, rangeRate: 0.6, acc: 0.85, color: 0x9cff6a },
-  warrior: { name: 'WARLORD', health: 4000, speed: 8, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 42, meleeRate: 0.6, rangeDmg: 13, rangeRate: 0.16, acc: 0.9, color: 0xff9a3a },
-  octopus: { name: 'KRAKEN', health: 4500, speed: 7.5, scale: 4.3, radius: 1.9, meleeRange: 5, meleeDmg: 30, meleeRate: 0.5, rangeDmg: 18, rangeRate: 0.4, acc: 0.88, color: 0xc08bff },
+  xeno: { name: 'XENOMORPH', health: 3500, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 22, meleeRate: 0.7, rangeDmg: 14, rangeRate: 0.6, acc: 0.85, color: 0x9cff6a },
+  warrior: { name: 'WARLORD', health: 4000, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 24, meleeRate: 0.6, rangeDmg: 11, rangeRate: 0.16, acc: 0.9, color: 0xff9a3a },
+  octopus: { name: 'KRAKEN', health: 4500, scale: 4.3, radius: 1.9, meleeRange: 5, meleeDmg: 20, meleeRate: 0.5, rangeDmg: 16, rangeRate: 0.4, acc: 0.88, color: 0xc08bff },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -69,6 +72,8 @@ export type WeaponKind = 'rifle' | 'mg' | 'laser';
 export type Role = 'tank' | 'sniper' | 'assault' | 'flanker' | 'suppressor' | 'skirmisher';
 /** The sniper's long-range weapon (it swaps to a rifle if you close in). */
 const SNIPER_W = { rate: 1.7, dmg: 30, accMod: 1.7, color: 0x9af0ff };
+/** Only the sniper gets a long acquisition range; regulars must be close. */
+const SNIPER_VIEW = 68;
 const TANK_HP_MUL = 3;
 /** Shared squad awareness — one bot's sighting cues the whole group. */
 export interface Squad {
@@ -130,9 +135,11 @@ interface Params {
   view: number;
 }
 const PARAMS: Record<Difficulty, Params> = {
-  normal: { acc: 0.3, dmg: 7, rate: 1.1, speed: 2.4, view: 48 },
-  hard: { acc: 0.45, dmg: 9, rate: 0.85, speed: 3.0, view: 64 },
-  nightmare: { acc: 0.62, dmg: 12, rate: 0.62, speed: 3.6, view: 84 },
+  // `view` = how close a regular bot must be to acquire you (LoS still required).
+  // Kept well under the arena size so they DON'T spot you across the map at spawn.
+  normal: { acc: 0.24, dmg: 7, rate: 1.1, speed: 2.4, view: 26 },
+  hard: { acc: 0.36, dmg: 9, rate: 0.85, speed: 3.0, view: 33 },
+  nightmare: { acc: 0.5, dmg: 12, rate: 0.62, speed: 3.6, view: 42 },
 };
 
 function blocked(lvl: Level3D, x: number, z: number, r = R): boolean {
@@ -259,7 +266,7 @@ export function spawnEnemies(lvl: Level3D, count: number, rand: () => number): E
     const sr = squadRole(out.length, count);
     const hp = sr.role === 'tank' ? ENEMY_HP * TANK_HP_MUL : ENEMY_HP;
     const perch = sr.role === 'sniper' ? assignPerch(lvl, x, z) : null;
-    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)], role: sr.role, side: sr.side, barUntil: 0, boss: null, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
+    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)], role: sr.role, side: sr.side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
   }
   return out;
 }
@@ -288,6 +295,8 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
       side: (rand() < 0.5 ? 1 : -1) as 1 | -1,
       barUntil: 0,
       boss: k,
+      track: 0,
+      muzzle: 0,
       stunT: 0,
       slowT: 0,
       blindT: 0,
@@ -332,7 +341,7 @@ export function updateEnemies(
     if (e.health <= 0) return false;
     if (e.blindT > 0) return false; // flashbanged: can't acquire the player
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
-    if (dist >= (e.boss ? 220 : e.role === 'sniper' ? 100 : P.view)) return false;
+    if (dist >= (e.boss ? 220 : e.role === 'sniper' ? SNIPER_VIEW : P.view)) return false;
     const eeye: Vec3 = [e.x, e.y + EYE_H, e.z];
     if (segBlocked(eeye, peye, lvl)) return false;
     for (const sm of smokes) if (segHitsSphere(eeye, peye, [sm.x, sm.y, sm.z], sm.r)) return false;
@@ -347,7 +356,7 @@ export function updateEnemies(
       squad.t = now;
     }
   }
-  const haveIntel = squad.lastKnown != null && now - squad.t < 8000;
+  const haveIntel = squad.lastKnown != null && now - squad.t < 5000; // lose track sooner
 
   // Shared fire routine: line-of-sight gated, sniper swaps long gun for a rifle
   // up close, accuracy falls off with range and with the player's speed.
@@ -357,10 +366,15 @@ export function updateEnemies(
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
     const W = e.role === 'sniper' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
     e.fireCd = W.rate;
+    e.muzzle = 0.12; // show the firing pose + muzzle flash briefly
     tracers.push({ from: [e.x, e.y + EYE_H, e.z], to: peye, color: W.color });
     const evade = Math.min(0.7, pspeed * 0.14);
-    const distFactor = e.role === 'sniper' && dist > 12 ? 1 : Math.max(0.12, 1 - Math.max(0, dist - 8) / 38);
-    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade)) damage += W.dmg;
+    // Accuracy falls off steeply with range (the sniper is the exception far out).
+    const distFactor = e.role === 'sniper' && dist > 12 ? 1 : Math.max(0.1, 1 - Math.max(0, dist - 6) / 26);
+    // Zero-in: the longer they've held LoS on you, the better their aim. Peeking
+    // is safe; lingering in the open gets punished.
+    const trackRamp = 0.45 + 0.55 * Math.min(1, e.track / 1.4);
+    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade) * trackRamp) damage += W.dmg;
   };
 
   // Pass 2: act on personal or shared knowledge.
@@ -393,7 +407,7 @@ export function updateEnemies(
             wz += (dz / d) * 0.6;
           }
         }
-        moveEnemy(e, lvl, wx, wz, bd.speed, dt, bd.radius);
+        moveEnemy(e, lvl, wx, wz, P.speed * 2, dt, bd.radius); // 2× normal enemy speed
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
         e.fireCd -= dt;
         if (dist < bd.meleeRange) {
@@ -410,6 +424,10 @@ export function updateEnemies(
       }
       continue;
     }
+
+    // Zero-in tracking: continuous sight sharpens aim; losing sight decays it.
+    if (sees[i]) e.track = Math.min(2, e.track + dt);
+    else e.track = Math.max(0, e.track - dt * 1.5);
 
     if (e.stunT > 0) continue; // EMP/concussion: frozen, no move or fire
     const slow = e.slowT > 0 ? 0.45 : 1; // cryo slow

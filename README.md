@@ -36,19 +36,27 @@ npm run build && npm run start   # production build
 
 ## The game
 
-- **Arena:** a low-poly "warzone city" — walled buildings, multi-floor towers with
-  ladders, open platforms, bunkers, an elevated hill plateau, jump pads, and
-  ziplines strung between distinct rooftops. You and the aliens spawn at opposite
-  ends.
-- **Arsenal:** ~18 weapons across rifle / MG / laser / sniper / pistol / launcher
-  families, each with its own fire feel, ADS zoom, ammo economy, and sound. Plus
-  frag + smoke throwables (smoke blocks enemy line-of-sight).
-- **Enemies:** alien squads with line-of-sight-gated, adaptive AI — squad roles
-  (tank, sniper, flankers, suppressor), shared intel, wall-avoidance steering, and
-  health bars. Every 5th level is a boss fight.
-- **Campaign:** 20 levels with a gold-economy armory intermission between them, a
-  pre-deploy loadout screen, regenerating health while hidden, and a local
-  best-level saved to `localStorage`.
+- **Arena:** a low-poly "warzone city" — **6-floor towers** (full decks linked by a
+  switchback of external ladders), an elevated hill plateau, open platforms,
+  bunkers, jump pads, and ziplines strung between distinct rooftops. You and the
+  aliens spawn at opposite ends.
+- **Arsenal:** ~18 weapons across rifle / MG / laser / sniper / pistol / **launcher**
+  (explosive AoE) families, each with its own fire feel, a unique sound, and ADS
+  (right-click zoom is a 3-state toggle). Plus **12 throwables** (10 each): frag,
+  smoke, molotov, cryo, EMP, flashbang, cluster, toxin, singularity, concussion,
+  decoy, plasma — with burn / slow / stun / blind effects and lingering fire / gas /
+  cryo / decoy zones.
+- **Enemies:** alien-soldier sprites with **4 state-driven poses** (run, fire +
+  muzzle flash, crouch). **Realistic perception** — short acquisition range so they
+  don't spot you across the map; only the **sniper** reaches far, and it climbs a
+  tower to perch. **Squad-coordinated, adaptive AI** (tank / sniper / flanker /
+  suppressor roles, shared intel, wall-avoidance, climbing, and **zero-in** aim that
+  sharpens the longer they hold line-of-sight on you). Every 5th level is a boss.
+- **Campaign:** 20 levels with a gold armory between them, a pre-deploy loadout
+  screen, **per-gun customization** (upgrade damage / fire-rate / magazine / reload
+  with stage gold), a HUD **radar/minimap**, **fullscreen** (with an iOS
+  pseudo-fullscreen fallback) and an adjustable **look-sensitivity** slider,
+  regenerating health while hidden, and a local best-level in `localStorage`.
 
 ## Stack
 
