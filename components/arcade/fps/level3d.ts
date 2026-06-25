@@ -98,24 +98,33 @@ function shell(boxes: Box[], cx: number, cz: number, half: number, bw: number, y
   windowWall(boxes, cx, cz + half, bw, 0.3, yBase);
 }
 
-/** 3-floor walled building: external ground→2nd ladder, interior ladder up to a
- *  back mezzanine (the open front is the big 3rd-floor access + shoot-down). */
-function tower3(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: number): void {
+const FLOOR_H = 3; // height between floors
+
+/** Multi-floor walled building. Each upper floor is a mezzanine over the back
+ *  half (the open front is the access shaft + shoot-down). An external ladder
+ *  climbs ground→F1, then an interior ladder chains up each remaining floor.
+ *  Top deck has rails. `floors` = number of levels (ground counts as one). */
+function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: number, floors: number): void {
   const half = bw / 2;
-  const F2 = 3;
-  const F3 = 6;
-  const top = F3 + 0.6;
   const slab = 0.3;
+  const roof = (floors - 1) * FLOOR_H; // top deck height
+  const top = roof + 0.6;
   columns(boxes, cx, cz, half, top);
-  shell(boxes, cx, cz, half, bw, 0); // ground story walls
-  shell(boxes, cx, cz, half, bw, F2); // 2nd story walls
-
-  boxes.push({ x: cx, y: F2 - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 }); // 2nd floor
-  // 3rd-floor mezzanine over the back half (front half open = the access/opening)
-  boxes.push({ x: cx, y: F3 - slab / 2, z: cz + half / 2, sx: bw, sy: slab, sz: half, tex: 3 });
-
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: F2 + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
-  ladders.push({ x: cx, z: cz - 0.5, y0: F2, y1: F3 + 0.5, sx: 1, sz: 0.9, exX: 0, exZ: 1 });
+  for (let f = 0; f < floors - 1; f++) shell(boxes, cx, cz, half, bw, f * FLOOR_H); // story walls
+  // ground floor is the slab at y=0; upper floors are back-half mezzanines
+  for (let f = 1; f < floors; f++) {
+    boxes.push({ x: cx, y: f * FLOOR_H - slab / 2, z: cz + half / 2, sx: bw, sy: slab, sz: half, tex: 3 });
+  }
+  // external ground → 1st floor ladder (front face)
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: FLOOR_H + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
+  // interior ladders chaining each upper floor through the open front shaft
+  for (let f = 1; f < floors - 1; f++) {
+    ladders.push({ x: cx, z: cz - 0.5, y0: f * FLOOR_H, y1: (f + 1) * FLOOR_H + 0.5, sx: 1, sz: 0.9, exX: 0, exZ: 1 });
+  }
+  // roof rails (3 sides, open front −z)
+  boxes.push({ x: cx - half, y: roof + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
+  boxes.push({ x: cx + half, y: roof + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
+  boxes.push({ x: cx, y: roof + 0.4, z: cz + half, sx: bw, sy: 0.8, sz: 0.2, tex: 2 });
 }
 
 /** 2-floor walled perch: ground walls + open upper deck, external ladder. */
@@ -203,17 +212,19 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
   hill(boxes, ladders, hillX, hillZ, hillW);
   placed.push({ x: hillX, z: hillZ, rad: hillW });
 
-  // Multi-floor towers FIRST, spaced FAR apart. Force the first few to be
-  // 3-floor towers so there are enough rooftops to string ziplines between.
+  // Multi-floor towers FIRST, spaced FAR apart. Force the first few to be tall
+  // 6-floor towers so there are enough rooftops to string ziplines between.
+  const TOWER_FLOORS = 6;
   const towerCount = Math.max(4, Math.round(size / 18));
   for (let i = 0; i < towerCount; i++) {
     const bw = 6 + r() * 3;
     const pos = tryPlace(bw, size * 0.22);
     if (!pos) continue;
     placed.push({ x: pos.x, z: pos.z, rad: bw });
-    const isT3 = i < 3 || r() < 0.5;
-    (isT3 ? tower3 : tower2)(boxes, ladders, pos.x, pos.z, bw);
-    if (isT3) towers3.push({ x: pos.x, z: pos.z, half: bw / 2 });
+    const isTall = i < 3 || r() < 0.5;
+    if (isTall) towerN(boxes, ladders, pos.x, pos.z, bw, TOWER_FLOORS);
+    else tower2(boxes, ladders, pos.x, pos.z, bw);
+    if (isTall) towers3.push({ x: pos.x, z: pos.z, half: bw / 2 });
   }
   // Then smaller structures fill the gaps (platforms + bunkers).
   const fillers = Math.round(size / 6);
@@ -244,7 +255,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
   // Each zipline links a DISTINCT pair of towers — (0,1), (2,3), (4,5) — so no
   // tower is reused (no "circle"); every hook goes to a different building.
   const ziplines: Zipline[] = [];
-  const Y3 = 6; // 3rd-floor deck height
+  const Y3 = (TOWER_FLOORS - 1) * FLOOR_H; // top-deck height for rooftop ziplines
   for (let a = 0; a + 1 < towers3.length && ziplines.length < 3; a += 2) {
     const A = towers3[a];
     const B = towers3[a + 1];

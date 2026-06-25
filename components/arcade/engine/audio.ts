@@ -80,34 +80,72 @@ class Sfx {
     this.noise(0.09, 0.22, 2600);
     this.tone('square', 360, 150, 0.07, 0.08);
   }
-  /** Per-family gun sound (rifle / mg / laser / sniper / pistol). */
-  gun(kind: string): void {
+  private hash(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  /** Per-GUN sound: the family sets the character, then a per-id pitch/length
+   *  tweak makes every individual weapon sound distinct. */
+  gun(id: string, family: string): void {
     this.ensure();
-    switch (kind) {
+    const h = this.hash(id);
+    const p = 0.82 + ((h % 100) / 100) * 0.5; // pitch factor 0.82..1.32
+    const d = 0.88 + (((h >> 5) % 100) / 100) * 0.34; // length factor 0.88..1.22
+    switch (family) {
       case 'mg':
-        this.noise(0.05, 0.16, 2200);
-        this.tone('square', 300, 150, 0.04, 0.06);
+        this.noise(0.05 * d, 0.16, 2200 * p);
+        this.tone('square', 300 * p, 150 * p, 0.04 * d, 0.06);
         break;
       case 'laser':
-        this.tone('sawtooth', 1300, 320, 0.12, 0.09);
-        this.tone('sine', 820, 1500, 0.1, 0.05);
+        this.tone('sawtooth', 1300 * p, 320 * p, 0.12 * d, 0.09);
+        this.tone('sine', 820 * p, 1500 * p, 0.1 * d, 0.05);
         break;
       case 'sniper':
-        this.noise(0.22, 0.34, 1500);
-        this.tone('square', 170, 55, 0.26, 0.16);
+        this.noise(0.22 * d, 0.34, 1500 * p);
+        this.tone('square', 170 * p, 55 * p, 0.26 * d, 0.16);
+        break;
+      case 'launcher':
+        this.noise(0.18 * d, 0.3, 1100 * p);
+        this.tone('sine', 150 * p, 45 * p, 0.34 * d, 0.18);
+        this.tone('square', 90 * p, 38 * p, 0.3 * d, 0.1);
         break;
       case 'pistol':
-        this.noise(0.06, 0.18, 2400);
-        this.tone('square', 520, 230, 0.05, 0.07);
+        this.noise(0.06 * d, 0.18, 2400 * p);
+        this.tone('square', 520 * p, 230 * p, 0.05 * d, 0.07);
         break;
       default: // rifle
-        this.noise(0.08, 0.2, 2700);
-        this.tone('square', 430, 170, 0.06, 0.08);
+        this.noise(0.08 * d, 0.2, 2700 * p);
+        this.tone('square', 430 * p, 170 * p, 0.06 * d, 0.08);
     }
   }
   enemyHit(): void {
     this.ensure();
     this.tone('square', 900, 1200, 0.05, 0.08);
+  }
+  ignite(): void {
+    this.ensure();
+    this.noise(0.5, 0.22, 1800);
+    this.tone('sawtooth', 240, 90, 0.4, 0.08);
+  }
+  freeze(): void {
+    this.ensure();
+    this.tone('sine', 1400, 300, 0.4, 0.1);
+    this.tone('triangle', 900, 1700, 0.3, 0.06);
+  }
+  zap(): void {
+    this.ensure();
+    this.noise(0.18, 0.2, 4000);
+    this.tone('sawtooth', 1800, 200, 0.16, 0.1);
+  }
+  gas(): void {
+    this.ensure();
+    this.noise(0.6, 0.16, 800);
+  }
+  flash(): void {
+    this.ensure();
+    this.noise(0.3, 0.34, 5000);
+    this.tone('sine', 2000, 600, 0.25, 0.12);
   }
   hurt(): void {
     this.ensure();

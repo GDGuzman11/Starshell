@@ -57,21 +57,52 @@ export function gunById(id: string): GunDef {
 export const PRIMARIES = GUNS.filter((g) => g.family !== 'pistol');
 export const SIDEARMS = GUNS.filter((g) => g.family === 'pistol');
 
-/** Throwables — one occupies the loadout's throwable slot. */
-export type ThrowKind = 'frag' | 'smoke';
+/** Throwables — one occupies the loadout's throwable slot.
+ *  Each detonation can do up to four things: an instant blast (AoE damage), a
+ *  status applied to enemies in radius (stun/slow/burn/blind), a lingering zone
+ *  (fire/gas/cryo/smoke/decoy), and a pull/push impulse. */
+export type ThrowKind =
+  | 'frag'
+  | 'smoke'
+  | 'incendiary'
+  | 'cryo'
+  | 'shock'
+  | 'flash'
+  | 'cluster'
+  | 'gas'
+  | 'gravity'
+  | 'concussion'
+  | 'decoy'
+  | 'plasma';
+export type ZoneKind = 'fire' | 'gas' | 'cryo' | 'smoke' | 'decoy';
 export interface ThrowDef {
   id: string;
   name: string;
   kind: ThrowKind;
   count: number;
-  dmg: number;
-  radius: number;
   fuse: number; // seconds
   color: number;
+  blast: { dmg: number; radius: number };
+  status?: { radius: number; duration: number; stun?: number; slow?: number; burn?: number; blind?: number };
+  zone?: { kind: ZoneKind; radius: number; duration: number; dps?: number; slow?: number; blocksLoS?: boolean; lure?: boolean };
+  cluster?: number; // number of delayed secondary blasts
+  pull?: number; // yank enemies toward the blast (gravity)
+  push?: number; // shove enemies away from the blast (concussion)
 }
+
 export const THROWABLES: ThrowDef[] = [
-  { id: 'frag', name: 'FRAG', kind: 'frag', count: 3, dmg: 220, radius: 6.5, fuse: 1.4, color: 0xffae3a },
-  { id: 'smoke', name: 'SMOKE', kind: 'smoke', count: 3, dmg: 0, radius: 5.5, fuse: 1.0, color: 0x9aa3b8 },
+  { id: 'frag', name: 'FRAG', kind: 'frag', count: 3, fuse: 1.4, color: 0xffae3a, blast: { dmg: 220, radius: 6.5 } },
+  { id: 'smoke', name: 'SMOKE', kind: 'smoke', count: 3, fuse: 1.0, color: 0x9aa3b8, blast: { dmg: 0, radius: 0 }, zone: { kind: 'smoke', radius: 5.5, duration: 8, blocksLoS: true } },
+  { id: 'incendiary', name: 'MOLOTOV', kind: 'incendiary', count: 2, fuse: 1.1, color: 0xff5a2a, blast: { dmg: 50, radius: 4 }, zone: { kind: 'fire', radius: 4.5, duration: 6, dps: 55 } },
+  { id: 'cryo', name: 'CRYO BOMB', kind: 'cryo', count: 2, fuse: 1.3, color: 0x7fdfff, blast: { dmg: 40, radius: 4.5 }, status: { radius: 5.5, duration: 4.5, slow: 0.6 }, zone: { kind: 'cryo', radius: 5, duration: 4.5, slow: 0.5 } },
+  { id: 'shock', name: 'EMP SHOCK', kind: 'shock', count: 2, fuse: 1.2, color: 0x9af0ff, blast: { dmg: 70, radius: 5 }, status: { radius: 5.5, duration: 2.4, stun: 2.4 } },
+  { id: 'flash', name: 'FLASHBANG', kind: 'flash', count: 2, fuse: 1.4, color: 0xffffff, blast: { dmg: 0, radius: 0 }, status: { radius: 10, duration: 4.5, blind: 4.5 } },
+  { id: 'cluster', name: 'CLUSTER', kind: 'cluster', count: 2, fuse: 1.3, color: 0xffd27a, blast: { dmg: 90, radius: 4 }, cluster: 5 },
+  { id: 'gas', name: 'TOXIN', kind: 'gas', count: 2, fuse: 1.2, color: 0x9cff6a, blast: { dmg: 0, radius: 0 }, zone: { kind: 'gas', radius: 5.5, duration: 7, dps: 34, blocksLoS: true } },
+  { id: 'gravity', name: 'SINGULARITY', kind: 'gravity', count: 1, fuse: 1.6, color: 0xc08bff, blast: { dmg: 220, radius: 7 }, pull: 5 },
+  { id: 'concussion', name: 'CONCUSSION', kind: 'concussion', count: 2, fuse: 1.1, color: 0xffe9a8, blast: { dmg: 75, radius: 6 }, status: { radius: 6, duration: 1.3, stun: 1.3 }, push: 5 },
+  { id: 'decoy', name: 'DECOY', kind: 'decoy', count: 2, fuse: 0.5, color: 0xaef5c8, blast: { dmg: 0, radius: 0 }, zone: { kind: 'decoy', radius: 1.2, duration: 6, lure: true } },
+  { id: 'plasma', name: 'PLASMA ORB', kind: 'plasma', count: 1, fuse: 1.0, color: 0xff5d6e, blast: { dmg: 340, radius: 5 } },
 ];
 export function throwById(id: string): ThrowDef {
   return THROWABLES.find((t) => t.id === id) ?? THROWABLES[0];

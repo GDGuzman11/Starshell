@@ -7,7 +7,7 @@
  * up. Difficulty scales reaction, accuracy, speed, damage, and view range.
  */
 import { segBlocked, segHitsSphere, type Vec3 } from './combat';
-import type { Level3D } from './level3d';
+import type { Ladder, Level3D } from './level3d';
 import { EYE, type Player3 } from './physics';
 
 export type Difficulty = 'normal' | 'hard' | 'nightmare';
@@ -30,6 +30,15 @@ export interface Enemy {
   side: 1 | -1; // which way this bot flanks/orbits
   barUntil: number; // show a health bar until this timestamp (set on hit)
   boss: BossKind | null;
+  // Throwable-applied status (timers, seconds). Decremented by the game loop.
+  stunT: number; // frozen: no move, no fire
+  slowT: number; // movement at ~45%
+  blindT: number; // can't see/acquire the player
+  burnT: number; // taking damage-over-time
+  burnDps: number;
+  // Vertical / climbing.
+  onDeck: boolean; // standing on an elevated floor (don't fall)
+  perch: { x: number; z: number; y: number } | null; // sniper tower target
 }
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
@@ -167,6 +176,73 @@ function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number
   e.step += speed * dt * 1.3; // advance the running gait
 }
 
+const ECLIMB = 3.2; // enemy climb speed
+const EFALL = 8; // enemy drop speed
+
+function onLadderXZ(e: Enemy, l: Ladder): boolean {
+  return (
+    e.x > l.x - l.sx / 2 - R &&
+    e.x < l.x + l.sx / 2 + R &&
+    e.z > l.z - l.sz / 2 - R &&
+    e.z < l.z + l.sz / 2 + R
+  );
+}
+/** Nearest ground-rooted ladder (the entry to a building). */
+function nearestGroundLadder(lvl: Level3D, x: number, z: number): Ladder | null {
+  let best: Ladder | null = null;
+  let bd = Infinity;
+  for (const l of lvl.ladders) {
+    if (l.y0 > 0.6) continue;
+    const d = Math.hypot(l.x - x, l.z - z);
+    if (d < bd) {
+      bd = d;
+      best = l;
+    }
+  }
+  return best;
+}
+/** Move an enemy toward a target standing height: walk to the nearest ladder,
+ *  ride it up, step onto the deck, or drop back down. Returns true if it took
+ *  over this bot's motion (the caller should skip its normal ground move). */
+function climbToward(e: Enemy, lvl: Level3D, targetY: number, speed: number, dt: number): boolean {
+  const need = targetY - e.y;
+  if (Math.abs(need) < 0.5) {
+    e.onDeck = e.y > 0.5;
+    return false;
+  }
+  if (need > 0.5) {
+    // Going up. On a ladder that reaches higher? Climb it.
+    const lad = lvl.ladders.find((l) => onLadderXZ(e, l) && l.y1 > e.y + 0.2);
+    if (lad) {
+      e.y = Math.min(lad.y1 - 0.5, e.y + ECLIMB * dt);
+      if (e.y >= lad.y1 - 0.6) {
+        e.x += lad.exX * ECLIMB * dt;
+        e.z += lad.exZ * ECLIMB * dt;
+        e.onDeck = true;
+      }
+      e.step += ECLIMB * dt;
+      return true;
+    }
+    // Otherwise head to the nearest building's ground ladder.
+    const gl = nearestGroundLadder(lvl, e.x, e.z);
+    if (gl) {
+      moveEnemy(e, lvl, gl.x - gl.exX * 1.0 - e.x, gl.z - gl.exZ * 1.0 - e.z, speed, dt);
+      return true;
+    }
+    return false;
+  }
+  // Going down: drop toward the target height.
+  e.y = Math.max(targetY, e.y - EFALL * dt);
+  e.onDeck = e.y > 0.5;
+  return true;
+}
+/** A sniper's perch = the deck just past the top of the nearest ground ladder. */
+function assignPerch(lvl: Level3D, x: number, z: number): { x: number; z: number; y: number } | null {
+  const gl = nearestGroundLadder(lvl, x, z);
+  if (!gl) return null;
+  return { x: gl.x + gl.exX * 1.4, z: gl.z + gl.exZ * 1.4, y: gl.y1 - 0.5 };
+}
+
 export function spawnEnemies(lvl: Level3D, count: number, rand: () => number): Enemy[] {
   const out: Enemy[] = [];
   const half = lvl.size / 2;
@@ -182,7 +258,8 @@ export function spawnEnemies(lvl: Level3D, count: number, rand: () => number): E
     if (blocked(lvl, x, z)) continue;
     const sr = squadRole(out.length, count);
     const hp = sr.role === 'tank' ? ENEMY_HP * TANK_HP_MUL : ENEMY_HP;
-    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)], role: sr.role, side: sr.side, barUntil: 0, boss: null });
+    const perch = sr.role === 'sniper' ? assignPerch(lvl, x, z) : null;
+    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)], role: sr.role, side: sr.side, barUntil: 0, boss: null, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
   }
   return out;
 }
@@ -211,6 +288,13 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
       side: (rand() < 0.5 ? 1 : -1) as 1 | -1,
       barUntil: 0,
       boss: k,
+      stunT: 0,
+      slowT: 0,
+      blindT: 0,
+      burnT: 0,
+      burnDps: 0,
+      onDeck: false,
+      perch: null,
     };
   });
 }
@@ -246,6 +330,7 @@ export function updateEnemies(
   // Pass 1: sightings → personal memory + SHARED squad intel (smoke blocks it).
   const sees = enemies.map((e) => {
     if (e.health <= 0) return false;
+    if (e.blindT > 0) return false; // flashbanged: can't acquire the player
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
     if (dist >= (e.boss ? 220 : e.role === 'sniper' ? 100 : P.view)) return false;
     const eeye: Vec3 = [e.x, e.y + EYE_H, e.z];
@@ -263,6 +348,20 @@ export function updateEnemies(
     }
   }
   const haveIntel = squad.lastKnown != null && now - squad.t < 8000;
+
+  // Shared fire routine: line-of-sight gated, sniper swaps long gun for a rifle
+  // up close, accuracy falls off with range and with the player's speed.
+  const fireAt = (e: Enemy, canSee: boolean): void => {
+    e.fireCd -= dt;
+    if (!canSee || e.fireCd > 0) return;
+    const dist = Math.hypot(player.x - e.x, player.z - e.z);
+    const W = e.role === 'sniper' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
+    e.fireCd = W.rate;
+    tracers.push({ from: [e.x, e.y + EYE_H, e.z], to: peye, color: W.color });
+    const evade = Math.min(0.7, pspeed * 0.14);
+    const distFactor = e.role === 'sniper' && dist > 12 ? 1 : Math.max(0.12, 1 - Math.max(0, dist - 8) / 38);
+    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade)) damage += W.dmg;
+  };
 
   // Pass 2: act on personal or shared knowledge.
   for (let i = 0; i < enemies.length; i++) {
@@ -312,12 +411,36 @@ export function updateEnemies(
       continue;
     }
 
+    if (e.stunT > 0) continue; // EMP/concussion: frozen, no move or fire
+    const slow = e.slowT > 0 ? 0.45 : 1; // cryo slow
     const role = ROLE[e.role];
     const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
+
+    // SNIPER: first instinct is to climb the nearest tower and perch, then shoot
+    // from elevation. Shared squad intel still feeds its target.
+    if (e.role === 'sniper' && e.perch) {
+      const reached = e.onDeck && Math.abs(e.y - e.perch.y) < 0.7 && Math.hypot(e.x - e.perch.x, e.z - e.perch.z) < 2.6;
+      if (!reached) {
+        const busy = climbToward(e, lvl, e.perch.y, P.speed * role.speedMul * slow, dt);
+        if (!busy && e.onDeck) moveEnemy(e, lvl, e.perch.x - e.x, e.perch.z - e.z, P.speed * 0.7 * slow, dt);
+      }
+      if (tgt) e.state = 'alert';
+      fireAt(e, sees[i]);
+      if (!sees[i] && !haveIntel) e.state = 'idle';
+      continue;
+    }
 
     if (tgt) {
       e.state = 'alert';
       const boosted = e.alarm > 0;
+      // Climb after an elevated player, or drop back down for a grounded one.
+      let wantY = e.y;
+      if (player.y > e.y + 2) wantY = player.y;
+      else if (e.onDeck && player.y < e.y - 1.5) wantY = 0;
+      if (Math.abs(wantY - e.y) > 0.6 && climbToward(e, lvl, wantY, P.speed * role.speedMul * slow, dt)) {
+        fireAt(e, sees[i]);
+        continue;
+      }
       // Move to a role-based standoff position around the target — flankers come
       // in from the side, suppressors hold far back, skirmishers harass.
       const baseAng = Math.atan2(e.z - tgt.z, e.x - tgt.x); // target→bot bearing
@@ -350,28 +473,18 @@ export function updateEnemies(
           wz += (dz / d) * 0.5;
         }
       }
-      moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1), dt);
-
-      // Fire only with personal line-of-sight.
-      e.fireCd -= dt;
-      const dist = Math.hypot(player.x - e.x, player.z - e.z);
-      // Sniper: long-range scope far out, swaps to a rifle if you close inside ~12.
-      const W = e.role === 'sniper' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
-      if (sees[i] && e.fireCd <= 0) {
-        e.fireCd = W.rate;
-        tracers.push({ from: [e.x, e.y + EYE_H, e.z], to: peye, color: W.color });
-        const evade = Math.min(0.7, pspeed * 0.14);
-        const distFactor = e.role === 'sniper' && dist > 12 ? 1 : Math.max(0.12, 1 - Math.max(0, dist - 8) / 38);
-        if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade)) damage += W.dmg;
-      }
+      moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1) * slow, dt);
+      fireAt(e, sees[i]);
       // Give up only when there's no personal sight, no shared intel, and the
       // bot has reached the spot.
       if (!sees[i] && !haveIntel && md < 1.5) {
         e.state = 'idle';
         e.lastSeen = null;
       }
+    } else if (e.onDeck) {
+      climbToward(e, lvl, 0, P.speed * 0.5, dt); // no target: come down off the deck
     } else {
-      moveEnemy(e, lvl, Math.sin(now / 1500 + e.wander), Math.cos(now / 1700 + e.wander * 2), P.speed * 0.35, dt);
+      moveEnemy(e, lvl, Math.sin(now / 1500 + e.wander), Math.cos(now / 1700 + e.wander * 2), P.speed * 0.35 * slow, dt);
     }
   }
   return { damage, tracers, seen };

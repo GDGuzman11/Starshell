@@ -1,7 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { PRIMARIES, SIDEARMS, THROWABLES, type GunDef } from '../fps/weapons';
+import { PRIMARIES, SIDEARMS, THROWABLES, type GunDef, type ThrowKind } from '../fps/weapons';
+
+const THROW_SUB: Record<ThrowKind, string> = {
+  frag: 'AoE damage',
+  smoke: 'blocks LoS',
+  incendiary: 'fire zone DoT',
+  cryo: 'slows + freezes',
+  shock: 'EMP stun',
+  flash: 'blinds',
+  cluster: 'multi-blast',
+  gas: 'poison + LoS',
+  gravity: 'pull + boom',
+  concussion: 'stun + knockback',
+  decoy: 'lures enemies',
+  plasma: 'huge burst',
+};
 
 /** Pre-deploy loadout: 2 primaries + 1 sidearm + 1 throwable, from the pool. */
 export function FpsLoadout({
@@ -33,7 +48,7 @@ export function FpsLoadout({
           <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {THROWABLES.map((t) => (
-              <Chip key={t.id} label={`${t.name} ×${t.count}`} sub={t.kind === 'smoke' ? 'blocks LoS' : 'AoE'} on={th === t.id} color="#ffae3a" onClick={() => setTh(t.id)} />
+              <Chip key={t.id} label={`${t.name} ×${t.count}`} sub={THROW_SUB[t.kind]} on={th === t.id} color="#ffae3a" onClick={() => setTh(t.id)} />
             ))}
           </div>
         </div>

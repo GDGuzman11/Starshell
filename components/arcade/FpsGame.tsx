@@ -7,13 +7,15 @@ import { FpsControls } from './ui/FpsControls';
 import { FpsHud } from './ui/FpsHud';
 import { FpsLoadout } from './screens/FpsLoadout';
 import { FpsShop } from './screens/FpsShop';
+import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, type BossKind, type Difficulty } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
+import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 
-type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete';
+type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const LEVELS = 20;
@@ -50,7 +52,7 @@ export function FpsGame() {
   const [isTouch, setIsTouch] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
   const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar', p2: 'rail', sa: 'sidearm', th: 'frag' });
-  const [run, setRun] = useState({ level: 1, gold: 0, maxHp: 100 });
+  const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   const [best, setBest] = useState(0);
   const [sensitivity, setSensitivityState] = useState(1.5);
@@ -134,12 +136,12 @@ export function FpsGame() {
   }, [pseudoFs]);
 
   const startLevel = useCallback(
-    (level: number, lo: Loadout, maxHp: number) => {
+    (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>) => {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
       const lvl = makeArena3D(isBoss ? 5 : campaignEnemies(level, enemies), seed);
-      const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)];
+      const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
       player.health = maxHp;
@@ -173,11 +175,24 @@ export function FpsGame() {
 
   const beginCampaign = useCallback(
     (lo: Loadout) => {
-      setRun({ level: 1, gold: 0, maxHp: 100 });
-      startLevel(1, lo, 100);
+      // Every loadout gun starts with the free basic enhancement.
+      const ups: Record<string, Upg> = {};
+      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
+      startLevel(1, lo, 100, ups);
     },
     [startLevel],
   );
+
+  const buyUpgrade = useCallback((gunId: string, key: UpgradeKey) => {
+    setRun((r) => {
+      const up = r.upgrades[gunId] ?? freshUpg();
+      if (up[key] >= MAX_LEVEL) return r;
+      const cost = costFor(up[key]);
+      if (r.gold < cost) return r;
+      return { ...r, gold: r.gold - cost, upgrades: { ...r.upgrades, [gunId]: { ...up, [key]: up[key] + 1 } } };
+    });
+  }, []);
 
   // Level cleared / run lost (resolved once per level via the guard ref).
   useEffect(() => {
@@ -335,8 +350,19 @@ export function FpsGame() {
             maxHp={run.maxHp}
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
-            onNext={() => { const next = run.level + 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp); }}
+            onCustomize={() => setMode('customize')}
+            onNext={() => { const next = run.level + 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
             onExit={() => setMode('menu')}
+          />
+        )}
+
+        {mode === 'customize' && (
+          <FpsCustomize
+            gunIds={[lastLoadout.p1, lastLoadout.p2, lastLoadout.sa]}
+            upgrades={run.upgrades}
+            gold={run.gold}
+            onBuy={buyUpgrade}
+            onBack={() => setMode('shop')}
           />
         )}
 

@@ -8,6 +8,7 @@ export function FpsShop({
   maxHp,
   onBuyArmor,
   onRefit,
+  onCustomize,
   onNext,
   onExit,
 }: {
@@ -16,6 +17,7 @@ export function FpsShop({
   maxHp: number;
   onBuyArmor: () => void;
   onRefit: () => void;
+  onCustomize: () => void;
   onNext: () => void;
   onExit: () => void;
 }) {
@@ -34,6 +36,13 @@ export function FpsShop({
           className="min-h-[40px] w-56 rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-4 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 disabled:cursor-not-allowed disabled:opacity-30 sm:text-[10px]"
         >
           Armour +25 · {ARMOR_COST}g <span className="text-white/40">(max {maxHp})</span>
+        </button>
+        <button
+          type="button"
+          onClick={onCustomize}
+          className="min-h-[40px] w-56 rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-4 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 sm:text-[10px]"
+        >
+          Customize Guns
         </button>
         <button
           type="button"

@@ -10,12 +10,42 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
   const hit = now - snap.hitAt < 180;
   const hurt = now - snap.hurtAt < 320;
   const scoped = snap.ads && snap.scoped;
+  const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
+
+  // Radar geometry: a circular minimap, player centred, forward = up.
+  const RAD = 40; // usable px radius
+  const RAD_RANGE = 60; // world units shown to the edge
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30 font-pixel text-white">
       {hurt && (
         <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 60px 20px rgba(255,40,60,0.55)' }} />
       )}
+      {blind > 0 && <div aria-hidden className="absolute inset-0 bg-white" style={{ opacity: blind }} />}
+
+      {/* Radar / minimap (player centred, forward = up) */}
+      <div className="absolute left-3 top-11 h-[88px] w-[88px] rounded-full border border-[#7fdfff]/30 bg-black/45 sm:top-12">
+        <div className="absolute left-1/2 top-1/2 h-px w-full -translate-x-1/2 -translate-y-1/2 bg-[#7fdfff]/10" />
+        <div className="absolute left-1/2 top-1/2 h-full w-px -translate-x-1/2 -translate-y-1/2 bg-[#7fdfff]/10" />
+        <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#aef5c8]" />
+        <div className="absolute left-1/2 top-[6px] h-2 w-px -translate-x-1/2 bg-[#aef5c8]/70" />
+        {snap.radar.map((r, i) => {
+          let px = (r.x / RAD_RANGE) * RAD;
+          let py = -(r.z / RAD_RANGE) * RAD;
+          const m = Math.hypot(px, py);
+          if (m > RAD) {
+            px = (px / m) * RAD;
+            py = (py / m) * RAD;
+          }
+          return (
+            <div
+              key={i}
+              className={`absolute rounded-full ${r.boss ? 'h-2 w-2 bg-[#ff9a3a]' : 'h-1.5 w-1.5 bg-[#ff5d6e]'}`}
+              style={{ left: `calc(50% + ${px}px)`, top: `calc(50% + ${py}px)`, transform: 'translate(-50%,-50%)' }}
+            />
+          );
+        })}
+      </div>
 
       {/* Sniper scope */}
       {scoped && (
