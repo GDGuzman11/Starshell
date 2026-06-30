@@ -289,7 +289,12 @@ const BOSS_CLIMB = 6; // boss haul-up speed when chasing a player onto a ledge
 function bossVerticalChase(e: Enemy, lvl: Level3D, player: Player3, dirX: number, dirZ: number, dt: number, grid?: SpatialGrid): void {
   const reach = 4.5; // how tall a single haul-up can be
   const here = groundHeightAt(e.x, e.z, lvl, grid, e.y + reach);
-  const ahead = groundHeightAt(e.x + dirX * 2.2, e.z + dirZ * 2.2, lvl, grid, e.y + reach);
+  // Probe a couple of distances ahead (a big boss stops ~1.6 short of a wall, so a
+  // single short probe can miss the ledge top) and take the highest.
+  const ahead = Math.max(
+    groundHeightAt(e.x + dirX * 2.0, e.z + dirZ * 2.0, lvl, grid, e.y + reach),
+    groundHeightAt(e.x + dirX * 3.2, e.z + dirZ * 3.2, lvl, grid, e.y + reach),
+  );
   const playerAbove = player.y > e.y + 1.0;
   let target = here;
   if (playerAbove && ahead > here + 0.3) target = Math.min(ahead, player.y + 0.6); // climb toward the ledge the player's on
@@ -704,12 +709,25 @@ export function updateEnemies(
           }
         }
         const wl = Math.hypot(wx, wz) || 1;
-        const ndx = wx / wl;
-        const ndz = wz / wl;
+        let ndx = wx / wl;
+        let ndz = wz / wl;
+        let spdMul = mv.speedMul;
+        // Elevation priority: if the player is on higher ground, BEELINE straight
+        // for them so the boss reaches the platform edge and the climb below
+        // triggers — otherwise the brain's strafing makes it circle the base
+        // forever (its look-ahead points sideways, never at the ledge).
+        if (player.y > e.y + 1.5) {
+          let tx = tgtB.x - e.x;
+          let tz = tgtB.z - e.z;
+          const tl = Math.hypot(tx, tz) || 1;
+          ndx = tx / tl;
+          ndz = tz / tl;
+          spdMul = 1.1;
+        }
         // Climb/jump up onto the player's platform (or drop down) BEFORE the
         // horizontal move so a raised stage no longer stops the boss cold.
         bossVerticalChase(e, lvl, player, ndx, ndz, dt, grid);
-        moveEnemy(e, lvl, ndx, ndz, P.speed * 2 * mv.speedMul, dt, bd.radius, grid);
+        moveEnemy(e, lvl, ndx, ndz, P.speed * 2 * spdMul, dt, bd.radius, grid);
         e.fireCd -= dt;
         if (dist < bd.meleeRange) {
           if (e.fireCd <= 0) {
