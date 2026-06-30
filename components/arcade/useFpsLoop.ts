@@ -1026,7 +1026,7 @@ export function useFpsLoop(
           for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
           if (world && res.bossShots.length) {
             for (const bs of res.bossShots) {
-              projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, radius: 0.42 });
+              projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
             }
           }
           if (world && res.bossTelegraphs.length) {

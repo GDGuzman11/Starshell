@@ -655,6 +655,7 @@ export interface BossShot {
   dmg: number;
   color: number;
   splash: number;
+  gravity?: number; // >0 = arcing lob (grenades); omit for straight projectiles
 }
 
 /** Advance all bots with squad tactics: shared sight intel, role-based standoff
@@ -921,6 +922,22 @@ export function updateEnemies(
           }
           const wl = Math.hypot(wx, wz) || 1;
           moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1), dt, bd.radius, grid);
+
+          // WARLORD GRENADE VOLLEY: lob a cluster of arcing grenades to deny the
+          // player's ground (independent of the suppressive-fire cadence).
+          if (e.boss === 'warrior' && sees[i] && dist > 6 && dist < 40) {
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0) {
+              brain.volleyCd = (desp ? 3.5 : 5.5) + Math.random() * 2.5;
+              const muzzleY = e.y + bd.scale * 0.6;
+              for (let g = -1; g <= 1; g++) {
+                const lx = player.x + pvx * 0.4 + g * 2.6; // lead + spread the cluster
+                const lz = player.z + pvz * 0.4;
+                const hd = Math.hypot(lx - e.x, lz - e.z);
+                bossShots.push({ kind: 'grenade', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, hd * 0.45, lz - e.z], speed: 17, dmg: Math.round(bd.rangeDmg * 1.5), color: 0xffae3a, splash: 3.2, gravity: 22 });
+              }
+            }
+          }
           if (dist < bd.meleeRange) {
             if (e.fireCd <= 0) {
               e.fireCd = bd.meleeRate;

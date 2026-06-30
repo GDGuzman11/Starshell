@@ -20,6 +20,7 @@ export interface BossBrainState {
   pounceX: number; // committed landing spot
   pounceZ: number;
   pounceCd: number; // cooldown before the next pounce
+  volleyCd: number; // cooldown for a boss special (Warlord grenade volley)
 }
 
 export interface BossMove {
@@ -29,7 +30,7 @@ export interface BossMove {
 }
 
 export function makeBossBrain(): BossBrainState {
-  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2, pounce: 'none', pounceT: 0, pounceX: 0, pounceZ: 0, pounceCd: 4 };
+  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2, pounce: 'none', pounceT: 0, pounceX: 0, pounceZ: 0, pounceCd: 4, volleyCd: 3 };
 }
 
 const STAND_MIN = 13; // back off if closer than this
