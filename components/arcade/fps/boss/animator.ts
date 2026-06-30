@@ -29,9 +29,11 @@ export function poseBossModel(
   parts.legL.rotation.x = gait * 0.5;
   parts.legR.rotation.x = -gait * 0.5;
 
-  // Restless tail + head sway (the "always hunting" read).
-  parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;
-  parts.tail.rotation.x = 0.1 + Math.sin(t * 0.8) * 0.1;
+  // Restless tail (Xenomorph) + head sway.
+  if (parts.tail) {
+    parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;
+    parts.tail.rotation.x = 0.1 + Math.sin(t * 0.8) * 0.1;
+  }
   parts.head.rotation.z = Math.sin(t * 1.6) * 0.05;
 
   // Emissive: a green VULNERABLE pulse during the weak-point window, otherwise a

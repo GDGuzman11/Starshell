@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { accent, box, capsuleZ, coneZ, cylZ, metal } from '../models/parts';
+import { buildHumanoid } from '../enemies/models/humanoid';
 import type { BossKind } from '../enemy';
 
 export interface BossParts {
@@ -21,7 +22,7 @@ export interface BossParts {
   torso: THREE.Group;
   legL: THREE.Group;
   legR: THREE.Group;
-  tail: THREE.Group;
+  tail?: THREE.Group; // Xenomorph only
 }
 
 /** XENOMORPH — the Hive Hunter. Black glossy biomechanical predator: elongated
@@ -105,9 +106,32 @@ function buildXenomorph(tier: RenderTier): THREE.Group {
   return root;
 }
 
-/** Build the 3D model for a boss, or null to keep the legacy sprite (Warlord +
- *  Kraken until P2/P3). */
+/** WARLORD — the Battlefield Commander. A towering armored humanoid (reuses the
+ *  shared humanoid rig): bronze/gold armor, big shoulder plates, orange visor +
+ *  command core, heavy arm-cannon, crest, antenna, and a back reactor spine. */
+function buildWarlord(tier: RenderTier): THREE.Group {
+  return buildHumanoid({
+    tier,
+    scale: 1.15,
+    girth: 1.35,
+    accent: 0xff9a3a, // orange visor + command core glow
+    body: 0x8a6a2a, // bronze/gold commander armor
+    dark: 0x3a2e16,
+    legs: 'thick',
+    shoulders: 1.0,
+    heavyArms: true,
+    weapon: 'cannon',
+    backpack: 'reactor',
+    antenna: 2,
+    crest: true,
+    spine: true,
+  });
+}
+
+/** Build the 3D model for a boss, or null to keep the legacy sprite (Kraken until
+ *  P3). */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
+  if (kind === 'warrior') return buildWarlord(tier);
   return null;
 }
