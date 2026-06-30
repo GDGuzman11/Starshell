@@ -274,34 +274,6 @@ function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number
 
 const ECLIMB = 3.2; // enemy climb speed
 const EFALL = 8; // enemy drop speed
-const BOSS_CLIMB = 6; // boss haul-up speed when chasing a player onto a ledge
-
-/**
- * Vertical pursuit for bosses. A boss has no ladder/nav routine like the regular
- * troops, so without this it gets STUCK at the foot of any raised platform/stage.
- * This hauls the boss UP onto a reachable ledge just ahead when the player is
- * above it (jump-up + chase onto stages/stairs/small platforms), and falls/steps
- * it back DOWN off decks. The climb is capped at the player's own height, so a
- * boss can only reach places the player legitimately can — it never scales sheer
- * walls. Call BEFORE the horizontal move so the box-stop stops blocking the
- * step-on once the boss is high enough.
- */
-function bossVerticalChase(e: Enemy, lvl: Level3D, player: Player3, dirX: number, dirZ: number, dt: number, grid?: SpatialGrid): void {
-  const reach = 4.5; // how tall a single haul-up can be
-  const here = groundHeightAt(e.x, e.z, lvl, grid, e.y + reach);
-  // Probe a couple of distances ahead (a big boss stops ~1.6 short of a wall, so a
-  // single short probe can miss the ledge top) and take the highest.
-  const ahead = Math.max(
-    groundHeightAt(e.x + dirX * 2.0, e.z + dirZ * 2.0, lvl, grid, e.y + reach),
-    groundHeightAt(e.x + dirX * 3.2, e.z + dirZ * 3.2, lvl, grid, e.y + reach),
-  );
-  const playerAbove = player.y > e.y + 1.0;
-  let target = here;
-  if (playerAbove && ahead > here + 0.3) target = Math.min(ahead, player.y + 0.6); // climb toward the ledge the player's on
-  if (target > e.y) e.y = Math.min(target, e.y + BOSS_CLIMB * dt); // haul up
-  else e.y = Math.max(target, e.y - EFALL * dt); // fall / step down
-  e.onDeck = e.y > 0.5;
-}
 
 function onLadderXZ(e: Enemy, l: Ladder): boolean {
   return (
@@ -683,18 +655,18 @@ export function updateEnemies(
     if (e.shieldRegenT > 0) e.shieldRegenT -= dt;
     else if (e.shield < e.maxShield) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * SHIELD_REGEN_FRAC * dt);
 
-    // Bosses: relentless pursuit to melee range; ranged attack at distance,
-    // melee (claws/sword/tentacles) up close. Smart = high accuracy.
+    // Bosses: a RANGED KITER. Holds a standoff distance and shoots from afar;
+    // strafes to stay a hard target; when the player ducks behind cover it
+    // maneuvers AROUND to regain a clean shot. Never charges in / never climbs —
+    // it repositions for the angle, so an elevated/hidden player gets shot at.
     if (e.boss) {
       const bd = BOSSES[e.boss];
       const tgtB = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
       if (tgtB) {
         e.state = 'alert';
-        // Tactical movement: the BossBrain picks approach-in-an-arc / strafe /
-        // reposition / dash instead of charging in a straight line.
         e.bossBrain ??= makeBossBrain();
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
-        const mv = tickBossBrain(e.bossBrain, e.x, e.z, tgtB.x, tgtB.z, pvx, pvz, dist, dt);
+        const mv = tickBossBrain(e.bossBrain, e.x, e.z, tgtB.x, tgtB.z, sees[i], dist, dt);
         let wx = mv.wx;
         let wz = mv.wz;
         for (let j = 0; j < enemies.length; j++) {
@@ -709,27 +681,10 @@ export function updateEnemies(
           }
         }
         const wl = Math.hypot(wx, wz) || 1;
-        let ndx = wx / wl;
-        let ndz = wz / wl;
-        let spdMul = mv.speedMul;
-        // Elevation priority: if the player is on higher ground, BEELINE straight
-        // for them so the boss reaches the platform edge and the climb below
-        // triggers — otherwise the brain's strafing makes it circle the base
-        // forever (its look-ahead points sideways, never at the ledge).
-        if (player.y > e.y + 1.5) {
-          let tx = tgtB.x - e.x;
-          let tz = tgtB.z - e.z;
-          const tl = Math.hypot(tx, tz) || 1;
-          ndx = tx / tl;
-          ndz = tz / tl;
-          spdMul = 1.1;
-        }
-        // Climb/jump up onto the player's platform (or drop down) BEFORE the
-        // horizontal move so a raised stage no longer stops the boss cold.
-        bossVerticalChase(e, lvl, player, ndx, ndz, dt, grid);
-        moveEnemy(e, lvl, ndx, ndz, P.speed * 2 * spdMul, dt, bd.radius, grid);
+        moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul, dt, bd.radius, grid);
         e.fireCd -= dt;
         if (dist < bd.meleeRange) {
+          // Only if the player rushes the boss into melee range.
           if (e.fireCd <= 0) {
             e.fireCd = bd.meleeRate;
             damage += bd.meleeDmg;
