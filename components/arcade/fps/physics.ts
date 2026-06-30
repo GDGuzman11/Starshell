@@ -12,6 +12,8 @@ export interface Player3 {
   y: number; // feet
   z: number;
   vy: number;
+  px: number; // external horizontal impulse velocity (knockback / pull), decays
+  pz: number;
   yaw: number;
   pitch: number;
   onGround: boolean;
@@ -82,7 +84,23 @@ export interface MoveInput {
 }
 
 export function makePlayer3(spawn: { x: number; z: number; yaw: number }): Player3 {
-  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, zip: null };
+  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, px: 0, pz: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, zip: null };
+}
+
+/** Add a horizontal impulse to the player (boss knockback / pull). `(dx,dz)` is
+ *  the push direction (need not be normalized); `strength` is the velocity added.
+ *  For a pull vortex, point it toward the centre each frame. */
+export function pushPlayer(p: Player3, dx: number, dz: number, strength: number): void {
+  const d = Math.hypot(dx, dz) || 1;
+  p.px += (dx / d) * strength;
+  p.pz += (dz / d) * strength;
+}
+
+/** Launch the player upward (slam knockback / eruption). Takes the max so it never
+ *  cancels an existing jump. */
+export function launchPlayer(p: Player3, vy: number): void {
+  if (vy > p.vy) p.vy = vy;
+  p.onGround = false;
 }
 
 function overlapXZ(p: Player3, b: Box): boolean {
@@ -147,6 +165,16 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
   }
   let vx = wx * MOVE;
   let vz = wz * MOVE;
+
+  // External impulse (boss knockback / pull vortex): add to this frame's velocity,
+  // then decay it. Ignored while on a ladder/zip (those override vx/vz below).
+  vx += p.px;
+  vz += p.pz;
+  const kd = Math.min(1, dt * 6);
+  p.px -= p.px * kd;
+  p.pz -= p.pz * kd;
+  if (Math.abs(p.px) < 0.01) p.px = 0;
+  if (Math.abs(p.pz) < 0.01) p.pz = 0;
 
   const lad = lvl.ladders.find((l) => inLadder(p, l));
   let attached = false;
