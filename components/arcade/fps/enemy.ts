@@ -13,6 +13,7 @@ import { type NavGraph, type NavNode, nearestNode, pathTo } from './level/nav';
 import { EYE, groundHeightAt, type Player3 } from './physics';
 import type { EnemyClass } from './enemies/types';
 import { type BossBrainState, makeBossBrain, tickBossBrain } from './boss/brain';
+import { MINIONS, type MinionKind } from './boss/minions';
 
 export type Difficulty = 'normal' | 'hard' | 'nightmare';
 
@@ -56,6 +57,7 @@ export interface Enemy {
   repath?: number;
   navGoal?: { x: number; z: number };
   bossBrain?: BossBrainState; // tactical movement brain (bosses only)
+  minion?: MinionKind; // boss-faction minion type (drives model + role AI)
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -527,6 +529,63 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
   });
 }
 
+/** Spawn a boss's themed minion squad near the boss end. Xenomorph hive only for
+ *  now (Warlord/Kraken get theirs in P2/P3). The boss-death win condition means
+ *  these don't have to be cleared to finish the level. */
+export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => number): Enemy[] {
+  if (kind !== 'xeno') return [];
+  const comp: MinionKind[] = ['broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'spitter', 'spitter'];
+  return comp.map((mk, idx) => makeMinion(lvl, mk, idx, rand));
+}
+
+function makeMinion(lvl: Level3D, mk: MinionKind, idx: number, rand: () => number): Enemy {
+  const md = MINIONS[mk];
+  const a = lvl.enemySpawn;
+  const half = lvl.size / 2;
+  let x = a.x;
+  let z = a.z;
+  for (let g = 0; g < 60; g++) {
+    const ang = rand() * Math.PI * 2;
+    const rad = 3 + rand() * Math.max(8, lvl.size * 0.18);
+    x = a.x + Math.cos(ang) * rad;
+    z = a.z + Math.sin(ang) * rad;
+    if (Math.abs(x) < half - 3 && Math.abs(z) < half - 3 && !blocked(lvl, x, z)) break;
+  }
+  const hp = md.hp;
+  return {
+    x,
+    y: 0,
+    z,
+    health: hp,
+    maxHealth: hp,
+    shield: 0, // minions are killable swarm — no shield
+    maxShield: 0,
+    shieldRegenT: 0,
+    state: 'idle',
+    lastSeen: null,
+    fireCd: rand() * 0.8,
+    hitFlash: 0,
+    wander: rand() * 6,
+    step: 0,
+    alarm: 0,
+    weapon: 'rifle',
+    cls: 'scout',
+    side: (idx % 2 === 0 ? 1 : -1) as 1 | -1,
+    barUntil: 0,
+    boss: null,
+    track: 0,
+    muzzle: 0,
+    stunT: 0,
+    slowT: 0,
+    blindT: 0,
+    burnT: 0,
+    burnDps: 0,
+    onDeck: false,
+    perch: null,
+    minion: mk,
+  };
+}
+
 export interface EnemyTracer {
   from: Vec3;
   to: Vec3;
@@ -670,6 +729,60 @@ export function updateEnemies(
     // Shield regen: paused for a few seconds after any hit, then slowly refills.
     if (e.shieldRegenT > 0) e.shieldRegenT -= dt;
     else if (e.shield < e.maxShield) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * SHIELD_REGEN_FRAC * dt);
+
+    // Boss-faction MINIONS: themed role AI (rush / acid support / flank-lunge).
+    if (e.minion) {
+      const md = MINIONS[e.minion];
+      const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
+      if (tgt) {
+        e.state = 'alert';
+        const dist = Math.hypot(player.x - e.x, player.z - e.z);
+        e.fireCd -= dt;
+        let tx = tgt.x - e.x;
+        let tz = tgt.z - e.z;
+        const tl = Math.hypot(tx, tz) || 1;
+        tx /= tl;
+        tz /= tl;
+        const perpX = -tz;
+        const perpZ = tx;
+        if (e.minion === 'broodling') {
+          // Rush + erratic weave; bite on contact.
+          const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
+          moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul, dt, R, grid);
+          if (dist < 2.4 && e.fireCd <= 0) {
+            e.fireCd = 0.8;
+            damage += md.melee;
+            tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: 0x6aff7a });
+          }
+        } else if (e.minion === 'spitter') {
+          // Standoff acid support: hold mid-range, retreat if rushed, spit acid.
+          if (dist < 9) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul, dt, R, grid);
+          else if (dist > 16) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul, dt, R, grid);
+          else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
+          if (sees[i] && e.fireCd <= 0 && dist < 22) {
+            e.fireCd = 1.7;
+            const my = e.y + 0.9;
+            bossShots.push({ kind: 'acid', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 22, dmg: md.ranged, color: 0x9cff6a, splash: 1.8 });
+          }
+        } else {
+          // STALKER: circle wide, then lunge in for a strike (e.track = lunge timer).
+          e.track += dt;
+          if (dist > 5 && e.track < 2.4) {
+            moveEnemy(e, lvl, perpX * e.side * 1.1 + tx * 0.4, perpZ * e.side * 1.1 + tz * 0.4, P.speed * md.speedMul, dt, R, grid);
+          } else {
+            moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * 1.7, dt, R, grid);
+            if (dist < 2.6 && e.fireCd <= 0) {
+              e.fireCd = 1.0;
+              damage += md.melee;
+              tracers.push({ from: [e.x, e.y + 0.6, e.z], to: peye, color: 0x6aff7a });
+              e.track = 0;
+            }
+            if (e.track > 3.4) e.track = 0;
+          }
+        }
+      }
+      continue;
+    }
 
     // Bosses: a RANGED KITER. Holds a standoff distance and shoots from afar;
     // strafes to stay a hard target; when the player ducks behind cover it

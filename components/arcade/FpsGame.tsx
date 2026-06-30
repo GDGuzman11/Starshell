@@ -12,7 +12,7 @@ import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
+import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 
@@ -197,6 +197,8 @@ export function FpsGame() {
       player.health = maxHp;
       const bossKinds: BossKind[] = level === 20 ? ['xeno', 'warrior', 'octopus'] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
       const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random) : spawnEnemies(lvl, campaignEnemies(level, enemies), level, Math.random);
+      // Boss encounters bring a themed minion squad (Xenomorph hive for now).
+      if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
       gameRef.current = {
         level: lvl,
         player,

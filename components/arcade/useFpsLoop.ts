@@ -12,6 +12,7 @@ import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
 import { poseDeath, poseEnemy } from './fps/enemies/animator';
 import { buildBossModel } from './fps/boss/models';
 import { poseBossDeath, poseBossModel } from './fps/boss/animator';
+import { MINIONS, buildMinionModel, poseMinion } from './fps/boss/minions';
 import type { GunDef, ThrowDef } from './fps/weapons';
 import { sfx } from './engine/audio';
 import { makeComposer } from './fps/postfx';
@@ -329,6 +330,12 @@ export function useFpsLoop(
           s.scale.set(1.5 * bd.scale, 2.0 * bd.scale, 1);
           world!.scene.add(s);
           return s;
+        }
+        if (e.minion) {
+          const m = buildMinionModel(e.minion, tier);
+          m.scale.setScalar(MINIONS[e.minion].scale);
+          world!.scene.add(m);
+          return m;
         }
         // Regular enemies are 3D models, one per doctrine class.
         const m = buildEnemyModel(e.cls, tier);
@@ -1034,7 +1041,10 @@ export function useFpsLoop(
           // were triggered by the fire/reload hooks above). Drawn after the world.
           viewmodel?.update(dt, Math.hypot(pvx, pvz), g.reloading);
 
-          if (g.enemies.every((e) => e.health <= 0)) g.status = 'won';
+          // Boss levels are won when the BOSS dies (its summoned minions then
+          // don't block the clear); normal levels when every enemy is down.
+          const hasBoss = g.enemies.some((e) => e.boss);
+          if (hasBoss ? !g.enemies.some((e) => e.boss && e.health > 0) : g.enemies.every((e) => e.health <= 0)) g.status = 'won';
         }
         // Kill any sustained loop if we left the playing state (win/lose/pause).
         if (activeLoop && g.status !== 'playing') {
@@ -1078,6 +1088,19 @@ export function useFpsLoop(
               }
               continue;
             }
+            if (e.minion) {
+              // Minion death: a quick shrink + sink.
+              if (s.userData.deadT === undefined) sfx.enemyDie();
+              const mdt = (s.userData.deadT = ((s.userData.deadT as number) ?? 0) + dt);
+              if (mdt >= 0.7) {
+                s.visible = false;
+                continue;
+              }
+              s.visible = true;
+              s.position.set(e.x, e.y - mdt * 0.6, e.z);
+              s.scale.setScalar(MINIONS[e.minion].scale * (1 - mdt / 0.7));
+              continue;
+            }
             if (s.userData.deadT === undefined) sfx.enemyDie();
             const ddt = (s.userData.deadT = ((s.userData.deadT as number) ?? 0) + dt);
             if (ddt >= 1.4) {
@@ -1117,6 +1140,10 @@ export function useFpsLoop(
               s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z);
               poseBossModel(s as THREE.Group, e.boss, moving, e.step, e.hitFlash, now);
             }
+          } else if (e.minion) {
+            s.position.set(e.x, e.y, e.z);
+            s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z);
+            poseMinion(s as THREE.Group, e.minion, moving, e.step, e.hitFlash, now);
           } else {
             // 3D model: stand on the ground, face the player, animate, flash on hit.
             s.position.set(e.x, e.y, e.z);
