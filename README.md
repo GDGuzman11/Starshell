@@ -61,7 +61,16 @@ npm run build && npm run start   # production build
   **Squad-coordinated, adaptive AI** (LoS-gated perception, shared intel, coordinated
   HUNT, per-class behaviour, wall discipline, climbing, **zero-in** aim, cross-fight
   learning). The Tank breaks down + detonates on death; the Berserker charges to melee.
-  Every 5th level is a (sprite) boss.
+- **Bosses (every 5th level):** three distinct 3D boss encounters, each a coordinated
+  command unit with its own themed minions, multiple HP phases, telegraphed attacks
+  (read the warning, dodge, punish), and a status HUD. **Xenomorph** — a ranged hive
+  predator (acid spit + puddles, a telegraphed pounce that leaves it exposed on a
+  miss) leading a broodling/spitter/stalker hive. **Warlord** — a battlefield
+  commander (suppressive fire, arcing grenade volleys, a destructible Command Beacon
+  that buffs its legion, a shot-blocking Shield Wall) commanding a real doctrine
+  squad. **Kraken** — a living arena (tentacle eruptions, slam waves, pull vortices,
+  vision-clouding void fog) with a purple abyss swarm. **Level 20 is the GAUNTLET:**
+  all three, ENHANCED, fought back-to-back with recovery windows.
 - **Campaign:** 20 levels with a gold armory between them, a pre-deploy loadout
   screen, **per-gun customization** (upgrade damage / fire-rate / magazine / reload
   with stage gold), a HUD **radar/minimap**, **fullscreen** (with an iOS
