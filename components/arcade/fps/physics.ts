@@ -3,7 +3,9 @@
  * per-axis resolution (so you slide along walls and stand on upper floors),
  * gravity + jump, and ladder zones you climb by simply walking into them.
  */
-import type { Box, Ladder, Level3D } from './level3d';
+import type { Box, Ladder, Level3D, Ramp } from './level3d';
+import { rampContains, rampHeightAt } from './level3d';
+import type { SpatialGrid } from './level/grid';
 
 export interface Player3 {
   x: number;
@@ -28,6 +30,50 @@ const MOVE = 4.6;
 const GRAV = 22;
 const JUMP = 7.2;
 const CLIMB = 3.4;
+/** Max vertical the player auto-snaps/steps without jumping (ramps + ledges). */
+const STEP_UP = 0.4;
+/** How far above a ramp surface still counts as "on" it (snap-down tolerance). */
+const RAMP_SNAP = 0.5;
+
+/**
+ * Highest walkable support height under the point (x,z): the world floor (0),
+ * any ramp surface whose footprint contains the point, and the tops of solid
+ * boxes the point sits over (whose top is at/below the reference height `refTop`
+ * so we don't count tops far overhead). Grid-backed; identical candidate math.
+ */
+export function groundHeightAt(
+  x: number,
+  z: number,
+  lvl: Level3D,
+  grid?: SpatialGrid,
+  refTop = Infinity,
+): number {
+  let h = 0; // world floor
+  const ramps = lvl.ramps;
+  if (ramps) {
+    for (let i = 0; i < ramps.length; i++) {
+      const rmp = ramps[i];
+      if (rampContains(rmp, x, z)) {
+        const rh = rampHeightAt(rmp, x, z);
+        if (rh > h && rh <= refTop + 1e-3) h = rh;
+      }
+    }
+  }
+  const boxes: readonly Box[] = grid ? grid.queryAABB(x, z, x, z) : lvl.boxes;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (
+      x > b.x - b.sx / 2 &&
+      x < b.x + b.sx / 2 &&
+      z > b.z - b.sz / 2 &&
+      z < b.z + b.sz / 2
+    ) {
+      const top = b.y + b.sy / 2;
+      if (top > h && top <= refTop + 1e-3) h = top;
+    }
+  }
+  return h;
+}
 
 export interface MoveInput {
   fwd: number;
@@ -62,7 +108,11 @@ function inLadder(p: Player3, l: Ladder): boolean {
   );
 }
 
-export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: number): void {
+export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: number, grid?: SpatialGrid): void {
+  // Candidate boxes overlapping the player's XZ footprint at the current pos.
+  // Returns the full box list when no grid is supplied (identical behavior).
+  const near = (): readonly Box[] =>
+    grid ? grid.queryAABB(p.x - R, p.z - R, p.x + R, p.z + R) : lvl.boxes;
   // Zipline ride — slide along the line, look freely, drop off at the end.
   if (p.zip) {
     const zl = lvl.ziplines[p.zip.i];
@@ -133,19 +183,58 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
     p.vy -= GRAV * dt;
   }
 
-  // Move + collide, one axis at a time.
+  // Headroom: can the player stand with feet at `feetY` here (no box clips the
+  // body span feetY..feetY+H)? Used to allow step-ups only when there's clearance.
+  const headroomClear = (feetY: number, boxes: readonly Box[]): boolean => {
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (!overlapXZ(p, b)) continue;
+      const bTop = b.y + b.sy / 2;
+      const bBot = b.y - b.sy / 2;
+      // A box overlaps the body span if it spans above the new feet and below head.
+      if (feetY + H > bBot + 1e-4 && feetY < bTop - 1e-4) return false;
+    }
+    return true;
+  };
+
+  // Move + collide, one axis at a time. Each axis re-queries `near()` AFTER the
+  // move so the candidate set matches the resolved position (the same boxes the
+  // full loop's overlapXZ would test). A blocking box whose top is within STEP_UP
+  // of the feet (with headroom) lifts the player onto it instead of stopping.
   p.x += vx * dt;
-  for (const b of lvl.boxes) {
-    if (overlapXZ(p, b) && overlapY(p, b)) p.x = vx > 0 ? b.x - b.sx / 2 - R : b.x + b.sx / 2 + R;
+  {
+    const boxes = near();
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (!overlapXZ(p, b) || !overlapY(p, b)) continue;
+      const top = b.y + b.sy / 2;
+      if (p.onGround && top - p.y > 0 && top - p.y <= STEP_UP && headroomClear(top, boxes)) {
+        p.y = top; // step up onto the low ledge
+      } else {
+        p.x = vx > 0 ? b.x - b.sx / 2 - R : b.x + b.sx / 2 + R;
+      }
+    }
   }
   p.z += vz * dt;
-  for (const b of lvl.boxes) {
-    if (overlapXZ(p, b) && overlapY(p, b)) p.z = vz > 0 ? b.z - b.sz / 2 - R : b.z + b.sz / 2 + R;
+  {
+    const boxes = near();
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (!overlapXZ(p, b) || !overlapY(p, b)) continue;
+      const top = b.y + b.sy / 2;
+      if (p.onGround && top - p.y > 0 && top - p.y <= STEP_UP && headroomClear(top, boxes)) {
+        p.y = top;
+      } else {
+        p.z = vz > 0 ? b.z - b.sz / 2 - R : b.z + b.sz / 2 + R;
+      }
+    }
   }
 
   p.y += p.vy * dt;
   p.onGround = false;
-  for (const b of lvl.boxes) {
+  const yboxes = near();
+  for (let i = 0; i < yboxes.length; i++) {
+    const b = yboxes[i];
     if (!overlapXZ(p, b) || !overlapY(p, b)) continue;
     if (p.vy <= 0) {
       // landing on top of a box
@@ -158,6 +247,27 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
       p.vy = 0;
     }
   }
+
+  // Ramp snap — a ramp is a height FUNCTION, not a solid box, so it isn't in the
+  // box-stop pass above (no fighting/jitter). When grounded or descending and the
+  // feet are at/just above the ramp surface under us, glue to that surface so you
+  // walk up/down smoothly. Never while ascending through a jump (vy > 0).
+  if (lvl.ramps && lvl.ramps.length > 0 && p.vy <= 0) {
+    let surf = -Infinity;
+    for (let i = 0; i < lvl.ramps.length; i++) {
+      const rmp = lvl.ramps[i];
+      if (rampContains(rmp, p.x, p.z)) {
+        const rh = rampHeightAt(rmp, p.x, p.z);
+        if (rh > surf) surf = rh;
+      }
+    }
+    if (surf > -Infinity && p.y <= surf + RAMP_SNAP && surf >= 0) {
+      p.y = surf;
+      p.vy = 0;
+      p.onGround = true;
+    }
+  }
+
   if (p.y <= 0) {
     p.y = 0;
     if (p.vy < 0) p.vy = 0;

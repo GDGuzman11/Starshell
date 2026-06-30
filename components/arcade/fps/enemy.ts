@@ -7,8 +7,11 @@
  * up. Difficulty scales reaction, accuracy, speed, damage, and view range.
  */
 import { segBlocked, segHitsSphere, type Vec3 } from './combat';
-import type { Ladder, Level3D } from './level3d';
-import { EYE, type Player3 } from './physics';
+import type { Box, Ladder, Level3D } from './level3d';
+import type { SpatialGrid } from './level/grid';
+import { type NavGraph, type NavNode, nearestNode, pathTo } from './level/nav';
+import { EYE, groundHeightAt, type Player3 } from './physics';
+import type { EnemyClass } from './enemies/types';
 
 export type Difficulty = 'normal' | 'hard' | 'nightmare';
 
@@ -26,7 +29,7 @@ export interface Enemy {
   step: number; // accumulated gait distance (drives the run animation)
   alarm: number; // seconds of "under fire" evasive behaviour after being shot
   weapon: WeaponKind;
-  role: Role;
+  cls: EnemyClass;
   side: 1 | -1; // which way this bot flanks/orbits
   barUntil: number; // show a health bar until this timestamp (set on hit)
   boss: BossKind | null;
@@ -40,7 +43,14 @@ export interface Enemy {
   burnDps: number;
   // Vertical / climbing.
   onDeck: boolean; // standing on an elevated floor (don't fall)
-  perch: { x: number; z: number; y: number } | null; // sniper tower target
+  perch: { x: number; z: number; y: number } | null; // sniper tower target / chosen vantage
+  perchT?: number; // sniper: cooldown before re-picking a better vantage
+  // Nav (Phase 4): cached A* route (remaining waypoint node ids), repath cooldown,
+  // and the goal the route was planned for (repath when it moves). All optional so
+  // existing constructors and the no-graph fallback are untouched.
+  path?: number[];
+  repath?: number;
+  navGoal?: { x: number; z: number };
 }
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
@@ -68,17 +78,43 @@ export const BOSSES: Record<BossKind, BossDef> = {
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
-/** Squad combat roles — so a group doesn't all blindly rush. */
-export type Role = 'tank' | 'sniper' | 'assault' | 'flanker' | 'suppressor' | 'skirmisher';
-/** The sniper's long-range weapon (it swaps to a rifle if you close in). */
+/** The marksman's long-range weapon (it swaps to a rifle if you close in). */
 const SNIPER_W = { rate: 1.7, dmg: 30, accMod: 1.7, color: 0x9af0ff };
-/** Only the sniper gets a long acquisition range; regulars must be close. */
-const SNIPER_VIEW = 68;
-const TANK_HP_MUL = 3;
-/** Shared squad awareness — one bot's sighting cues the whole group. */
+/** Coarse learning grid resolution (HGRID × HGRID cells over the arena). */
+const HGRID = 6;
+/** What the squad LEARNS about the player, persisted across fights in a run so
+ *  later levels hunt smarter: where the player likes to be (heat), how they
+ *  engage (aggression + preferred range), and how many bots they've dropped
+ *  (losses → tighter coordination + more cover use). */
+export interface HuntMemory {
+  heat: Float32Array; // player-presence accumulation per cell (decays slowly)
+  aggression: number; // 0 (camps) … 1 (rushes), EMA of player speed
+  preferRange: number; // running avg distance the player fights at
+  losses: number; // bots downed across the run
+}
+export function makeHuntMemory(): HuntMemory {
+  return { heat: new Float32Array(HGRID * HGRID), aggression: 0.5, preferRange: 16, losses: 0 };
+}
+function heatCell(x: number, z: number, size: number): number {
+  const gx = Math.min(HGRID - 1, Math.max(0, Math.floor(((x + size / 2) / size) * HGRID)));
+  const gz = Math.min(HGRID - 1, Math.max(0, Math.floor(((z + size / 2) / size) * HGRID)));
+  return gz * HGRID + gx;
+}
+function cellCenter(idx: number, size: number): { x: number; z: number } {
+  const gx = idx % HGRID;
+  const gz = Math.floor(idx / HGRID);
+  return { x: -size / 2 + (gx + 0.5) * (size / HGRID), z: -size / 2 + (gz + 0.5) * (size / HGRID) };
+}
+
+/** Shared squad awareness — one bot's sighting cues the whole group, plus the
+ *  coordinated hunt plan (learned focus + per-frame book-keeping). */
 export interface Squad {
   lastKnown: { x: number; z: number } | null;
   t: number;
+  mem?: HuntMemory; // persistent learning (same object across a run's levels)
+  hot?: { x: number; z: number } | null; // learned favourite ground (hottest cell)
+  planT?: number; // re-plan / heat-decay cooldown
+  lastAlive?: number; // alive bot count last frame (to detect losses)
 }
 
 /** Active smoke cloud — blocks the aliens' line of sight. */
@@ -99,29 +135,44 @@ const WEAPONS: Record<WeaponKind, { rate: number; dmg: number; accMod: number; c
 };
 const WEAPON_KEYS: WeaponKind[] = ['rifle', 'mg', 'laser'];
 
-// Standoff range, flank angle (rad), orbit strafe, speed per role.
-const ROLE: Record<Role, { range: number; angle: number; strafe: number; speedMul: number }> = {
-  tank: { range: 5, angle: 0.0, strafe: 0.25, speedMul: 0.7 }, // soaks damage, pushes in
-  sniper: { range: 28, angle: 0.12, strafe: 0.2, speedMul: 0.85 }, // holds far, accurate
-  assault: { range: 6, angle: 0.0, strafe: 0.5, speedMul: 1.05 },
-  flanker: { range: 8, angle: 1.2, strafe: 0.7, speedMul: 1.0 },
-  suppressor: { range: 17, angle: 0.25, strafe: 0.3, speedMul: 0.8 },
-  skirmisher: { range: 11, angle: 0.7, strafe: 1.0, speedMul: 1.1 },
+// Per-class combat params: standoff range, flank angle (rad), orbit strafe, speed
+// multiplier, HP multiplier (× ENEMY_HP), and acquisition-range multiplier (×
+// difficulty view). This is what gives each of the 10 classes distinct movement.
+interface ClassDef {
+  range: number;
+  angle: number;
+  strafe: number;
+  speedMul: number;
+  hp: number;
+  viewMul: number;
+}
+const CLASS: Record<EnemyClass, ClassDef> = {
+  rifleman: { range: 7, angle: 0.0, strafe: 0.5, speedMul: 1.0, hp: 1.0, viewMul: 1.0 }, // core, uses cover
+  scout: { range: 12, angle: 1.3, strafe: 1.0, speedMul: 1.35, hp: 0.7, viewMul: 1.2 }, // fast, circles, retreats
+  breacher: { range: 4, angle: 0.1, strafe: 0.4, speedMul: 1.05, hp: 2.2, viewMul: 0.95 }, // rushes close
+  marksman: { range: 30, angle: 0.12, strafe: 0.2, speedMul: 0.85, hp: 0.9, viewMul: 2.2 }, // perches, long range
+  suppressor: { range: 18, angle: 0.25, strafe: 0.25, speedMul: 0.75, hp: 1.8, viewMul: 1.0 }, // pins, holds
+  engineer: { range: 22, angle: 0.3, strafe: 0.3, speedMul: 0.9, hp: 1.2, viewMul: 0.9 }, // hangs back (support)
+  tank: { range: 6, angle: 0.0, strafe: 0.2, speedMul: 0.6, hp: 3.0, viewMul: 1.0 }, // slow, heavy push
+  elite: { range: 9, angle: 1.1, strafe: 0.7, speedMul: 1.1, hp: 1.5, viewMul: 1.15 }, // fast flank
+  commander: { range: 20, angle: 0.2, strafe: 0.3, speedMul: 0.85, hp: 2.0, viewMul: 1.1 }, // stays back, calm
+  berserker: { range: 2.5, angle: 0.0, strafe: 0.3, speedMul: 1.3, hp: 1.6, viewMul: 1.0 }, // charges to melee
 };
-/** A deliberate squad composition by index: a pusher, pincer flankers on
- *  OPPOSITE sides, a suppressor that holds, and a skirmisher. */
-function squadRole(i: number, count: number): { role: Role; side: 1 | -1 } {
-  if (count === 1) return { role: 'assault', side: 1 };
-  // With a group there's always a TANK (front-line, soaks damage) and a SNIPER
-  // (holds far, accurate), then flankers / suppressor.
-  const comp: { role: Role; side: 1 | -1 }[] = [
-    { role: 'tank', side: 1 },
-    { role: 'sniper', side: -1 },
-    { role: 'flanker', side: 1 },
-    { role: 'flanker', side: -1 },
-    { role: 'suppressor', side: 1 },
-  ];
-  return comp[i] ?? { role: 'skirmisher', side: i % 2 === 0 ? 1 : -1 };
+
+/** Battlefield-doctrine squad templates (signature units FIRST so even a small
+ *  squad still includes them). The campaign level selects the doctrine. */
+const DOCTRINES: EnemyClass[][] = [
+  ['rifleman', 'rifleman', 'rifleman', 'scout', 'rifleman'], // patrol
+  ['tank', 'rifleman', 'breacher', 'rifleman', 'rifleman'], // assault team
+  ['marksman', 'marksman', 'engineer', 'rifleman', 'rifleman', 'rifleman'], // defensive position
+  ['tank', 'tank', 'suppressor', 'suppressor', 'engineer', 'suppressor', 'rifleman', 'rifleman', 'engineer', 'rifleman', 'rifleman', 'rifleman'], // heavy push
+  ['commander', 'elite', 'elite', 'marksman', 'scout', 'marksman', 'scout', 'scout'], // elite strike team
+];
+function composeSquad(count: number, level: number, rand: () => number): EnemyClass[] {
+  const d = level <= 3 ? DOCTRINES[0] : level <= 6 ? (rand() < 0.5 ? DOCTRINES[1] : DOCTRINES[2]) : level <= 12 ? DOCTRINES[3] : DOCTRINES[4];
+  const out: EnemyClass[] = [];
+  for (let i = 0; i < count; i++) out.push(d[i] ?? (rand() < 0.4 ? 'scout' : 'rifleman'));
+  return out;
 }
 
 const R = 0.45; // collision radius
@@ -142,8 +193,10 @@ const PARAMS: Record<Difficulty, Params> = {
   nightmare: { acc: 0.5, dmg: 12, rate: 0.62, speed: 3.6, view: 42 },
 };
 
-function blocked(lvl: Level3D, x: number, z: number, r = R): boolean {
-  for (const b of lvl.boxes) {
+function blocked(lvl: Level3D, x: number, z: number, r = R, grid?: SpatialGrid): boolean {
+  const boxes = grid ? grid.queryAABB(x - r, z - r, x + r, z + r) : lvl.boxes;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
     if (
       x + r > b.x - b.sx / 2 &&
       x - r < b.x + b.sx / 2 &&
@@ -158,29 +211,39 @@ function blocked(lvl: Level3D, x: number, z: number, r = R): boolean {
 }
 
 /** If a wall is dead ahead, steer around it (probe rotated directions). */
-function avoidWalls(e: Enemy, lvl: Level3D, dx: number, dz: number, r: number): [number, number] {
+function avoidWalls(e: Enemy, lvl: Level3D, dx: number, dz: number, r: number, grid?: SpatialGrid): [number, number] {
   const look = 1.8;
-  if (!blocked(lvl, e.x + dx * look, e.z + dz * look, r)) return [dx, dz];
+  if (!blocked(lvl, e.x + dx * look, e.z + dz * look, r, grid)) return [dx, dz];
   for (const a of [0.9, -0.9, 1.6, -1.6, 2.4, -2.4]) {
     const c = Math.cos(a);
     const s = Math.sin(a);
     const nx = dx * c - dz * s;
     const nz = dx * s + dz * c;
-    if (!blocked(lvl, e.x + nx * look, e.z + nz * look, r)) return [nx, nz];
+    if (!blocked(lvl, e.x + nx * look, e.z + nz * look, r, grid)) return [nx, nz];
   }
   return [dx, dz];
 }
 
-function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number, dt: number, r = R): void {
+/** Max vertical a grounded bot follows per move (ramps/trenches, not tall boxes). */
+const GROUND_FOLLOW = 0.55;
+
+function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number, dt: number, r = R, grid?: SpatialGrid): void {
   const l = Math.hypot(wx, wz);
   if (l < 0.01) return;
-  const [dx, dz] = avoidWalls(e, lvl, wx / l, wz / l, r); // path around walls, not into them
+  const [dx, dz] = avoidWalls(e, lvl, wx / l, wz / l, r, grid); // path around walls, not into them
   const sp = speed * dt;
   const nx = e.x + dx * sp;
   const nz = e.z + dz * sp;
-  if (!blocked(lvl, nx, e.z, r)) e.x = nx;
-  if (!blocked(lvl, e.x, nz, r)) e.z = nz;
+  if (!blocked(lvl, nx, e.z, r, grid)) e.x = nx;
+  if (!blocked(lvl, e.x, nz, r, grid)) e.z = nz;
   e.step += speed * dt * 1.3; // advance the running gait
+  // Follow ground elevation (ramps up/down, trench floors). Only when NOT on an
+  // elevated deck (the box-climbing system owns those) and only within a small
+  // step so bots don't pop onto tall cover.
+  if (!e.onDeck) {
+    const g = groundHeightAt(e.x, e.z, lvl, grid, e.y + GROUND_FOLLOW);
+    if (Math.abs(g - e.y) <= GROUND_FOLLOW) e.y = g;
+  }
 }
 
 const ECLIMB = 3.2; // enemy climb speed
@@ -211,7 +274,7 @@ function nearestGroundLadder(lvl: Level3D, x: number, z: number): Ladder | null 
 /** Move an enemy toward a target standing height: walk to the nearest ladder,
  *  ride it up, step onto the deck, or drop back down. Returns true if it took
  *  over this bot's motion (the caller should skip its normal ground move). */
-function climbToward(e: Enemy, lvl: Level3D, targetY: number, speed: number, dt: number): boolean {
+function climbToward(e: Enemy, lvl: Level3D, targetY: number, speed: number, dt: number, grid?: SpatialGrid): boolean {
   const need = targetY - e.y;
   if (Math.abs(need) < 0.5) {
     e.onDeck = e.y > 0.5;
@@ -233,7 +296,7 @@ function climbToward(e: Enemy, lvl: Level3D, targetY: number, speed: number, dt:
     // Otherwise head to the nearest building's ground ladder.
     const gl = nearestGroundLadder(lvl, e.x, e.z);
     if (gl) {
-      moveEnemy(e, lvl, gl.x - gl.exX * 1.0 - e.x, gl.z - gl.exZ * 1.0 - e.z, speed, dt);
+      moveEnemy(e, lvl, gl.x - gl.exX * 1.0 - e.x, gl.z - gl.exZ * 1.0 - e.z, speed, dt, R, grid);
       return true;
     }
     return false;
@@ -243,6 +306,58 @@ function climbToward(e: Enemy, lvl: Level3D, targetY: number, speed: number, dt:
   e.onDeck = e.y > 0.5;
   return true;
 }
+/** How close (horizontally) a bot must get to a waypoint before popping it. */
+const WAYPOINT_REACH = 2.4;
+/** Inside this range a bot abandons the nav route and uses its tuned close-range
+ *  standoff/orbit steering directly (preserves the existing combat feel). */
+const NAV_NEAR = 14;
+
+/** Long-range path follow. Returns:
+ *   - `'climb'`  the next waypoint is a vertical link and `climbToward` already
+ *                moved the bot this frame (caller should just fire + continue);
+ *   - `{wx,wz}`  a heading toward the next ground waypoint (caller calls moveEnemy);
+ *   - `null`     no graph, no route, or the route is exhausted → caller falls back
+ *                to its existing direct/standoff steering for the final approach.
+ *  Repaths are throttled (cooldown + only when the goal drifts) so A* is cheap. */
+function navFollow(
+  e: Enemy,
+  graph: NavGraph,
+  lvl: Level3D,
+  gx: number,
+  gz: number,
+  gy: number,
+  climbSpeed: number,
+  dt: number,
+  grid?: SpatialGrid,
+): 'climb' | { wx: number; wz: number } | null {
+  e.repath = (e.repath ?? 0) - dt;
+  const goalMoved = e.navGoal ? Math.hypot(gx - e.navGoal.x, gz - e.navGoal.z) > 6 : true;
+  if (e.repath <= 0 || !e.path || e.path.length === 0 || goalMoved) {
+    const start = nearestNode(graph, e.x, e.z, e.y);
+    const goal = nearestNode(graph, gx, gz, gy);
+    e.path = pathTo(graph, start, goal);
+    e.navGoal = { x: gx, z: gz };
+    e.repath = 0.45 + Math.random() * 0.35;
+  }
+  const path = e.path;
+  if (!path || path.length === 0) return null;
+  // Pop waypoints we've effectively reached (horizontal proximity).
+  while (path.length > 0) {
+    const w = graph.nodes[path[0]];
+    if (Math.hypot(w.x - e.x, w.z - e.z) < WAYPOINT_REACH) path.shift();
+    else break;
+  }
+  if (path.length === 0) return null; // arrived at the route end → close-range logic
+  const wp = graph.nodes[path[0]];
+  // A waypoint well above or below us is a ladder/ramp/zip link → use the climb
+  // system (it walks to the nearest ground ladder and rides it / drops down).
+  if (wp.y - e.y > 1.2 || (e.onDeck && e.y - wp.y > 1.2)) {
+    climbToward(e, lvl, wp.y, climbSpeed, dt, grid);
+    return 'climb';
+  }
+  return { wx: wp.x - e.x, wz: wp.z - e.z };
+}
+
 /** A sniper's perch = the deck just past the top of the nearest ground ladder. */
 function assignPerch(lvl: Level3D, x: number, z: number): { x: number; z: number; y: number } | null {
   const gl = nearestGroundLadder(lvl, x, z);
@@ -250,8 +365,81 @@ function assignPerch(lvl: Level3D, x: number, z: number): { x: number; z: number
   return { x: gl.x + gl.exX * 1.4, z: gl.z + gl.exZ * 1.4, y: gl.y1 - 0.5 };
 }
 
-export function spawnEnemies(lvl: Level3D, count: number, rand: () => number): Enemy[] {
+/** Push AWAY from any wall within `range` (probed on the 4 cardinals). Added to a
+ *  bot's heading while it's SHOOTING so it doesn't pin itself against geometry and
+ *  keeps a clean line of fire. */
+function wallRepulse(e: Enemy, lvl: Level3D, grid: SpatialGrid | undefined, range = 1.3): [number, number] {
+  let px = 0;
+  let pz = 0;
+  if (blocked(lvl, e.x + range, e.z, R, grid)) px -= 1;
+  if (blocked(lvl, e.x - range, e.z, R, grid)) px += 1;
+  if (blocked(lvl, e.x, e.z + range, R, grid)) pz -= 1;
+  if (blocked(lvl, e.x, e.z - range, R, grid)) pz += 1;
+  return [px, pz];
+}
+
+/** Heading toward the nearest cover that breaks line of sight from (fromX,fromZ):
+ *  the far side of the closest body-height box. Used when a bot is hit but can't
+ *  see the shooter — it RUNS FOR COVER instead of standing in the open. */
+function seekCoverDir(e: Enemy, lvl: Level3D, grid: SpatialGrid | undefined, fromX: number, fromZ: number): [number, number] | null {
+  const boxes = grid ? grid.queryAABB(e.x - 12, e.z - 12, e.x + 12, e.z + 12) : lvl.boxes;
+  let best: Box | null = null;
+  let bd = Infinity;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (b.y + b.sy / 2 < 1.7 || b.y - b.sy / 2 > 1.5) continue; // must block a standing bot
+    const d = Math.hypot(b.x - e.x, b.z - e.z);
+    if (d < bd) {
+      bd = d;
+      best = b;
+    }
+  }
+  if (!best) return null;
+  let dx = best.x - fromX;
+  let dz = best.z - fromZ;
+  const dl = Math.hypot(dx, dz) || 1;
+  dx /= dl;
+  dz /= dl;
+  const cx = best.x + dx * (Math.max(best.sx, best.sz) / 2 + 0.8); // far side of the box
+  const cz = best.z + dz * (Math.max(best.sx, best.sz) / 2 + 0.8);
+  return [cx - e.x, cz - e.z];
+}
+
+/** The best vantage node to shoot the focus from: elevated, with a CLEAR line to
+ *  the focus, around the player's preferred engagement range. Drives the sniper's
+ *  "always relocate to the best possible shot" behaviour. Throttled by the caller. */
+function bestVantage(
+  nav: NavGraph,
+  lvl: Level3D,
+  grid: SpatialGrid | undefined,
+  ex: number,
+  ez: number,
+  fx: number,
+  fz: number,
+  want: number,
+): { x: number; y: number; z: number } | null {
+  let best: NavNode | null = null;
+  let bs = -Infinity;
+  const target = Math.min(40, Math.max(16, want * 1.3));
+  const foc: Vec3 = [fx, EYE, fz];
+  for (let i = 0; i < nav.nodes.length; i++) {
+    const n = nav.nodes[i];
+    const dF = Math.hypot(n.x - fx, n.z - fz);
+    if (dF < 10 || dF > 60) continue;
+    if (segBlocked([n.x, n.y + EYE_H, n.z], foc, lvl, grid)) continue; // no shot from here
+    const dB = Math.hypot(n.x - ex, n.z - ez);
+    const score = n.y * 3 - dB * 0.12 - Math.abs(dF - target) * 0.08; // high, near, ~range out
+    if (score > bs) {
+      bs = score;
+      best = n;
+    }
+  }
+  return best ? { x: best.x, y: best.y, z: best.z } : null;
+}
+
+export function spawnEnemies(lvl: Level3D, count: number, level: number, rand: () => number): Enemy[] {
   const out: Enemy[] = [];
+  const classes = composeSquad(count, level, rand); // doctrine composition
   const half = lvl.size / 2;
   const a = lvl.enemySpawn; // far end, opposite the player
   const R = Math.max(6, lvl.size * 0.16);
@@ -263,10 +451,12 @@ export function spawnEnemies(lvl: Level3D, count: number, rand: () => number): E
     const z = a.z + Math.sin(ang) * rad;
     if (Math.abs(x) > half - 3 || Math.abs(z) > half - 3) continue;
     if (blocked(lvl, x, z)) continue;
-    const sr = squadRole(out.length, count);
-    const hp = sr.role === 'tank' ? ENEMY_HP * TANK_HP_MUL : ENEMY_HP;
-    const perch = sr.role === 'sniper' ? assignPerch(lvl, x, z) : null;
-    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)], role: sr.role, side: sr.side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
+    const cls = classes[out.length];
+    const hp = ENEMY_HP * CLASS[cls].hp;
+    const perch = cls === 'marksman' ? assignPerch(lvl, x, z) : null;
+    const weapon: WeaponKind = cls === 'suppressor' ? 'mg' : cls === 'marksman' ? 'rifle' : WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)];
+    const side: 1 | -1 = out.length % 2 === 0 ? 1 : -1;
+    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon, cls, side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
   }
   return out;
 }
@@ -291,7 +481,7 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
       step: 0,
       alarm: 0,
       weapon: 'rifle' as WeaponKind,
-      role: 'assault' as Role,
+      cls: 'tank' as EnemyClass,
       side: (rand() < 0.5 ? 1 : -1) as 1 | -1,
       barUntil: 0,
       boss: k,
@@ -328,6 +518,8 @@ export function updateEnemies(
   now: number,
   squad: Squad,
   smokes: Smoke[],
+  grid?: SpatialGrid,
+  nav?: NavGraph,
 ): { damage: number; tracers: EnemyTracer[]; seen: boolean } {
   const P = PARAMS[diff];
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
@@ -341,12 +533,13 @@ export function updateEnemies(
     if (e.health <= 0) return false;
     if (e.blindT > 0) return false; // flashbanged: can't acquire the player
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
-    if (dist >= (e.boss ? 220 : e.role === 'sniper' ? SNIPER_VIEW : P.view)) return false;
+    if (dist >= (e.boss ? 220 : P.view * CLASS[e.cls].viewMul)) return false;
     const eeye: Vec3 = [e.x, e.y + EYE_H, e.z];
-    if (segBlocked(eeye, peye, lvl)) return false;
+    if (segBlocked(eeye, peye, lvl, grid)) return false;
     for (const sm of smokes) if (segHitsSphere(eeye, peye, [sm.x, sm.y, sm.z], sm.r)) return false;
     return true;
   });
+  const mem = squad.mem;
   for (let i = 0; i < enemies.length; i++) {
     if (sees[i]) {
       seen = true;
@@ -354,23 +547,69 @@ export function updateEnemies(
       enemies[i].lastSeen = { x: player.x, z: player.z };
       squad.lastKnown = { x: player.x, z: player.z };
       squad.t = now;
+      if (mem) {
+        // Learn the range the player chooses to fight at (informs vantage choice).
+        const d = Math.hypot(player.x - enemies[i].x, player.z - enemies[i].z);
+        mem.preferRange += (d - mem.preferRange) * 0.04;
+      }
     }
   }
   const haveIntel = squad.lastKnown != null && now - squad.t < 5000; // lose track sooner
+
+  // LEARNING: build a heatmap of where the player spends time (their favourite
+  // ground), model how aggressively they play, and count bots lost — all persisted
+  // across the run so later fights hunt smarter. The hottest cell becomes the
+  // squad's search focus when they have no live intel.
+  if (mem) {
+    mem.heat[heatCell(player.x, player.z, lvl.size)] += dt;
+    mem.aggression += (Math.min(1, pspeed / 6) - mem.aggression) * 0.02;
+    const aliveNow = enemies.reduce((a, e) => a + (e.health > 0 && !e.boss ? 1 : 0), 0);
+    if (squad.lastAlive != null && aliveNow < squad.lastAlive) mem.losses += squad.lastAlive - aliveNow;
+    squad.lastAlive = aliveNow;
+    squad.planT = (squad.planT ?? 0) - dt;
+    if (squad.planT <= 0) {
+      let hi = 0;
+      for (let k = 0; k < mem.heat.length; k++) {
+        mem.heat[k] *= 0.9; // forget slowly so it tracks recent play
+        if (mem.heat[k] > mem.heat[hi]) hi = k;
+      }
+      squad.hot = mem.heat[hi] > 0.5 ? cellCenter(hi, lvl.size) : null;
+      squad.planT = 1.5;
+    }
+  }
+  // Coordination strength grows as the squad takes losses (they learn to gang up).
+  const coord = mem ? Math.min(1, mem.losses / 6) : 0;
+  // Per-frame: each living non-boss bot's ordinal among its squad, so the hunt can
+  // fan them out around the focus from evenly-spread bearings (a real pincer).
+  const slot: number[] = new Array(enemies.length).fill(0);
+  let aliveCount = 0;
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i].health > 0 && !enemies[i].boss) slot[i] = aliveCount++;
+  }
 
   // Shared fire routine: line-of-sight gated, sniper swaps long gun for a rifle
   // up close, accuracy falls off with range and with the player's speed.
   const fireAt = (e: Enemy, canSee: boolean): void => {
     e.fireCd -= dt;
-    if (!canSee || e.fireCd > 0) return;
+    if (e.fireCd > 0) return;
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
-    const W = e.role === 'sniper' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
+    // BERSERKER: melee claws — strikes only point-blank, no LoS needed (it charges).
+    if (e.cls === 'berserker') {
+      if (dist > 3.5) return;
+      e.fireCd = 0.6;
+      e.muzzle = 0.12;
+      tracers.push({ from: [e.x, e.y + 1, e.z], to: peye, color: 0xff3344 });
+      damage += 16;
+      return;
+    }
+    if (!canSee) return;
+    const W = e.cls === 'marksman' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
     e.fireCd = W.rate;
     e.muzzle = 0.12; // show the firing pose + muzzle flash briefly
     tracers.push({ from: [e.x, e.y + EYE_H, e.z], to: peye, color: W.color });
     const evade = Math.min(0.7, pspeed * 0.14);
-    // Accuracy falls off steeply with range (the sniper is the exception far out).
-    const distFactor = e.role === 'sniper' && dist > 12 ? 1 : Math.max(0.1, 1 - Math.max(0, dist - 6) / 26);
+    // Accuracy falls off steeply with range (the marksman is the exception far out).
+    const distFactor = e.cls === 'marksman' && dist > 12 ? 1 : Math.max(0.1, 1 - Math.max(0, dist - 6) / 26);
     // Zero-in: the longer they've held LoS on you, the better their aim. Peeking
     // is safe; lingering in the open gets punished.
     const trackRamp = 0.45 + 0.55 * Math.min(1, e.track / 1.4);
@@ -407,7 +646,7 @@ export function updateEnemies(
             wz += (dz / d) * 0.6;
           }
         }
-        moveEnemy(e, lvl, wx, wz, P.speed * 2, dt, bd.radius); // 2× normal enemy speed
+        moveEnemy(e, lvl, wx, wz, P.speed * 2, dt, bd.radius, grid); // 2× normal enemy speed
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
         e.fireCd -= dt;
         if (dist < bd.meleeRange) {
@@ -431,31 +670,71 @@ export function updateEnemies(
 
     if (e.stunT > 0) continue; // EMP/concussion: frozen, no move or fire
     const slow = e.slowT > 0 ? 0.45 : 1; // cryo slow
-    const role = ROLE[e.role];
+    const role = CLASS[e.cls];
     const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
 
-    // SNIPER: first instinct is to climb the nearest tower and perch, then shoot
-    // from elevation. Shared squad intel still feeds its target.
-    if (e.role === 'sniper' && e.perch) {
-      const reached = e.onDeck && Math.abs(e.y - e.perch.y) < 0.7 && Math.hypot(e.x - e.perch.x, e.z - e.perch.z) < 2.6;
-      if (!reached) {
-        const busy = climbToward(e, lvl, e.perch.y, P.speed * role.speedMul * slow, dt);
-        if (!busy && e.onDeck) moveEnemy(e, lvl, e.perch.x - e.x, e.perch.z - e.z, P.speed * 0.7 * slow, dt);
+    // SNIPER: relocate to the best VANTAGE on the player's area and shoot from it.
+    // Re-picks a better perch periodically (elevated + a clear line to the focus)
+    // so it's always moving toward the best possible shot; routes there via the
+    // nav graph and eases off walls while holding. Falls back to its spawn perch
+    // when there's no nav graph.
+    if (e.cls === 'marksman') {
+      const focusS = tgt ?? squad.hot ?? { x: player.x, z: player.z };
+      e.perchT = (e.perchT ?? 0) - dt;
+      if (nav && !sees[i] && (e.perchT <= 0 || !e.perch)) {
+        const v = bestVantage(nav, lvl, grid, e.x, e.z, focusS.x, focusS.z, mem?.preferRange ?? 18);
+        if (v) e.perch = v;
+        e.perchT = 1.4 + Math.random() * 1.2;
       }
-      if (tgt) e.state = 'alert';
+      const v = e.perch;
+      if (v) {
+        const reached = Math.abs(e.y - v.y) < 0.8 && Math.hypot(e.x - v.x, e.z - v.z) < 2.6;
+        if (!reached) {
+          if (nav && Math.hypot(v.x - e.x, v.z - e.z) > NAV_NEAR) {
+            const nf = navFollow(e, nav, lvl, v.x, v.z, v.y, P.speed * role.speedMul * slow, dt, grid);
+            if (nf !== 'climb' && nf) moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * slow, dt, R, grid);
+          } else {
+            const busy = climbToward(e, lvl, v.y, P.speed * role.speedMul * slow, dt, grid);
+            if (!busy) moveEnemy(e, lvl, v.x - e.x, v.z - e.z, P.speed * 0.8 * slow, dt, R, grid);
+          }
+        } else if (sees[i]) {
+          const [rx, rz] = wallRepulse(e, lvl, grid); // hold the shot, but don't hug the wall
+          if (rx || rz) moveEnemy(e, lvl, rx, rz, P.speed * 0.5 * slow, dt, R, grid);
+        }
+      } else if (nav) {
+        const nf = navFollow(e, nav, lvl, focusS.x, focusS.z, 0, P.speed * role.speedMul * slow, dt, grid);
+        if (nf !== 'climb' && nf) moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * slow, dt, R, grid);
+      }
+      e.state = sees[i] || haveIntel ? 'alert' : 'idle';
       fireAt(e, sees[i]);
-      if (!sees[i] && !haveIntel) e.state = 'idle';
       continue;
     }
 
     if (tgt) {
       e.state = 'alert';
       const boosted = e.alarm > 0;
+      // LONG-RANGE NAV: when the target is far, route the battlefield via the nav
+      // graph (around structures, up ladders, across ramps, out of trenches) and
+      // hand off to the close-range standoff/orbit logic below once within reach.
+      const distTgt = Math.hypot(tgt.x - e.x, tgt.z - e.z);
+      if (nav && distTgt > NAV_NEAR) {
+        const tgtY = player.y > e.y + 2 ? player.y : 0;
+        const nf = navFollow(e, nav, lvl, tgt.x, tgt.z, tgtY, P.speed * role.speedMul * slow, dt, grid);
+        if (nf === 'climb') {
+          fireAt(e, sees[i]);
+          continue;
+        }
+        if (nf) {
+          moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * (boosted ? 1.15 : 1) * slow, dt, R, grid);
+          fireAt(e, sees[i]);
+          continue;
+        }
+      }
       // Climb after an elevated player, or drop back down for a grounded one.
       let wantY = e.y;
       if (player.y > e.y + 2) wantY = player.y;
       else if (e.onDeck && player.y < e.y - 1.5) wantY = 0;
-      if (Math.abs(wantY - e.y) > 0.6 && climbToward(e, lvl, wantY, P.speed * role.speedMul * slow, dt)) {
+      if (Math.abs(wantY - e.y) > 0.6 && climbToward(e, lvl, wantY, P.speed * role.speedMul * slow, dt, grid)) {
         fireAt(e, sees[i]);
         continue;
       }
@@ -491,7 +770,21 @@ export function updateEnemies(
           wz += (dz / d) * 0.5;
         }
       }
-      moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1) * slow, dt);
+      // WALL DISCIPLINE: while shooting, ease off any wall so the firing lane stays
+      // clean; if hit but currently blind, BREAK FOR COVER rather than stand exposed.
+      if (sees[i]) {
+        const [rx, rz] = wallRepulse(e, lvl, grid);
+        wx += rx * 0.8;
+        wz += rz * 0.8;
+      } else if (e.alarm > 0) {
+        const cv = seekCoverDir(e, lvl, grid, tgt.x, tgt.z);
+        if (cv) {
+          const cl = Math.hypot(cv[0], cv[1]) || 1;
+          wx = cv[0] / cl;
+          wz = cv[1] / cl;
+        }
+      }
+      moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1) * slow, dt, R, grid);
       fireAt(e, sees[i]);
       // Give up only when there's no personal sight, no shared intel, and the
       // bot has reached the spot.
@@ -500,9 +793,28 @@ export function updateEnemies(
         e.lastSeen = null;
       }
     } else if (e.onDeck) {
-      climbToward(e, lvl, 0, P.speed * 0.5, dt); // no target: come down off the deck
+      climbToward(e, lvl, 0, P.speed * 0.5, dt, grid); // no target: come down off the deck
     } else {
-      moveEnemy(e, lvl, Math.sin(now / 1500 + e.wander), Math.cos(now / 1700 + e.wander * 2), P.speed * 0.35 * slow, dt);
+      // COORDINATED HUNT — no sighting, no live intel. The squad searches with a
+      // PLAN: head for the player's learned favourite ground (heat) and FAN OUT by
+      // slot so they sweep in from spread bearings (a pincer). The tank drives to
+      // the centre to harass; the others surround, tighter the more bots the player
+      // has dropped (learned). Still NO fire — no line of sight.
+      const focus = squad.hot ?? { x: player.x, z: player.z };
+      const N = Math.max(1, aliveCount);
+      const bearing = (slot[i] / N) * Math.PI * 2 + now / 9000;
+      const ring = e.cls === 'tank' ? 0 : 10 - coord * 4 + (slot[i] % 3) * 4;
+      const gx2 = focus.x + Math.cos(bearing) * ring;
+      const gz2 = focus.z + Math.sin(bearing) * ring;
+      const hsp = (e.cls === 'tank' ? 0.62 : 0.5) * P.speed * slow;
+      const nf = nav ? navFollow(e, nav, lvl, gx2, gz2, 0, hsp, dt, grid) : null;
+      if (nf === 'climb') {
+        // climb system moved the bot toward a vertical link on the route
+      } else if (nf) {
+        moveEnemy(e, lvl, nf.wx, nf.wz, hsp, dt, R, grid);
+      } else {
+        moveEnemy(e, lvl, gx2 - e.x, gz2 - e.z, hsp, dt, R, grid);
+      }
     }
   }
   return { damage, tracers, seen };

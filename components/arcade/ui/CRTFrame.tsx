@@ -8,11 +8,18 @@ import type { ReactNode } from 'react';
  * The scanline drift is a CSS animation, so the global reduced-motion guard
  * collapses it automatically.
  */
-export function CRTFrame({ children }: { children: ReactNode }) {
+export function CRTFrame({ children, fullBleed = false }: { children: ReactNode; fullBleed?: boolean }) {
+  // fullBleed (mobile): the screen fills its parent edge-to-edge, no bezel; the
+  // game decides its own aspect. Otherwise the framed 16:9 cabinet for desktop.
+  const outer = fullBleed
+    ? 'relative h-full w-full bg-black'
+    : 'relative w-full max-w-5xl rounded-[22px] border border-white/10 bg-[#0a0c14] p-3 shadow-[0_30px_120px_-40px_rgba(110,168,255,0.5)] sm:p-5';
+  const inner = fullBleed
+    ? 'relative h-full w-full overflow-hidden bg-black'
+    : 'relative aspect-[16/9] w-full overflow-hidden rounded-[12px] bg-black ring-1 ring-inset ring-[#6ea8ff]/25';
   return (
-    <div className="relative w-full max-w-5xl rounded-[22px] border border-white/10 bg-[#0a0c14] p-3 shadow-[0_30px_120px_-40px_rgba(110,168,255,0.5)] sm:p-5">
-      {/* Inner screen — fixed 16:9 so the canvas scales uniformly. */}
-      <div className="relative aspect-[16/9] w-full overflow-hidden rounded-[12px] bg-black ring-1 ring-inset ring-[#6ea8ff]/25">
+    <div className={outer}>
+      <div className={inner}>
         {children}
         {/* Scanlines */}
         <div

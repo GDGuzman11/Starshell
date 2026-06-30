@@ -4,6 +4,7 @@
  * Vectors are [x, y, z]; directions are unit-length so `t` is world distance.
  */
 import type { Box, Level3D } from './level3d';
+import type { SpatialGrid } from './level/grid';
 
 export type Vec3 = [number, number, number];
 
@@ -28,25 +29,27 @@ function rayBox(o: Vec3, d: Vec3, b: Box): number {
   return tmin;
 }
 
-/** Nearest wall hit distance along a ray (capped at maxD). */
-export function rayWallDist(o: Vec3, d: Vec3, lvl: Level3D, maxD: number): number {
+/** Nearest wall hit distance along a ray (capped at maxD).
+ *  With a grid, only candidate boxes along the ray are tested (identical math). */
+export function rayWallDist(o: Vec3, d: Vec3, lvl: Level3D, maxD: number, grid?: SpatialGrid): number {
   let best = maxD;
-  for (const b of lvl.boxes) {
-    const t = rayBox(o, d, b);
+  const boxes = grid ? grid.queryRay(o[0], o[2], d[0], d[2], maxD) : lvl.boxes;
+  for (let i = 0; i < boxes.length; i++) {
+    const t = rayBox(o, d, boxes[i]);
     if (t < best) best = t;
   }
   return best;
 }
 
 /** Is the straight segment a→b blocked by any wall? */
-export function segBlocked(a: Vec3, b: Vec3, lvl: Level3D): boolean {
+export function segBlocked(a: Vec3, b: Vec3, lvl: Level3D, grid?: SpatialGrid): boolean {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const dz = b[2] - a[2];
   const len = Math.hypot(dx, dy, dz);
   if (len < 1e-6) return false;
   const dir: Vec3 = [dx / len, dy / len, dz / len];
-  return rayWallDist(a, dir, lvl, len - 0.2) < len - 0.2;
+  return rayWallDist(a, dir, lvl, len - 0.2, grid) < len - 0.2;
 }
 
 /** Does the segment a→b pass within radius r of centre c? (smoke LoS block). */

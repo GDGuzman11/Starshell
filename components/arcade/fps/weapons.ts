@@ -34,7 +34,7 @@ export const GUNS: GunDef[] = [
   { id: 'ripper', name: 'RIPPER', family: 'mg', dmg: 13, rate: 0.05, mag: 50, reserve: 320, reload: 2.0, auto: true, scoped: false, hipFov: 82, adsFov: 68, color: 0xff6f9a },
   // lasers
   { id: 'pulse', name: 'ION REPEATER', family: 'laser', dmg: 22, rate: 0.08, mag: 50, reserve: 250, reload: 1.8, auto: true, scoped: false, hipFov: 78, adsFov: 58, color: 0x7fdfff },
-  { id: 'beam', name: 'LANCE BEAM', family: 'laser', dmg: 66, rate: 0.42, mag: 12, reserve: 90, reload: 2.0, auto: false, scoped: false, hipFov: 78, adsFov: 48, color: 0x9af0ff },
+  { id: 'beam', name: 'LANCE BEAM', family: 'laser', dmg: 13, rate: 0.08, mag: 60, reserve: 300, reload: 2.0, auto: true, scoped: false, hipFov: 78, adsFov: 48, color: 0x9af0ff }, // continuous beam: fast low-damage ticks while held
   { id: 'arc', name: 'ARC THROWER', family: 'laser', dmg: 30, rate: 0.13, mag: 28, reserve: 168, reload: 1.9, auto: true, scoped: false, hipFov: 78, adsFov: 56, color: 0x6ad0ff },
   // snipers
   { id: 'rail', name: 'RAILGUN', family: 'sniper', dmg: 165, rate: 0.95, mag: 5, reserve: 40, reload: 2.4, auto: false, scoped: true, hipFov: 78, adsFov: 22, color: 0xc8a8ff },
@@ -54,7 +54,14 @@ export function gunById(id: string): GunDef {
   return GUNS.find((g) => g.id === id) ?? GUNS[0];
 }
 
-export const PRIMARIES = GUNS.filter((g) => g.family !== 'pistol');
+// Loadout pools by FIRE ROLE (disjoint, so the primary/secondary lists never
+// repeat a gun): PRIMARY = sustained-fire weapons (assault rifles, machine guns,
+// rapid energy); SECONDARY = slow, high-damage-per-shot weapons (snipers, rail
+// guns, launchers); SIDEARM = pistols.
+const PRIMARY_FAMILIES: Family[] = ['rifle', 'mg', 'laser'];
+const SECONDARY_FAMILIES: Family[] = ['sniper', 'launcher'];
+export const PRIMARIES = GUNS.filter((g) => PRIMARY_FAMILIES.includes(g.family));
+export const SECONDARIES = GUNS.filter((g) => SECONDARY_FAMILIES.includes(g.family));
 export const SIDEARMS = GUNS.filter((g) => g.family === 'pistol');
 
 /** Throwables — one occupies the loadout's throwable slot.

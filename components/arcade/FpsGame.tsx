@@ -6,12 +6,13 @@ import { CRTFrame } from './ui/CRTFrame';
 import { FpsControls } from './ui/FpsControls';
 import { FpsHud } from './ui/FpsHud';
 import { FpsLoadout } from './screens/FpsLoadout';
+import { OrientationGate } from './mobile/OrientationGate';
 import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, type BossKind, type Difficulty } from './fps/enemy';
+import { spawnEnemies, spawnBosses, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 
@@ -46,10 +47,14 @@ export function FpsGame() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<FpsGameState | null>(null);
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
+  // Squad learning, persisted across a run's levels (reset on a new campaign) so
+  // later fights hunt the player smarter. The SAME object feeds every level's squad.
+  const huntMemRef = useRef<HuntMemory | null>(null);
   const [mode, setMode] = useState<Mode>('menu');
   const [diff, setDiff] = useState<Difficulty>('normal');
   const [enemies, setEnemies] = useState(2);
   const [isTouch, setIsTouch] = useState(false);
+  const [portrait, setPortrait] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
   const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar', p2: 'rail', sa: 'sidearm', th: 'frag' });
   const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
@@ -59,9 +64,12 @@ export function FpsGame() {
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
   const [pseudoFs, setPseudoFs] = useState(false); // CSS fallback (iOS Safari)
   const fsActive = fullscreen || pseudoFs;
+  const [showSettings, setShowSettings] = useState(false);
+  const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1 });
 
+  const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, throwGrenade } = useFpsLoop(canvasRef, gameRef, mode === 'play', onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused, onSnapshot);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -72,6 +80,40 @@ export function FpsGame() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // Load saved touch/aim settings once.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('starshell.cfg');
+      if (raw) setCfg((c) => ({ ...c, ...JSON.parse(raw) }));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Push settings into the loop + persist on change.
+  useEffect(() => {
+    setAimAssist(cfg.aimAssist);
+    setInvertY(cfg.invertY);
+    try {
+      localStorage.setItem('starshell.cfg', JSON.stringify(cfg));
+    } catch {
+      /* ignore */
+    }
+  }, [cfg, setAimAssist, setInvertY]);
+
+  // Track portrait/landscape (phones only) to gate the landscape-only game.
+  useEffect(() => {
+    const mq = window.matchMedia('(orientation: portrait)');
+    const update = () => setPortrait(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      mq.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
   // Keep the loop's look multiplier + the saved value in sync with the slider.
@@ -146,7 +188,7 @@ export function FpsGame() {
       const player = makePlayer3(lvl.spawn);
       player.health = maxHp;
       const bossKinds: BossKind[] = level === 20 ? ['xeno', 'warrior', 'octopus'] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
-      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random) : spawnEnemies(lvl, campaignEnemies(level, enemies), Math.random);
+      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random) : spawnEnemies(lvl, campaignEnemies(level, enemies), level, Math.random);
       gameRef.current = {
         level: lvl,
         player,
@@ -164,7 +206,7 @@ export function FpsGame() {
         status: 'playing',
         kills: 0,
         regenT: 0,
-        squad: { lastKnown: null, t: 0 },
+        squad: { lastKnown: null, t: 0, mem: (huntMemRef.current ??= makeHuntMemory()) },
         maxHp,
       };
       setSnap(null);
@@ -178,6 +220,7 @@ export function FpsGame() {
       // Every loadout gun starts with the free basic enhancement.
       const ups: Record<string, Upg> = {};
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      huntMemRef.current = makeHuntMemory(); // fresh learning each new campaign
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       startLevel(1, lo, 100, ups);
     },
@@ -227,53 +270,79 @@ export function FpsGame() {
     if (dead && document.pointerLockElement) document.exitPointerLock?.();
   }, [dead]);
 
+  const fullBleed = isTouch; // phones go edge-to-edge; desktop keeps the CRT cabinet
   return (
     <div
       ref={wrapRef}
-      className={`flex w-full flex-col items-center gap-4 bg-black ${pseudoFs ? 'fixed inset-0 z-[999] justify-center overflow-auto p-2' : ''}`}
-      style={pseudoFs ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}
+      className={
+        fullBleed
+          ? 'fixed inset-0 z-[60] overflow-hidden bg-black'
+          : `flex w-full flex-col items-center gap-4 bg-black ${pseudoFs ? 'fixed inset-0 z-[999] justify-center overflow-auto p-2' : ''}`
+      }
+      style={
+        fullBleed
+          ? { height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }
+          : pseudoFs
+            ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }
+            : undefined
+      }
     >
-      <div className="flex w-full max-w-5xl items-center justify-between px-1">
-        <h1 className="font-pixel text-[11px] text-[#7fdfff] sm:text-[13px]">STARSHELL</h1>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="min-h-[32px] font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]"
-            aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
-          >
-            {fsActive ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
-          </button>
-          <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
+      {!fullBleed && (
+        <div className="flex w-full max-w-5xl items-center justify-between px-1">
+          <h1 className="font-pixel text-[11px] text-[#7fdfff] sm:text-[13px]">STARSHELL</h1>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="min-h-[32px] font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]"
+              aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {fsActive ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
+            </button>
+            <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
+              ◂ EXIT
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <CRTFrame fullBleed={fullBleed}>
+        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none [image-rendering:pixelated]" />
+
+        {fullBleed && mode === 'menu' && (
+          <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
             ◂ EXIT
           </Link>
-        </div>
-      </div>
-
-      <CRTFrame>
-        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none [image-rendering:pixelated]" />
+        )}
 
         {mode === 'play' && snap && snap.status === 'playing' && (
           <>
-            <FpsHud snap={snap} />
-            <div className="pointer-events-none absolute left-3 top-3 z-30 font-pixel text-[8px] text-[#ffd27a] sm:text-[10px]">
-              LVL {run.level}/{LEVELS} · ⛀ {run.gold}
-            </div>
+            <FpsHud snap={snap} level={run.level} gold={run.gold} isTouch={isTouch} />
             <button type="button" onClick={() => setMode('menu')} className="absolute right-3 top-3 z-50 font-pixel text-[8px] text-white/55 transition-colors hover:text-white">
               MENU
             </button>
             {isTouch && (
               <>
-                <FpsControls onMove={(s, f) => setMoveAxis(s, f)} onLook={(dx, dy) => addLook(dx, dy)} />
-                <button type="button" onClick={() => cycleWeapon(1)} className="pointer-events-auto absolute right-3 top-[26%] z-40 rounded-md border border-white/20 bg-black/40 px-3 py-2 font-pixel text-[8px] text-white/80">
-                  WPN ▸
-                </button>
-                <button type="button" onClick={() => cycleZoom()} className="pointer-events-auto absolute right-3 top-[42%] z-40 rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-3 py-2 font-pixel text-[8px] text-[#7fdfff]">
-                  ZOOM
-                </button>
-                <button type="button" onClick={() => throwGrenade()} className="pointer-events-auto absolute right-3 top-[58%] z-40 rounded-md border border-[#ffae3a]/40 bg-[#ffae3a]/10 px-3 py-2 font-pixel text-[8px] text-[#ffae3a]">
-                  THROW
-                </button>
+                <FpsControls onMove={(s, f) => setMoveAxis(s, f)} onLook={(dx, dy) => addLook(dx, dy)} leftHanded={cfg.leftHanded} opacity={cfg.joyOpacity} />
+                {/* Big action buttons, opposite the joystick, clear of the aim region. */}
+                <div className={`pointer-events-none absolute bottom-4 z-40 flex flex-col gap-2 ${cfg.leftHanded ? 'left-3 items-start' : 'right-3 items-end'}`}>
+                  <div className="flex gap-2">
+                    <TouchBtn onTap={reload} label="RELOAD" color="#7fdfff" scale={cfg.btnScale} />
+                    <TouchBtn onTap={() => cycleWeapon(1)} label="WPN ▸" color="#ffffff" scale={cfg.btnScale} />
+                  </div>
+                  <div className="flex gap-2">
+                    <TouchBtn onTap={() => cycleZoom()} label="ZOOM" color="#7fdfff" scale={cfg.btnScale} />
+                    <TouchBtn onTap={() => throwGrenade()} label="NADE" color="#ffae3a" scale={cfg.btnScale} />
+                  </div>
+                  <button
+                    type="button"
+                    onPointerDown={jump}
+                    className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[9px] text-[#aef5c8] backdrop-blur-sm active:bg-[#aef5c8]/25"
+                    style={{ width: 148 * cfg.btnScale, height: 48 * cfg.btnScale }}
+                  >
+                    JUMP
+                  </button>
+                </div>
               </>
             )}
             {!isTouch && (
@@ -322,8 +391,11 @@ export function FpsGame() {
               className="mt-2 h-1.5 w-56 cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
             />
 
-            <button type="button" onClick={() => { setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
+            <button type="button" onClick={() => { if (fullBleed && !fsActive) toggleFullscreen(); setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
               Loadout ▸
+            </button>
+            <button type="button" onClick={() => setShowSettings(true)} className="mt-3 min-h-[36px] font-pixel text-[8px] uppercase text-white/50 transition-colors hover:text-white sm:text-[9px]">
+              ⚙ Settings
             </button>
             <p className="mt-5 max-w-xs text-center font-pixel text-[6px] leading-relaxed text-white/35 sm:text-[8px]">
               {isTouch ? 'LEFT STICK MOVE · RIGHT LOOK · AUTO-FIRE ON TARGET' : 'CLICK TO CAPTURE MOUSE, THEN AIM + FIRE'}
@@ -391,6 +463,77 @@ export function FpsGame() {
           </div>
         )}
       </CRTFrame>
+
+      <OrientationGate show={fullBleed && portrait} />
+
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 px-4 backdrop-blur-md"
+          style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0a0c14]/90 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-pixel text-[12px] text-[#7fdfff]">SETTINGS</p>
+              <button type="button" onClick={() => setShowSettings(false)} className="min-h-[32px] font-pixel text-[9px] text-white/55 hover:text-white">
+                DONE
+              </button>
+            </div>
+            <div className="space-y-3">
+              <Toggle label="Invert Look Y" on={cfg.invertY} onToggle={() => setCfg((c) => ({ ...c, invertY: !c.invertY }))} />
+              {isTouch && (
+                <>
+                  <Toggle label="Aim Assist" on={cfg.aimAssist} onToggle={() => setCfg((c) => ({ ...c, aimAssist: !c.aimAssist }))} />
+                  <Toggle label="Left-handed" on={cfg.leftHanded} onToggle={() => setCfg((c) => ({ ...c, leftHanded: !c.leftHanded }))} />
+                  <Slider label="Joystick Opacity" value={cfg.joyOpacity} min={0.2} max={1} step={0.1} onChange={(v) => setCfg((c) => ({ ...c, joyOpacity: v }))} />
+                  <Slider label="Button Size" value={cfg.btnScale} min={0.8} max={1.5} step={0.1} onChange={(v) => setCfg((c) => ({ ...c, btnScale: v }))} />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function Toggle({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} className="flex min-h-[36px] w-full items-center justify-between font-pixel text-[8px] text-white/80 sm:text-[9px]">
+      <span>{label}</span>
+      <span className={`rounded px-2 py-1 text-[7px] ${on ? 'bg-[#aef5c8]/20 text-[#aef5c8]' : 'bg-white/10 text-white/45'}`}>{on ? 'ON' : 'OFF'}</span>
+    </button>
+  );
+}
+
+function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <p className="font-pixel text-[7px] text-white/55 sm:text-[8px]">
+        {label} · {value.toFixed(1)}
+      </p>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
+      />
+    </div>
+  );
+}
+
+/** A large glass action button for touch (fires on press, not click). */
+function TouchBtn({ onTap, label, color, scale = 1 }: { onTap: () => void; label: string; color: string; scale?: number }) {
+  return (
+    <button
+      type="button"
+      onPointerDown={onTap}
+      className="pointer-events-auto flex items-center justify-center rounded-2xl border bg-black/40 font-pixel text-[8px] backdrop-blur-sm active:brightness-150"
+      style={{ borderColor: `${color}66`, color, width: 64 * scale, height: 64 * scale }}
+    >
+      {label}
+    </button>
   );
 }

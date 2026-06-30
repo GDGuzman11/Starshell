@@ -56,3 +56,17 @@ body {
     scroll-behavior: auto !important;
   }
 }
+/* Rotate-your-phone hint (the landscape OrientationGate). */
+@keyframes gdg-rotate-phone {
+  0%,
+  18% {
+    transform: rotate(0deg);
+  }
+  50%,
+  82% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}

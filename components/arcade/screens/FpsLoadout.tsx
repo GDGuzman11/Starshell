@@ -1,7 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { PRIMARIES, SIDEARMS, THROWABLES, type GunDef, type ThrowKind } from '../fps/weapons';
+import { GUNS, PRIMARIES, SECONDARIES, SIDEARMS, THROWABLES, type GunDef, type ThrowKind } from '../fps/weapons';
+import { GunPreview } from './GunPreview';
+
+// Normalization bounds for the stat bars (computed once over the whole arsenal).
+const DMG_MAX = Math.max(...GUNS.map((g) => g.dmg));
+const MAG_MAX = Math.max(...GUNS.map((g) => g.mag));
+const RELOAD_MIN = Math.min(...GUNS.map((g) => g.reload));
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 const THROW_SUB: Record<ThrowKind, string> = {
   frag: 'AoE damage',
@@ -18,7 +25,8 @@ const THROW_SUB: Record<ThrowKind, string> = {
   plasma: 'huge burst',
 };
 
-/** Pre-deploy loadout: 2 primaries + 1 sidearm + 1 throwable, from the pool. */
+/** Pre-deploy loadout: 2 primaries + 1 sidearm + 1 throwable, from the pool.
+ *  A shared 3D preview shows whichever gun you last tapped (default PRIMARY 1). */
 export function FpsLoadout({
   onDeploy,
   onBack,
@@ -30,9 +38,17 @@ export function FpsLoadout({
   const [p2, setP2] = useState('rail');
   const [sa, setSa] = useState('sidearm');
   const [th, setTh] = useState('frag');
+  const [focus, setFocus] = useState('ar'); // gun shown in the preview
+
+  const pick = (set: (id: string) => void) => (id: string) => {
+    set(id);
+    setFocus(id);
+  };
+  const fg = GUNS.find((g) => g.id === focus);
+  const ft = !fg ? THROWABLES.find((t) => t.id === focus) : undefined;
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col bg-black/85 px-3 py-3 sm:px-5">
+    <div className="absolute inset-0 z-40 flex flex-col bg-black/85 px-3 py-2 sm:px-5 sm:py-3">
       <div className="flex items-center justify-between">
         <p className="font-pixel text-[10px] text-[#7fdfff] sm:text-[13px]">LOADOUT</p>
         <button type="button" onClick={onBack} className="font-pixel text-[8px] text-white/45 hover:text-white sm:text-[9px]">
@@ -40,16 +56,46 @@ export function FpsLoadout({
         </button>
       </div>
 
-      <div className="mt-2 flex-1 space-y-3 overflow-y-auto pr-1">
-        <Picker label="PRIMARY 1" items={PRIMARIES} value={p1} onPick={setP1} />
-        <Picker label="PRIMARY 2" items={PRIMARIES} value={p2} onPick={setP2} />
-        <Picker label="SIDEARM" items={SIDEARMS} value={sa} onPick={setSa} />
-        <div>
-          <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {THROWABLES.map((t) => (
-              <Chip key={t.id} label={`${t.name} ×${t.count}`} sub={THROW_SUB[t.kind]} on={th === t.id} color="#ffae3a" onClick={() => setTh(t.id)} />
-            ))}
+      {/* two columns: big preview on the left, full selection list on the right */}
+      <div className="mt-2 flex min-h-0 flex-1 gap-3">
+        {/* left: large 3D preview (fills the height) + stat bars */}
+        <div className="flex w-[42%] shrink-0 flex-col sm:w-[44%]">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-white/[0.06] to-transparent">
+            <GunPreview gunId={focus} />
+            <div className="pointer-events-none absolute bottom-1 left-2">
+              <p className="font-pixel text-[9px] text-white sm:text-[12px]">{fg?.name ?? ft?.name}</p>
+              <p className="font-pixel text-[6px] uppercase text-white/45 sm:text-[8px]">{fg ? fg.family : ft ? THROW_SUB[ft.kind] : ''}</p>
+            </div>
+          </div>
+          <div className="mt-1.5 shrink-0 space-y-1">
+            {fg && (
+              <>
+                <StatBar label="POWER" pct={Math.sqrt(fg.dmg / DMG_MAX)} value={`${fg.dmg}`} color="#ff5d6e" />
+                <StatBar label="MAG" pct={fg.mag / MAG_MAX} value={`${fg.mag}`} color="#7fdfff" />
+                <StatBar label="RELOAD" pct={RELOAD_MIN / fg.reload} value={`${fg.reload}s`} color="#aef5c8" />
+              </>
+            )}
+            {ft && (
+              <div className="flex items-center justify-between font-pixel text-[7px] text-white/55 sm:text-[8px]">
+                <span>CARRY ×{ft.count}</span>
+                <span>{ft.blast.dmg > 0 ? `BLAST ${ft.blast.dmg}` : 'UTILITY'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* right: the full selection list (own full-height space → no squish) */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
+          <Picker label="PRIMARY" items={PRIMARIES} value={p1} focus={focus} onPick={pick(setP1)} />
+          <Picker label="SECONDARY" items={SECONDARIES} value={p2} focus={focus} onPick={pick(setP2)} />
+          <Picker label="SIDEARM" items={SIDEARMS} value={sa} focus={focus} onPick={pick(setSa)} />
+          <div>
+            <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {THROWABLES.map((t) => (
+                <Chip key={t.id} label={`${t.name} ×${t.count}`} sub={THROW_SUB[t.kind]} on={th === t.id} ring={focus === t.id} color="#ffae3a" onClick={() => { setTh(t.id); setFocus(t.id); }} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -65,25 +111,37 @@ export function FpsLoadout({
   );
 }
 
-function Picker({ label, items, value, onPick }: { label: string; items: GunDef[]; value: string; onPick: (id: string) => void }) {
+function StatBar({ label, pct, value, color }: { label: string; pct: number; value: string; color: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-12 shrink-0 font-pixel text-[6px] uppercase text-white/45 sm:text-[7px]">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.round(clamp01(pct) * 100)}%`, backgroundColor: color }} />
+      </div>
+      <span className="w-9 shrink-0 text-right font-pixel text-[7px] text-white sm:text-[8px]">{value}</span>
+    </div>
+  );
+}
+
+function Picker({ label, items, value, focus, onPick }: { label: string; items: GunDef[]; value: string; focus: string; onPick: (id: string) => void }) {
   return (
     <div>
       <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">{label}</p>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {items.map((g) => (
-          <Chip key={g.id} label={g.name} sub={`${g.family} · ${g.dmg}`} on={value === g.id} color="#7fdfff" onClick={() => onPick(g.id)} />
+          <Chip key={g.id} label={g.name} sub={`${g.family} · ${g.dmg}`} on={value === g.id} ring={focus === g.id} color="#7fdfff" onClick={() => onPick(g.id)} />
         ))}
       </div>
     </div>
   );
 }
 
-function Chip({ label, sub, on, color, onClick }: { label: string; sub: string; on: boolean; color: string; onClick: () => void }) {
+function Chip({ label, sub, on, ring, color, onClick }: { label: string; sub: string; on: boolean; ring?: boolean; color: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-start rounded border px-2 py-1 text-left transition-colors ${on ? 'bg-white/10' : 'border-white/10 bg-white/[0.02] opacity-70 hover:opacity-100'}`}
+      className={`flex flex-col items-start rounded border px-2 py-1 text-left transition-colors ${on ? 'bg-white/10' : 'border-white/10 bg-white/[0.02] opacity-70 hover:opacity-100'} ${ring && !on ? 'ring-1 ring-white/30' : ''}`}
       style={on ? { borderColor: color } : undefined}
     >
       <span className="font-pixel text-[7px] leading-tight text-white sm:text-[8px]">{label}</span>

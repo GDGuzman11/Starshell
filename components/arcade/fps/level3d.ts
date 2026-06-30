@@ -48,16 +48,72 @@ export interface Zipline {
   z1: number;
 }
 
+/**
+ * A walkable sloped surface (NOT a solid box collider — a height FUNCTION).
+ * Footprint is the XZ rect centred on (x,z) with extents (sx,sz). The surface
+ * rises from `yLo` to `yHi` along `dir` across that footprint. Height at a point
+ * inside the footprint = lerp(yLo, yHi, frac), where frac is the normalized
+ * position along `dir` (0 at the low edge → 1 at the high edge), clamped to
+ * [yLo, yHi]. Physics snaps the player/enemies onto this surface; the rendered
+ * mesh is purely visual.
+ */
+export interface Ramp {
+  x: number;
+  z: number;
+  sx: number;
+  sz: number;
+  yLo: number;
+  yHi: number;
+  dir: '+x' | '-x' | '+z' | '-z';
+  tex: number;
+}
+
 export interface Level3D {
   boxes: Box[];
   ladders: Ladder[];
   pads: JumpPad[];
   ziplines: Zipline[];
+  /** Optional sloped walkable surfaces (Phase 3). Absent on older levels. */
+  ramps?: Ramp[];
   spawn: { x: number; z: number; yaw: number };
   /** Far end of the arena where enemies start (opposite the player spawn). */
   enemySpawn: { x: number; z: number };
   size: number;
   seed: number;
+}
+
+/** Is (px,pz) within the ramp's XZ footprint? */
+export function rampContains(rmp: Ramp, px: number, pz: number): boolean {
+  return (
+    px >= rmp.x - rmp.sx / 2 &&
+    px <= rmp.x + rmp.sx / 2 &&
+    pz >= rmp.z - rmp.sz / 2 &&
+    pz <= rmp.z + rmp.sz / 2
+  );
+}
+
+/** Surface height of the ramp at (px,pz). Caller should check rampContains first;
+ *  frac is clamped so the result is always within [yLo, yHi]. */
+export function rampHeightAt(rmp: Ramp, px: number, pz: number): number {
+  let frac: number;
+  switch (rmp.dir) {
+    case '+x':
+      frac = (px - (rmp.x - rmp.sx / 2)) / rmp.sx;
+      break;
+    case '-x':
+      frac = ((rmp.x + rmp.sx / 2) - px) / rmp.sx;
+      break;
+    case '+z':
+      frac = (pz - (rmp.z - rmp.sz / 2)) / rmp.sz;
+      break;
+    case '-z':
+    default:
+      frac = ((rmp.z + rmp.sz / 2) - pz) / rmp.sz;
+      break;
+  }
+  if (frac < 0) frac = 0;
+  else if (frac > 1) frac = 1;
+  return rmp.yLo + (rmp.yHi - rmp.yLo) * frac;
 }
 
 type Rnd = () => number;
@@ -176,12 +232,116 @@ function hill(boxes: Box[], ladders: Ladder[], cx: number, cz: number, w: number
   boxes.push({ x: cx + half * 0.4, y: H + 0.7, z: cz - half * 0.2, sx: 1.6, sy: 1.4, sz: 1.6, tex: 3 });
 }
 
+// ── Terrain primitives (Phase 3) ─────────────────────────────────────────────
+// Helpers that emit a Ramp and/or boxes to raise ground or ring a sunken area.
+// All elevation goes UP from y=0; a "trench/underground" is a flat base-level
+// floor surrounded by raised berm boxes, reached by a ramp leading DOWN into it.
+// (The world floor stays at y=0 — nothing is authored below it.)
+
+/** Emit one walkable ramp. `dir` points UPHILL (toward yHi). */
+function ramp(
+  ramps: Ramp[],
+  x: number,
+  z: number,
+  sx: number,
+  sz: number,
+  yLo: number,
+  yHi: number,
+  dir: Ramp['dir'],
+  tex = 2,
+): void {
+  ramps.push({ x, z, sx, sz, yLo, yHi, dir, tex });
+}
+
+/** A raised berm/wall of ground (a solid box from y=0 up to height h). */
+function berm(boxes: Box[], x: number, z: number, sx: number, sz: number, h: number, tex = 1): void {
+  boxes.push({ x, y: h / 2, z, sx, sy: h, sz, tex });
+}
+
+/** A single raised ground step (alias of berm, semantic name for stair runs). */
+function step(boxes: Box[], x: number, z: number, sx: number, sz: number, h: number, tex = 1): void {
+  berm(boxes, x, z, sx, sz, h, tex);
+}
+
+/**
+ * A "sunken" area: a flat base-level floor (y=0) ringed by raised berm walls of
+ * height `wall`, so it reads as a pit relative to the wall tops. A GAP on the
+ * `entry` side has NO berm; instead an UP-and-OVER ramp pair lets you reach it
+ * from the surrounding y=0 ground: an outer up-ramp (0 → wall) climbing to the
+ * berm crest, then an inner down-ramp (wall → 0) descending to the trench floor.
+ * Everything stays at y≥0; "underground" is purely the berm height around you.
+ */
+function trench(
+  boxes: Box[],
+  ramps: Ramp[],
+  cx: number,
+  cz: number,
+  w: number,
+  d: number,
+  wall: number,
+  entry: Ramp['dir'],
+  tex = 1,
+): void {
+  const hw = w / 2;
+  const hd = d / 2;
+  const t = 1.0; // berm thickness
+  const gap = Math.min(w, d) * 0.5; // opening width for the ramp pair
+  // Ring the trench with berms, leaving a gap on the `entry` side.
+  const fullX = (z: number) => berm(boxes, cx, z, w + 2 * t, t, wall, tex); // wall spanning X
+  const fullZ = (x: number) => berm(boxes, x, cz, t, d + 2 * t, wall, tex); // wall spanning Z
+  const stubX = (z: number) => {
+    const seg = (w + 2 * t - gap) / 2;
+    berm(boxes, cx - (gap / 2 + seg / 2), z, seg, t, wall, tex);
+    berm(boxes, cx + (gap / 2 + seg / 2), z, seg, t, wall, tex);
+  };
+  const stubZ = (x: number) => {
+    const seg = (d + 2 * t - gap) / 2;
+    berm(boxes, x, cz - (gap / 2 + seg / 2), t, seg, wall, tex);
+    berm(boxes, x, cz + (gap / 2 + seg / 2), t, seg, wall, tex);
+  };
+  if (entry === '-z') stubX(cz - hd - t / 2); else fullX(cz - hd - t / 2);
+  if (entry === '+z') stubX(cz + hd + t / 2); else fullX(cz + hd + t / 2);
+  if (entry === '-x') stubZ(cx - hw - t / 2); else fullZ(cx - hw - t / 2);
+  if (entry === '+x') stubZ(cx + hw + t / 2); else fullZ(cx + hw + t / 2);
+
+  // Up-and-over ramp pair through the gap; both high ends meet at the berm crest.
+  // The high end (yHi) of each ramp points TOWARD the crest.
+  const run = wall * 2.2; // gentle slope run per ramp
+  if (entry === '-z') {
+    const crest = cz - hd - t / 2; // berm centre line (−z side)
+    ramp(ramps, cx, crest - run / 2, gap, run, 0, wall, '+z', tex); // outer: low at −z, high at crest
+    ramp(ramps, cx, crest + run / 2, gap, run, 0, wall, '-z', tex); // inner: high at crest, low into pit
+  } else if (entry === '+z') {
+    const crest = cz + hd + t / 2;
+    ramp(ramps, cx, crest + run / 2, gap, run, 0, wall, '-z', tex);
+    ramp(ramps, cx, crest - run / 2, gap, run, 0, wall, '+z', tex);
+  } else if (entry === '-x') {
+    const crest = cx - hw - t / 2;
+    ramp(ramps, crest - run / 2, cz, run, gap, 0, wall, '+x', tex);
+    ramp(ramps, crest + run / 2, cz, run, gap, 0, wall, '-x', tex);
+  } else {
+    const crest = cx + hw + t / 2;
+    ramp(ramps, crest + run / 2, cz, run, gap, 0, wall, '-x', tex);
+    ramp(ramps, crest - run / 2, cz, run, gap, 0, wall, '+x', tex);
+  }
+}
+
+/** A stepped plateau: a stack of shrinking berm boxes (visual stairs you can
+ *  step-up onto). Not used by the demo but available for the generator. */
+function plateauStepped(boxes: Box[], cx: number, cz: number, w: number, steps: number, stepH: number, tex = 1): void {
+  for (let i = 0; i < steps; i++) {
+    const s = w * (1 - i / (steps + 1));
+    step(boxes, cx, cz, s, s, (i + 1) * stepH, tex);
+  }
+}
+
 export function makeArena3D(enemyCount: number, seed: number): Level3D {
   const r = rng(seed);
   const size = (22 + enemyCount * 6) * 2;
   const half = size / 2;
   const boxes: Box[] = [];
   const ladders: Ladder[] = [];
+  const ramps: Ramp[] = [];
 
   // Player and enemies start at OPPOSITE ends of the arena.
   const playerSpawn = { x: 0, z: -half * 0.78, yaw: Math.PI };
@@ -213,6 +373,25 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
   const hillZ = -half * 0.55;
   hill(boxes, ladders, hillX, hillZ, hillW);
   placed.push({ x: hillX, z: hillZ, rad: hillW });
+
+  // Phase-3 demo terrain (placed before towers so they avoid it): a ramp up onto
+  // a raised plateau, and one sunken "trench" (berm-ringed pit at y≥0 with entry
+  // ramps). Exercises the ramp/trench primitives in-game; the Phase-5 generator
+  // will place these properly per archetype.
+  const plX = -size * 0.18;
+  const plZ = size * 0.12;
+  const plH = 2.5;
+  berm(boxes, plX, plZ, 8, 6, plH); // raised plateau (8 wide × 6 deep, top at plH)
+  // RULE (also for the Phase-5 generator): a ramp that leads up to a platform must
+  // LAND on it — its high edge sits EXACTLY at the platform's near edge (plZ-3) at
+  // the platform's top height, and matches the platform width — so you walk
+  // straight onto the deck with no step/gap at the seam.
+  ramp(ramps, plX, plZ - 6, 8, 6, 0, plH, '+z'); // high edge = plZ-3 = plateau −z edge, full width
+  placed.push({ x: plX, z: plZ - 3, rad: 18 });
+  const trX = size * 0.18;
+  const trZ = -size * 0.12;
+  trench(boxes, ramps, trX, trZ, 10, 10, 2.5, '-z'); // sunken area + over-the-berm entry ramps
+  placed.push({ x: trX, z: trZ, rad: 18 });
 
   // Multi-floor towers FIRST, spaced FAR apart. Force the first few to be tall
   // 6-floor towers so there are enough rooftops to string ziplines between.
@@ -277,5 +456,5 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     pads.push({ x, z, r: 1.1, power: 13 });
   }
 
-  return { boxes, ladders, pads, ziplines, spawn: playerSpawn, enemySpawn, size, seed };
+  return { boxes, ladders, ramps, pads, ziplines, spawn: playerSpawn, enemySpawn, size, seed };
 }

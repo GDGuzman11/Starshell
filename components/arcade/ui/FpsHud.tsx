@@ -2,9 +2,13 @@
 
 import type { FpsSnapshot } from '../useFpsLoop';
 
+// The gun is now a real 3D viewmodel (fps/viewmodel.ts). Flip to true to restore
+// the old flat 2D CSS gun + screen-centre muzzle flash.
+const SHOW_2D_GUN = false;
+
 /** Combat HUD: crosshair / scope, hitmarker, muzzle flash, hurt vignette,
  *  health, the active weapon + ammo, weapon slots, and a gun view-model. */
-export function FpsHud({ snap }: { snap: FpsSnapshot }) {
+export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; level: number; gold: number; isTouch: boolean }) {
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const flash = now - snap.fireAt < 70;
   const hit = now - snap.hitAt < 180;
@@ -66,8 +70,8 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
         </div>
       )}
 
-      {/* muzzle flash + gun view-model (hidden while scoped) */}
-      {!scoped && (
+      {/* muzzle flash + gun view-model (hidden while scoped) — superseded by the 3D viewmodel */}
+      {SHOW_2D_GUN && !scoped && (
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
           {flash && (
             <div aria-hidden className="absolute -top-5 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full" style={{ background: 'radial-gradient(circle, #fff6c8 0%, #ffae3a 50%, transparent 70%)' }} />
@@ -80,9 +84,13 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
         </div>
       )}
 
-      {/* enemies left */}
-      <div className="absolute left-1/2 top-3 -translate-x-1/2 text-[9px] text-[#ff8a96] sm:text-[11px]">
-        ENEMIES {snap.enemiesLeft}
+      {/* wave · enemies · gold (glass objective pill) */}
+      <div className="absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] backdrop-blur-sm sm:text-[10px]">
+        <span className="text-[#7fdfff]">WAVE {level}</span>
+        <span className="text-white/25"> · </span>
+        <span className="text-[#ff8a96]">{snap.enemiesLeft} LEFT</span>
+        <span className="text-white/25"> · </span>
+        <span className="text-[#ffd27a]">⛀ {gold}</span>
       </div>
 
       {/* boss bars */}
@@ -99,12 +107,12 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
         </div>
       )}
 
-      {/* health */}
-      <div className="absolute bottom-4 left-4">
-        <div className="mb-1 text-[8px] text-white/60 sm:text-[9px]">
+      {/* health (glass) */}
+      <div className="absolute bottom-4 left-4 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 backdrop-blur-sm">
+        <div className="mb-1 text-[7px] text-white/55 sm:text-[8px]">
           HP {Math.round(snap.health)}/{snap.maxHp}
         </div>
-        <div className="h-2.5 w-32 overflow-hidden rounded bg-white/15 sm:w-40">
+        <div className="h-2 w-28 overflow-hidden rounded-full bg-white/15 sm:w-36">
           <div
             className="h-full transition-[width] duration-150"
             style={{ width: `${(snap.health / snap.maxHp) * 100}%`, backgroundColor: snap.health / snap.maxHp > 0.35 ? '#aef5c8' : '#ff5d6e' }}
@@ -112,20 +120,25 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
         </div>
       </div>
 
-      {/* weapon + ammo + slots */}
-      <div className="absolute bottom-4 right-4 text-right">
-        <div className="text-[9px] text-[#7fdfff] sm:text-[11px]">
+      {/* weapon + ammo + slots (glass). On touch it sits bottom-centre, clear of
+          the action buttons; on desktop bottom-right. */}
+      <div
+        className={`absolute bottom-4 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 backdrop-blur-sm ${
+          isTouch ? 'left-1/2 -translate-x-1/2 text-center' : 'right-4 text-right'
+        }`}
+      >
+        <div className="text-[8px] text-[#7fdfff] sm:text-[10px]">
           {snap.weapon} <span className="text-white/40">· {snap.family}</span>
         </div>
         {snap.reloading ? (
-          <div className="text-[10px] text-[#7fdfff] sm:text-[12px]">RELOADING…</div>
+          <div className="text-[9px] text-[#7fdfff] sm:text-[12px]">RELOADING…</div>
         ) : (
-          <div className="text-[14px] sm:text-[18px]">
+          <div className="text-[13px] sm:text-[17px]">
             <span className={snap.mag <= 3 ? 'text-[#ff5d6e]' : 'text-white'}>{snap.mag}</span>
             <span className="text-white/40"> / {snap.reserve}</span>
           </div>
         )}
-        <div className="mt-1 flex justify-end gap-1">
+        <div className={`mt-1 flex gap-1 ${isTouch ? 'justify-center' : 'justify-end'}`}>
           {snap.slots.map((s, i) => (
             <span
               key={i}
@@ -136,9 +149,8 @@ export function FpsHud({ snap }: { snap: FpsSnapshot }) {
           ))}
         </div>
         <div className="mt-0.5 text-[7px] text-[#ffae3a] sm:text-[8px]">
-          {snap.throwName} ×{snap.throwCount} <span className="text-white/30">· G</span>
+          {snap.throwName} ×{snap.throwCount}
         </div>
-        <div className="mt-0.5 text-[6px] text-white/35 sm:text-[7px]">1-3 / SCROLL SWAP · RMB ZOOM · R RELOAD · G THROW</div>
       </div>
     </div>
   );

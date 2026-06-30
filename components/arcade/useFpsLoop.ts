@@ -7,9 +7,16 @@ import { EYE, MAX_PITCH, stepPlayer, type Player3 } from './fps/physics';
 import type { Level3D } from './fps/level3d';
 import { updateEnemies, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
 import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
-import { enemyTex, bossTex } from './fps/textures';
+import { bossTex } from './fps/textures';
+import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
+import { poseDeath, poseEnemy } from './fps/enemies/animator';
 import type { GunDef, ThrowDef } from './fps/weapons';
 import { sfx } from './engine/audio';
+import { makeComposer } from './fps/postfx';
+import { Viewmodel } from './fps/viewmodel';
+import type { RenderTier } from './fps/materials';
+import { SpatialGrid } from './fps/level/grid';
+import { buildNavGraph, type NavGraph } from './fps/level/nav';
 
 const RW = 480;
 const RH = 270;
@@ -80,8 +87,11 @@ export function useFpsLoop(
   const fireHeld = useRef(false);
   const zoomLevel = useRef(0); // 0 = hip, 1 = zoom, 2 = deep zoom (right-click cycles)
   const sens = useRef(1); // look-sensitivity multiplier (user-adjustable)
+  const aimAssistOn = useRef(true); // touch aim assist (settings)
+  const invertY = useRef(false); // invert look pitch (settings)
   const reloadReq = useRef(false);
   const throwReq = useRef(false);
+  const jumpReq = useRef(false);
   const prevFire = useRef(false);
   const switchReq = useRef<number | 'next' | 'prev' | null>(null);
 
@@ -101,8 +111,20 @@ export function useFpsLoop(
   const setSensitivity = useCallback((v: number) => {
     sens.current = v;
   }, []);
+  const setAimAssist = useCallback((v: boolean) => {
+    aimAssistOn.current = v;
+  }, []);
+  const setInvertY = useCallback((v: boolean) => {
+    invertY.current = v;
+  }, []);
   const throwGrenade = useCallback(() => {
     throwReq.current = true;
+  }, []);
+  const jump = useCallback(() => {
+    jumpReq.current = true;
+  }, []);
+  const reload = useCallback(() => {
+    reloadReq.current = true;
   }, []);
 
   useEffect(() => {
@@ -116,12 +138,55 @@ export function useFpsLoop(
     const isTouch = 'ontouchstart' in window;
     const ballGeo = new THREE.SphereGeometry(1, 10, 8);
 
+    // Render tier — drives material cost (emissive walls) + post-FX weight.
+    // Phones / low-memory devices get the cheaper Lambert walls + bloom-only.
+    const lowMem = typeof navigator !== 'undefined' && (navigator as Navigator & { deviceMemory?: number }).deviceMemory !== undefined
+      && ((navigator as Navigator & { deviceMemory?: number }).deviceMemory as number) < 4;
+    const tier: RenderTier = isTouch || lowMem ? 'mobile' : 'desktop';
+
+    // Imperative post-processing composer (Bloom + grain), built lazily once the
+    // first world exists; sized to the 480×270 buffer. The RenderPass's scene is
+    // repointed when the world is rebuilt (camera object is stable).
+    let composer: ReturnType<typeof makeComposer> | null = null;
+    // 3D first-person viewmodel (the selected gun), drawn over the world frame.
+    let viewmodel: Viewmodel | null = null;
+    // DYNAMIC render resolution — the internal buffer matches the canvas aspect (so
+    // a full-screen game never stretches) at a perf-scaled retro resolution (NEAREST
+    // filter retained). renderScale flexes with measured FPS to hold a stable frame.
+    let renderScale = tier === 'mobile' ? 0.8 : 1.0;
+    let fpsFrames = 0;
+    let fpsTimer = 0;
+    const BASE_H = 270;
+    const MIN_H = 150;
+    const MAX_H = 430;
+    const resize = () => {
+      const cw = canvas.clientWidth || RW;
+      const ch = canvas.clientHeight || RH;
+      const aspect = cw / ch || RW / RH;
+      const h = Math.max(MIN_H, Math.min(MAX_H, Math.round(BASE_H * renderScale)));
+      const w = Math.round(h * aspect);
+      renderer.setSize(w, h, false);
+      composer?.composer.setSize(w, h);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      viewmodel?.resize(aspect);
+    };
+    // The weapon id whose sustained-fire loop (Ripper / Lance Beam) is playing.
+    let activeLoop: string | null = null;
+
     let world: World | null = null;
     let builtFor: Level3D | null = null;
-    let sprites: THREE.Sprite[] = [];
+    // Spatial grid over the current level's boxes — narrows collision/LoS queries
+    // to local candidates. Rebuilt with the world; identical results, fewer tests.
+    let grid: SpatialGrid | null = null;
+    // Nav graph for enemy long-range pathing — built once per level alongside the
+    // grid, threaded into updateEnemies. Absent → bots use the old direct steering.
+    let nav: NavGraph | null = null;
+    // Enemy actors: a 3D model Group for regular enemies, a billboard Sprite for
+    // bosses. Indexed parallel to g.enemies.
+    let sprites: THREE.Object3D[] = [];
     let barBg: THREE.Sprite[] = [];
     let barFill: THREE.Sprite[] = [];
-    let enemyTexes: THREE.CanvasTexture[] = []; // [runA, runB, fire, crouch]
     let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
@@ -141,15 +206,18 @@ export function useFpsLoop(
       (m.material as THREE.Material).dispose();
     };
     const disposeExtras = () => {
-      for (const s of [...sprites, ...barBg, ...barFill]) {
+      for (const s of sprites) {
+        world?.scene.remove(s);
+        if (s instanceof THREE.Sprite) (s.material as THREE.Material).dispose();
+        else disposeEnemyModel(s); // a 3D model Group
+      }
+      for (const s of [...barBg, ...barFill]) {
         world?.scene.remove(s);
         (s.material as THREE.Material).dispose();
       }
       sprites = [];
       barBg = [];
       barFill = [];
-      for (const t of enemyTexes) t.dispose();
-      enemyTexes = [];
       for (const t of bossTexes) t.dispose();
       bossTexes = [];
       for (const t of tracers) {
@@ -171,35 +239,47 @@ export function useFpsLoop(
     const buildFor = (g: FpsGameState) => {
       disposeExtras();
       world?.dispose();
-      world = buildWorld(g.level);
+      world = buildWorld(g.level, tier);
+      // (Re)build the spatial grid for this level's boxes.
+      grid = SpatialGrid.build(g.level.boxes);
+      // (Re)build the enemy nav graph for this level (grid-accelerated).
+      nav = buildNavGraph(g.level, grid);
+      // Build the composer once; afterwards just repoint the RenderPass at the
+      // new scene (do NOT recreate the renderer or the whole composer).
+      if (!composer) {
+        composer = makeComposer(renderer, world.scene, camera, tier, RW, RH);
+      } else {
+        composer.renderPass.mainScene = world.scene;
+      }
+      // Build the viewmodel once; (re)load the active gun for this level.
+      if (!viewmodel) viewmodel = new Viewmodel(tier, RW / RH);
+      viewmodel.setGun(g.guns[g.active].id);
+      resize(); // size the new composer/viewmodel to the live canvas
       const mk = (canvas2: HTMLCanvasElement) => {
         const t = new THREE.CanvasTexture(canvas2);
         t.magFilter = THREE.NearestFilter;
         t.minFilter = THREE.NearestFilter;
         return t;
       };
-      enemyTexes = [0, 1, 2, 3].map((f) => mk(enemyTex(f)));
       prevEnemyXZ = g.enemies.map((e) => ({ x: e.x, z: e.z }));
       const bossCache: Partial<Record<string, THREE.CanvasTexture>> = {};
       sprites = g.enemies.map((e) => {
-        let map = enemyTexes[0];
-        let sx = 1.7;
-        let sy = 2.3;
         if (e.boss) {
           if (!bossCache[e.boss]) {
             const t = mk(bossTex(e.boss));
             bossCache[e.boss] = t;
             bossTexes.push(t);
           }
-          map = bossCache[e.boss]!;
           const bd = BOSSES[e.boss];
-          sx = 1.5 * bd.scale;
-          sy = 2.0 * bd.scale;
+          const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: bossCache[e.boss]!, transparent: true }));
+          s.scale.set(1.5 * bd.scale, 2.0 * bd.scale, 1);
+          world!.scene.add(s);
+          return s;
         }
-        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true }));
-        s.scale.set(sx, sy, 1);
-        world!.scene.add(s);
-        return s;
+        // Regular enemies are 3D models, one per doctrine class.
+        const m = buildEnemyModel(e.cls, tier);
+        world!.scene.add(m);
+        return m;
       });
       barBg = g.enemies.map(() => {
         const s = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x0a0a0a, transparent: true, depthWrite: false }));
@@ -275,6 +355,23 @@ export function useFpsLoop(
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('wheel', onWheel, { passive: true });
 
+    // Keep the render buffer + camera matched to the live canvas size (dynamic
+    // viewport, address-bar collapse, orientation change, safe-area shifts).
+    const ro = new ResizeObserver(() => resize());
+    ro.observe(canvas);
+    const onViewport = () => resize();
+    window.addEventListener('orientationchange', onViewport);
+    window.addEventListener('resize', onViewport);
+    window.visualViewport?.addEventListener('resize', onViewport);
+    resize();
+
+    // Resume audio after a tab switch / phone-call interruption (mobile browsers
+    // suspend the AudioContext; this re-arms it once we're visible again).
+    const onVisible = () => {
+      if (!document.hidden) sfx.ensure();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     let raf = 0;
     let prev = performance.now();
     let disposed = false;
@@ -291,13 +388,47 @@ export function useFpsLoop(
         }
         const p = g.player;
         const ls = LOOK_SENS * sens.current;
+        // Touch AIM ASSIST — a subtle slowdown + magnetism when a target is near the
+        // reticle, and only while actively aiming (never drifts when idle).
+        let assist: { ex: number; ey: number; ez: number; el: number; dot: number } | null = null;
+        if (isTouch && aimAssistOn.current && g.status === 'playing') {
+          const cpa = Math.cos(p.pitch);
+          const afx = -cpa * Math.sin(p.yaw);
+          const afy = Math.sin(p.pitch);
+          const afz = -cpa * Math.cos(p.yaw);
+          const aeye: Vec3 = [p.x, p.y + EYE, p.z];
+          let bestDot = 0.95;
+          for (const e of g.enemies) {
+            if (e.health <= 0) continue;
+            const ex = e.x - p.x;
+            const ey = e.y + 1.1 - (p.y + EYE);
+            const ez = e.z - p.z;
+            const el = Math.hypot(ex, ey, ez) || 1;
+            const dot = (ex / el) * afx + (ey / el) * afy + (ez / el) * afz;
+            if (dot > bestDot && !segBlocked(aeye, [e.x, e.y + 1.1, e.z], g.level, grid ?? undefined)) {
+              bestDot = dot;
+              assist = { ex, ey, ez, el, dot };
+            }
+          }
+        }
+        const hadLook = lookDX.current !== 0 || lookDY.current !== 0;
+        const aimSlow = assist ? 0.62 : 1; // ease the turn near a target
         if (lookDX.current !== 0) {
-          p.yaw -= lookDX.current * ls;
+          p.yaw -= lookDX.current * ls * aimSlow;
           lookDX.current = 0;
         }
         if (lookDY.current !== 0) {
-          p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch - lookDY.current * ls));
+          const iy = invertY.current ? -1 : 1;
+          p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch - lookDY.current * ls * aimSlow * iy));
           lookDY.current = 0;
+        }
+        if (assist && hadLook) {
+          const pull = 0.05 * Math.min(1, (assist.dot - 0.95) / 0.05); // gentle, stronger nearer centre
+          let dYaw = Math.atan2(-assist.ex, -assist.ez) - p.yaw;
+          dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+          p.yaw += dYaw * pull;
+          const tPitch = Math.asin(Math.max(-1, Math.min(1, assist.ey / assist.el)));
+          p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch + (tPitch - p.pitch) * pull * 0.7));
         }
         let fwd = touchMove.current.fwd;
         let strafe = touchMove.current.strafe;
@@ -315,6 +446,7 @@ export function useFpsLoop(
             g.reloading = 0;
             g.fireCd = 0.22;
             zoomLevel.current = 0; // swapping weapons drops you back to the hip
+            viewmodel?.setGun(g.guns[g.active].id);
             sfx.swap();
           }
           const gun = g.guns[g.active];
@@ -331,7 +463,9 @@ export function useFpsLoop(
             camera.updateProjectionMatrix();
           }
 
-          stepPlayer(p, g.level, { fwd, strafe, jump: keys.current.has(' ') }, dt);
+          const jumpNow = keys.current.has(' ') || jumpReq.current;
+          jumpReq.current = false;
+          stepPlayer(p, g.level, { fwd, strafe, jump: jumpNow }, dt, grid ?? undefined);
           const pvx = (p.x - prevPos.x) / Math.max(dt, 0.001);
           const pvz = (p.z - prevPos.z) / Math.max(dt, 0.001);
           prevPos.x = p.x;
@@ -355,7 +489,7 @@ export function useFpsLoop(
               mesh.position.set(eye[0], eye[1], eye[2]);
               world.scene.add(mesh);
               grenades.push({ x: eye[0], y: eye[1], z: eye[2], vx: fx * sp, vy: fy * sp + 4.5, vz: fz * sp, fuse: g.throwable.fuse, mesh });
-              sfx.swap();
+              sfx.playThrowable(g.throwable.id, 'throw');
             }
           }
 
@@ -373,7 +507,8 @@ export function useFpsLoop(
             reloadReq.current = false;
             if (g.reloading <= 0 && g.mags[g.active] < gun.mag && g.reserves[g.active] > 0) {
               g.reloading = gun.reload;
-              sfx.reload();
+              viewmodel?.reload(gun.reload);
+              sfx.playReload(gun.id);
             }
           }
           g.fireCd -= dt;
@@ -386,7 +521,7 @@ export function useFpsLoop(
               const ey = e.y + 1.1 - (p.y + EYE);
               const ez = e.z - p.z;
               const el = Math.hypot(ex, ey, ez) || 1;
-              if ((ex / el) * fx + (ey / el) * fy + (ez / el) * fz > 0.985 && !segBlocked(eye, [e.x, e.y + 1.1, e.z], g.level)) {
+              if ((ex / el) * fx + (ey / el) * fy + (ez / el) * fz > 0.985 && !segBlocked(eye, [e.x, e.y + 1.1, e.z], g.level, grid ?? undefined)) {
                 autoFire = true;
                 break;
               }
@@ -397,12 +532,27 @@ export function useFpsLoop(
           const wantShot = gun.auto ? fireInput : fireInput && !prevFire.current;
           prevFire.current = fireInput;
 
+          // Sustained-fire audio (Ripper / Lance Beam): ONE loop while held with
+          // ammo, instead of a per-shot sound. Handles start/stop + weapon switches.
+          const wantLoop = sfx.isLoopWeapon(gun.id) && fireInput && g.mags[g.active] > 0 && g.reloading <= 0;
+          if (wantLoop) {
+            if (activeLoop !== gun.id) {
+              if (activeLoop) sfx.playWeaponLoopStop(activeLoop);
+              sfx.playWeaponLoopStart(gun.id);
+              activeLoop = gun.id;
+            }
+          } else if (activeLoop) {
+            sfx.playWeaponLoopStop(activeLoop);
+            activeLoop = null;
+          }
+
           if (wantShot && g.fireCd <= 0 && g.reloading <= 0 && g.mags[g.active] > 0) {
             g.fireCd = gun.rate;
             g.mags[g.active]--;
             snap.fireAt = now;
-            sfx.gun(gun.id, gun.family);
-            const wallD = rayWallDist(eye, dir, g.level, RANGE);
+            viewmodel?.fire();
+            if (!sfx.isLoopWeapon(gun.id)) sfx.playWeaponFire(gun.id, gun.family);
+            const wallD = rayWallDist(eye, dir, g.level, RANGE, grid ?? undefined);
             let hitT = wallD;
             let hit: Enemy | null = null;
             for (const e of g.enemies) {
@@ -448,7 +598,7 @@ export function useFpsLoop(
               g.squad.t = now;
               if (anyHit) {
                 snap.hitAt = now;
-                sfx.enemyHit();
+                sfx.playImpact(gun.id, 'enemy');
               }
             } else if (hit) {
               hit.health -= gun.dmg;
@@ -460,12 +610,13 @@ export function useFpsLoop(
               g.squad.lastKnown = { x: p.x, z: p.z };
               g.squad.t = now;
               snap.hitAt = now;
-              sfx.enemyHit();
+              sfx.playImpact(gun.id, 'enemy');
               if (hit.health <= 0) g.kills++;
             }
           } else if (wantShot && g.mags[g.active] <= 0 && g.reloading <= 0 && g.reserves[g.active] > 0) {
             g.reloading = gun.reload;
-            sfx.reload();
+            viewmodel?.reload(gun.reload);
+            sfx.playReload(gun.id);
           }
 
           // Grenade sim + detonation
@@ -488,6 +639,7 @@ export function useFpsLoop(
               const cx = gr.x;
               const cy = gr.y;
               const cz = gr.z;
+              sfx.playThrowable(t.id, 'blast'); // per-throwable detonation (all 12)
               const blastAt = (bx: number, by: number, bz: number, dmg: number, radius: number): boolean => {
                 let any = false;
                 for (const e of g.enemies) {
@@ -531,7 +683,6 @@ export function useFpsLoop(
               if (t.blast.dmg > 0 && t.blast.radius > 0) {
                 anyHit = blastAt(cx, cy, cz, t.blast.dmg, t.blast.radius) || anyHit;
                 spawnFlash(cx, cy, cz, t.blast.radius, t.color);
-                sfx.explosion();
               }
               // Cluster: a spread of smaller secondary blasts.
               if (t.cluster) {
@@ -572,7 +723,6 @@ export function useFpsLoop(
                   const tz = cz - p.z;
                   const tl = Math.hypot(tx, tz) || 1;
                   if (tl < s.radius && (tx / tl) * fx + (tz / tl) * fz > 0.2) snap.flashAt = now;
-                  sfx.flash();
                 }
               }
               // Lingering zones.
@@ -687,7 +837,7 @@ export function useFpsLoop(
           }
 
           // Enemies
-          const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes);
+          const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes, grid ?? undefined, nav ?? undefined);
           for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
           if (res.damage > 0) {
             p.health = Math.max(0, p.health - res.damage);
@@ -700,47 +850,79 @@ export function useFpsLoop(
             g.regenT += dt;
             if (g.regenT > 2) p.health = Math.min(g.maxHp, p.health + 24 * dt);
           }
+          // Drive the 3D viewmodel (bob from movement; recoil/flash/reload poses
+          // were triggered by the fire/reload hooks above). Drawn after the world.
+          viewmodel?.update(dt, Math.hypot(pvx, pvz), g.reloading);
+
           if (g.enemies.every((e) => e.health <= 0)) g.status = 'won';
         }
+        // Kill any sustained loop if we left the playing state (win/lose/pause).
+        if (activeLoop && g.status !== 'playing') {
+          sfx.playWeaponLoopStop(activeLoop);
+          activeLoop = null;
+        }
 
-        // Sprites
+        // Enemy actors (3D models for regulars, billboard sprites for bosses).
         for (let i = 0; i < sprites.length; i++) {
           const e = g.enemies[i];
           const s = sprites[i];
           const alive = e.health > 0;
-          s.visible = alive;
           const showBar = alive && !e.boss && now < e.barUntil; // bosses use the top bar
           barBg[i].visible = showBar;
           barFill[i].visible = showBar;
-          if (!alive) continue;
-          // How fast is this bot actually moving (drives run vs stand pose)?
+          if (!alive) {
+            // Death: bosses just vanish; 3D enemies topple over then disappear.
+            if (e.boss) {
+              s.visible = false;
+              continue;
+            }
+            if (s.userData.deadT === undefined) sfx.enemyDie();
+            const ddt = (s.userData.deadT = ((s.userData.deadT as number) ?? 0) + dt);
+            if (ddt >= 1.4) {
+              s.visible = false;
+              continue;
+            }
+            s.visible = true;
+            s.position.set(e.x, e.y, e.z);
+            poseDeath(s, ddt);
+            // A Tank dies catastrophically: a reactor flash + boom.
+            if (e.cls === 'tank' && !s.userData.died && world) {
+              s.userData.died = true;
+              const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true }));
+              fm.position.set(e.x, e.y + 1, e.z);
+              world.scene.add(fm);
+              flashes.push({ mesh: fm, born: now, r: 4 });
+              sfx.explosion();
+            }
+            continue;
+          }
+          s.visible = true;
           const pe = prevEnemyXZ[i] ?? { x: e.x, z: e.z };
           const moveSpeed = Math.hypot(e.x - pe.x, e.z - pe.z) / Math.max(dt, 0.001);
           prevEnemyXZ[i] = { x: e.x, z: e.z };
-          const cy = e.boss ? BOSSES[e.boss].scale : 1.15;
           const moving = moveSpeed > 1.4;
-          // Running bots bob; firing / crouched / standing bots stay steady.
-          const bob = e.boss ? Math.abs(Math.sin(e.step * 3.0)) * 0.3 : moving ? Math.abs(Math.sin(e.step * 3.0)) * 0.14 : 0;
-          s.position.set(e.x, e.y + cy + bob, e.z);
-          const mat = s.material as THREE.SpriteMaterial;
-          if (!e.boss) {
-            // Pose from behaviour: firing → fire, moving → run cycle, alert and
-            // holding → crouch/peek, otherwise an idle stand.
-            let frame: number;
-            if (e.muzzle > 0) frame = 2;
-            else if (moving) frame = Math.floor(e.step * 2.2) % 2 === 0 ? 0 : 1;
-            else if (e.state === 'alert') frame = 3;
-            else frame = 0;
-            const want = enemyTexes[frame];
-            if (mat.map !== want) {
-              mat.map = want;
-              mat.needsUpdate = true;
-            }
+
+          if (e.boss) {
+            const cy = BOSSES[e.boss].scale;
+            const bob = Math.abs(Math.sin(e.step * 3.0)) * 0.3;
+            s.position.set(e.x, e.y + cy + bob, e.z);
+            const mat = (s as THREE.Sprite).material as THREE.SpriteMaterial;
+            mat.color.setHex(e.hitFlash > 0 ? 0xff7777 : 0xffffff);
+          } else {
+            // 3D model: stand on the ground, face the player, animate, flash on hit.
+            s.position.set(e.x, e.y, e.z);
+            s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z); // forward +Z → faces player
+            poseEnemy(s, e.cls, moving, e.state === 'alert' || e.muzzle > 0, e.step, e.hitFlash, now);
+            const hf = e.hitFlash > 0 ? Math.min(1, e.hitFlash / 0.12) : 0;
+            // Tank "armor breakaway": glows hotter as it breaks down (exposed reactor).
+            const dmg = e.cls === 'tank' ? (1 - e.health / e.maxHealth) * 0.6 : 0;
+            const mats = s.userData.bodyMats as THREE.Material[] | undefined;
+            if (mats) for (const m of mats) (m as THREE.MeshStandardMaterial).emissive.setRGB(Math.max(hf * 0.7, dmg), Math.max(hf * 0.04, dmg * 0.4), hf * 0.04);
           }
-          mat.color.setHex(e.hitFlash > 0 ? 0xff7777 : 0xffffff);
+
           if (showBar) {
             const ratio = Math.max(0, e.health / e.maxHealth);
-            const by = e.y + 2.6 + bob;
+            const by = e.y + 2.6;
             barBg[i].position.set(e.x, by, e.z);
             barFill[i].position.set(e.x, by, e.z);
             barFill[i].scale.x = 1.4 * ratio;
@@ -759,7 +941,27 @@ export function useFpsLoop(
         camera.position.set(p.x, p.y + EYE, p.z);
         camera.rotation.y = p.yaw;
         camera.rotation.x = p.pitch;
-        if (world) renderer.render(world.scene, camera);
+        if (world) {
+          if (composer) composer.composer.render(dt);
+          else renderer.render(world.scene, camera);
+          // 3D viewmodel overlay — pixelated (same buffer), depth-cleared so it
+          // never clips world geometry. Hidden under the sniper scope overlay.
+          if (viewmodel && !(g.guns[g.active].scoped && zoomLevel.current > 0)) viewmodel.render(renderer);
+        }
+
+        // Dynamic resolution: nudge the internal buffer to hold ~55-60 fps.
+        fpsFrames++;
+        fpsTimer += dt;
+        if (fpsTimer >= 1) {
+          const fps = fpsFrames / fpsTimer;
+          fpsFrames = 0;
+          fpsTimer = 0;
+          const prevScale = renderScale;
+          const cap = tier === 'mobile' ? 1.0 : 1.5;
+          if (fps < 48) renderScale = Math.max(0.55, renderScale - 0.12);
+          else if (fps > 58 && renderScale < cap) renderScale = Math.min(cap, renderScale + 0.06);
+          if (renderScale !== prevScale) resize();
+        }
 
         if (now - lastSnap > 70) {
           lastSnap = now;
@@ -814,11 +1016,19 @@ export function useFpsLoop(
       document.removeEventListener('wheel', onWheel);
       if (document.pointerLockElement === canvas) document.exitPointerLock?.();
       disposeExtras();
+      ro.disconnect();
+      window.removeEventListener('orientationchange', onViewport);
+      window.removeEventListener('resize', onViewport);
+      window.visualViewport?.removeEventListener('resize', onViewport);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (activeLoop) sfx.playWeaponLoopStop(activeLoop);
       world?.dispose();
       ballGeo.dispose();
+      viewmodel?.dispose();
+      composer?.composer.dispose();
       renderer.dispose();
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, throwGrenade };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload };
 }
