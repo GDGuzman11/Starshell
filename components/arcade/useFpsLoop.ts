@@ -522,13 +522,16 @@ export function useFpsLoop(
 
           let autoFire = false;
           if (isTouch) {
+            // Fire only when the CENTRED shot would actually connect — the same
+            // raySphere the shot uses, so it's distance-correct at ANY zoom (a fixed
+            // angular cone fired on far enemies the dead-centre shot then missed). A
+            // small radius margin keeps it responsive on touch.
             for (const e of g.enemies) {
               if (e.health <= 0) continue;
-              const ex = e.x - p.x;
-              const ey = e.y + 1.1 - (p.y + EYE);
-              const ez = e.z - p.z;
-              const el = Math.hypot(ex, ey, ez) || 1;
-              if ((ex / el) * fx + (ey / el) * fy + (ez / el) * fz > 0.985 && !segBlocked(eye, [e.x, e.y + 1.1, e.z], g.level, grid ?? undefined)) {
+              const ecy = e.boss ? BOSSES[e.boss].scale : 1.0;
+              const hr = (e.boss ? BOSSES[e.boss].radius : ENEMY_R) * 1.35;
+              const tc: Vec3 = [e.x, e.y + ecy, e.z];
+              if (raySphere(eye, dir, tc, hr) < RANGE && !segBlocked(eye, tc, g.level, grid ?? undefined)) {
                 autoFire = true;
                 break;
               }
