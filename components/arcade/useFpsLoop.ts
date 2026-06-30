@@ -82,7 +82,7 @@ export interface FpsSnapshot {
   slots: { name: string; active: boolean }[];
   throwName: string;
   throwCount: number;
-  bosses: { name: string; ratio: number }[];
+  bosses: { name: string; ratio: number; phase: number; status: string; brood: number }[];
   enemiesLeft: number;
   status: 'playing' | 'won' | 'lost';
   kills: number;
@@ -1064,6 +1064,14 @@ export function useFpsLoop(
         for (let i = 0; i < sprites.length; i++) {
           const e = g.enemies[i];
           const s = sprites[i];
+          if (e.dormant) {
+            // Reinforcement not yet woken — keep it hidden + its bars off.
+            s.visible = false;
+            barBg[i].visible = false;
+            barFill[i].visible = false;
+            barShield[i].visible = false;
+            continue;
+          }
           const alive = e.health > 0;
           const showBar = alive && !e.boss && now < e.barUntil; // bosses use the top bar
           barBg[i].visible = showBar;
@@ -1229,10 +1237,23 @@ export function useFpsLoop(
           snap.slots = g.guns.map((gg, i) => ({ name: gg.name, active: i === g.active }));
           snap.throwName = g.throwable.name;
           snap.throwCount = g.throwCount;
+          const broodCount = g.enemies.filter((e) => e.minion && e.health > 0 && !e.dormant).length;
           snap.bosses = g.enemies
             .filter((e) => e.boss && e.health > 0)
-            .map((e) => ({ name: BOSSES[e.boss!].name, ratio: e.health / e.maxHealth }));
-          snap.enemiesLeft = g.enemies.filter((e) => e.health > 0).length;
+            .map((e) => {
+              const ratio = e.health / e.maxHealth;
+              const phase = ratio > 0.65 ? 1 : ratio > 0.35 ? 2 : ratio > 0.15 ? 3 : 4;
+              const status =
+                e.weakUntil && now < e.weakUntil
+                  ? 'VULNERABLE'
+                  : e.bossBrain?.pounce === 'windup' || e.bossBrain?.pounce === 'leap'
+                    ? 'POUNCING'
+                    : phase === 4
+                      ? 'ENRAGED'
+                      : 'HUNTING';
+              return { name: BOSSES[e.boss!].name, ratio, phase, status, brood: broodCount };
+            });
+          snap.enemiesLeft = g.enemies.filter((e) => e.health > 0 && !e.dormant).length;
           snap.status = g.status;
           snap.kills = g.kills;
           snap.shotsFired = g.shotsFired;
@@ -1242,7 +1263,7 @@ export function useFpsLoop(
           const sinY = Math.sin(p.yaw);
           const cosY = Math.cos(p.yaw);
           snap.radar = g.enemies
-            .filter((e) => e.health > 0)
+            .filter((e) => e.health > 0 && !e.dormant)
             .map((e) => {
               const dx = e.x - p.x;
               const dz = e.z - p.z;

@@ -59,6 +59,8 @@ export interface Enemy {
   bossBrain?: BossBrainState; // tactical movement brain (bosses only)
   minion?: MinionKind; // boss-faction minion type (drives model + role AI)
   weakUntil?: number; // timestamp: boss is in a vulnerability window (bonus damage)
+  dormant?: boolean; // reinforcement minion not yet woken (hidden, inert)
+  wakeAtHp?: number; // boss HP fraction at/below which this reinforcement wakes
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -144,6 +146,7 @@ export interface Squad {
   hot?: { x: number; z: number } | null; // learned favourite ground (hottest cell)
   planT?: number; // re-plan / heat-decay cooldown
   lastAlive?: number; // alive bot count last frame (to detect losses)
+  aggroUntil?: number; // hive-screech buff window: minions surge faster/aggressive
 }
 
 /** Active smoke cloud — blocks the aliens' line of sight. */
@@ -535,8 +538,26 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
  *  these don't have to be cleared to finish the level. */
 export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => number): Enemy[] {
   if (kind !== 'xeno') return [];
-  const comp: MinionKind[] = ['broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'spitter', 'spitter'];
-  return comp.map((mk, idx) => makeMinion(lvl, mk, idx, rand));
+  const out: Enemy[] = [];
+  // Phase 1 — the starting hive (active immediately).
+  (['broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'spitter', 'spitter'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+  // Phase 2 — wakes at 65% boss HP: stalkers arrive to flank.
+  (['stalker', 'stalker', 'stalker'] as MinionKind[]).forEach((mk, i) => {
+    const m = makeMinion(lvl, mk, i, rand);
+    m.dormant = true;
+    m.wakeAtHp = 0.65;
+    m.y = -100; // parked underground until woken (out of shots/zones)
+    out.push(m);
+  });
+  // Phase 3 — wakes at 35%: a fresh brood burst.
+  (['broodling', 'broodling', 'broodling', 'spitter'] as MinionKind[]).forEach((mk, i) => {
+    const m = makeMinion(lvl, mk, i, rand);
+    m.dormant = true;
+    m.wakeAtHp = 0.35;
+    m.y = -100;
+    out.push(m);
+  });
+  return out;
 }
 
 function makeMinion(lvl: Level3D, mk: MinionKind, idx: number, rand: () => number): Enemy {
@@ -732,10 +753,28 @@ export function updateEnemies(
     if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade) * trackRamp) damage += W.dmg;
   };
 
+  // Boss phase manager: wake dormant reinforcements as the boss loses health,
+  // each transition firing a HIVE SCREECH (a brief squad aggression surge).
+  const bossE = enemies.find((e) => e.boss && e.health > 0);
+  if (bossE) {
+    const frac = bossE.health / bossE.maxHealth;
+    for (const e of enemies) {
+      if (e.dormant && e.health > 0 && e.wakeAtHp != null && frac <= e.wakeAtHp) {
+        e.dormant = false;
+        e.x = bossE.x + (Math.random() - 0.5) * 7;
+        e.y = 0;
+        e.z = bossE.z + (Math.random() - 0.5) * 7;
+        e.state = 'alert';
+        squad.aggroUntil = now + 4500; // screech
+      }
+    }
+  }
+
   // Pass 2: act on personal or shared knowledge.
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.health <= 0) continue;
+    if (e.dormant) continue; // reinforcement not yet woken
     if (e.hitFlash > 0) e.hitFlash -= dt;
     if (e.alarm > 0) e.alarm -= dt;
     // Shield regen: paused for a few seconds after any hit, then slowly refills.
@@ -748,6 +787,7 @@ export function updateEnemies(
       const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
       if (tgt) {
         e.state = 'alert';
+        const aggro = now < (squad.aggroUntil ?? 0) ? 1.3 : 1; // hive-screech surge
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
         e.fireCd -= dt;
         let tx = tgt.x - e.x;
@@ -760,7 +800,7 @@ export function updateEnemies(
         if (e.minion === 'broodling') {
           // Rush + erratic weave; bite on contact.
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
-          moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul, dt, R, grid);
+          moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul * aggro, dt, R, grid);
           if (dist < 2.4 && e.fireCd <= 0) {
             e.fireCd = 0.8;
             damage += md.melee;
@@ -768,8 +808,8 @@ export function updateEnemies(
           }
         } else if (e.minion === 'spitter') {
           // Standoff acid support: hold mid-range, retreat if rushed, spit acid.
-          if (dist < 9) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul, dt, R, grid);
-          else if (dist > 16) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul, dt, R, grid);
+          if (dist < 9) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
+          else if (dist > 16) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
           else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
           if (sees[i] && e.fireCd <= 0 && dist < 22) {
             e.fireCd = 1.7;
@@ -780,9 +820,9 @@ export function updateEnemies(
           // STALKER: circle wide, then lunge in for a strike (e.track = lunge timer).
           e.track += dt;
           if (dist > 5 && e.track < 2.4) {
-            moveEnemy(e, lvl, perpX * e.side * 1.1 + tx * 0.4, perpZ * e.side * 1.1 + tz * 0.4, P.speed * md.speedMul, dt, R, grid);
+            moveEnemy(e, lvl, perpX * e.side * 1.1 + tx * 0.4, perpZ * e.side * 1.1 + tz * 0.4, P.speed * md.speedMul * aggro, dt, R, grid);
           } else {
-            moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * 1.7, dt, R, grid);
+            moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * 1.7 * aggro, dt, R, grid);
             if (dist < 2.6 && e.fireCd <= 0) {
               e.fireCd = 1.0;
               damage += md.melee;
@@ -808,6 +848,7 @@ export function updateEnemies(
         e.bossBrain ??= makeBossBrain();
         const brain = e.bossBrain;
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
+        const desp = e.health / e.maxHealth < 0.15; // desperation phase: faster + pounce-happy
         e.fireCd -= dt;
         brain.pounceCd -= dt;
 
@@ -842,7 +883,7 @@ export function updateEnemies(
               e.weakUntil = now + 2000; // overshot → exposed core, bonus-damage window
             }
             brain.pounce = 'none';
-            brain.pounceCd = 4.5 + Math.random() * 3;
+            brain.pounceCd = (desp ? 2.5 : 4.5) + Math.random() * (desp ? 1.5 : 3);
           }
         } else {
           // RANGED KITE (default): standoff movement + acid spit / hitscan fire.
@@ -861,7 +902,7 @@ export function updateEnemies(
             }
           }
           const wl = Math.hypot(wx, wz) || 1;
-          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul, dt, bd.radius, grid);
+          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1), dt, bd.radius, grid);
           if (dist < bd.meleeRange) {
             if (e.fireCd <= 0) {
               e.fireCd = bd.meleeRate;

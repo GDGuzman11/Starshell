@@ -118,17 +118,29 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         <span className="text-[#ffd27a]">⛀ {gold}</span>
       </div>
 
-      {/* boss bars */}
+      {/* boss bars + status (name · phase · state · brood count) */}
       {snap.bosses.length > 0 && (
         <div className="absolute left-1/2 top-8 z-30 w-60 -translate-x-1/2 space-y-1 sm:w-80">
-          {snap.bosses.map((b, i) => (
-            <div key={i}>
-              <div className="text-center text-[7px] tracking-[0.2em] text-[#ff5d6e] sm:text-[9px]">{b.name}</div>
-              <div className="h-2 w-full overflow-hidden rounded border border-[#ff5d6e]/40 bg-black/50">
-                <div className="h-full bg-[#ff5d6e] transition-[width] duration-200" style={{ width: `${b.ratio * 100}%` }} />
+          {snap.bosses.map((b, i) => {
+            const vuln = b.status === 'VULNERABLE';
+            return (
+              <div key={i}>
+                <div className="flex items-center justify-between text-[7px] tracking-[0.2em] sm:text-[9px]">
+                  <span className="text-[#ff5d6e]">{b.name}</span>
+                  <span className={vuln ? 'text-[#aef5c8]' : b.status === 'POUNCING' ? 'text-[#ffd27a]' : 'text-white/45'}>
+                    PHASE {['I', 'II', 'III', 'IV'][b.phase - 1]} · {b.status}
+                  </span>
+                </div>
+                <div className={`h-2 w-full overflow-hidden rounded border bg-black/50 ${vuln ? 'border-[#aef5c8]/70' : 'border-[#ff5d6e]/40'}`}>
+                  <div
+                    className="h-full transition-[width] duration-200"
+                    style={{ width: `${b.ratio * 100}%`, backgroundColor: vuln ? '#aef5c8' : '#ff5d6e' }}
+                  />
+                </div>
+                {b.brood > 0 && <div className="text-right text-[6px] tracking-[0.15em] text-[#9cff6a]/70 sm:text-[7px]">BROOD ACTIVE: {b.brood}</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
