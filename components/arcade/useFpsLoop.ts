@@ -20,6 +20,7 @@ import type { RenderTier } from './fps/materials';
 import { SpatialGrid } from './fps/level/grid';
 import { buildNavGraph, type NavGraph } from './fps/level/nav';
 import { ProjectileSystem } from './fps/projectiles';
+import { TelegraphSystem } from './fps/telegraph';
 
 const RW = 480;
 const RH = 270;
@@ -228,6 +229,7 @@ export function useFpsLoop(
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
     const projectiles = new ProjectileSystem(); // boss/minion projectiles (P0; spawned from P1)
+    const telegraphs = new TelegraphSystem(); // ground warning decals (P0; spawned from P1)
     let recoilKick = 0; // current view recoil (radians), decays to 0
     const grenades: Grenade[] = [];
     const smokes: SmokeFx[] = [];
@@ -275,6 +277,7 @@ export function useFpsLoop(
       flashes.length = 0;
       zones.length = 0;
       projectiles.clear();
+      telegraphs.clear();
     };
 
     const buildFor = (g: FpsGameState) => {
@@ -957,6 +960,18 @@ export function useFpsLoop(
               }
             }
           }
+          // Ground telegraphs resolving → a visible flash at the epicentre (P0;
+          // P1 adds the per-kind effect: eruption damage/knockback, pool, etc.).
+          if (telegraphs.count > 0) {
+            for (const tf of telegraphs.update(now, p)) {
+              if (world) {
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xffae3a, transparent: true, blending: THREE.AdditiveBlending }));
+                fm.position.set(tf.x, 0.4, tf.z);
+                world.scene.add(fm);
+                flashes.push({ mesh: fm, born: now, r: tf.radius });
+              }
+            }
+          }
           // Frag flash expand/fade
           for (let i = flashes.length - 1; i >= 0; i--) {
             const f = flashes[i];
@@ -1198,6 +1213,7 @@ export function useFpsLoop(
       world?.dispose();
       ballGeo.dispose();
       projectiles.dispose();
+      telegraphs.dispose();
       viewmodel?.dispose();
       composer?.composer.dispose();
       renderer.dispose();
