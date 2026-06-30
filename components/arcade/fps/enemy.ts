@@ -973,6 +973,12 @@ export function updateEnemies(
               brain.volleyCd = (desp ? 2 : 3.5) + Math.random() * 2;
               bossTelegraphs.push({ kind: 'eruption', x: player.x + pvx * 0.5, z: player.z + pvz * 0.5, radius: 3.6, delay: 0.9 });
             }
+            // SLAM WAVE: a big shockwave centred on the Kraken — get clear or get
+            // knocked back (brain.pounceCd is unused by the Kraken, reused here).
+            if (brain.pounceCd <= 0 && dist < 17) {
+              brain.pounceCd = (desp ? 4 : 6.5) + Math.random() * 2;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.75 });
+            }
           }
           // WARLORD GRENADE VOLLEY: lob a cluster of arcing grenades to deny the
           // player's ground (independent of the suppressive-fire cadence).

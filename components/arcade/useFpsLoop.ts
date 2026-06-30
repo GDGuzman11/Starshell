@@ -1015,9 +1015,18 @@ export function useFpsLoop(
                 pushPlayer(p, p.x - tf.x, p.z - tf.z, 7);
                 if (p.health <= 0 && !g.god) g.status = 'lost';
               }
+              // Slam Wave: a strong knockback (no launch) if caught in the ring.
+              if (tf.kind === 'slam' && tf.hitPlayer && p.y < 2.5) {
+                p.health = Math.max(0, p.health - 18);
+                snap.hurtAt = now;
+                recoilKick = Math.min(0.22, recoilKick + 0.1);
+                pushPlayer(p, p.x - tf.x, p.z - tf.z, 12);
+                if (p.health <= 0 && !g.god) g.status = 'lost';
+              }
               if (world) {
                 const erupt = tf.kind === 'eruption';
-                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: erupt ? 0xc08bff : 0xffae3a, transparent: true, blending: THREE.AdditiveBlending }));
+                const slam = tf.kind === 'slam';
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: erupt || slam ? 0xc08bff : 0xffae3a, transparent: true, blending: THREE.AdditiveBlending }));
                 fm.position.set(tf.x, erupt ? 1.6 : 0.4, tf.z);
                 world.scene.add(fm);
                 flashes.push({ mesh: fm, born: now, r: tf.radius * (erupt ? 1.3 : 1) });
