@@ -648,6 +648,7 @@ export interface EnemyTracer {
  *  TelegraphSystem; the boss resolves its own damage on landing, so the telegraph
  *  is purely the player's warning). */
 export interface BossTelegraph {
+  kind: string; // 'pounce' (cosmetic) | 'eruption' (damages + launches on fire)
   x: number;
   z: number;
   radius: number;
@@ -896,7 +897,7 @@ export function updateEnemies(
           brain.pounceT = 0.55;
           brain.pounceX = player.x + pvx * 0.35;
           brain.pounceZ = player.z + pvz * 0.35;
-          bossTelegraphs.push({ x: brain.pounceX, z: brain.pounceZ, radius: 4, delay: 0.55 });
+          bossTelegraphs.push({ kind: 'pounce', x: brain.pounceX, z: brain.pounceZ, radius: 4, delay: 0.55 });
         }
 
         if (brain.pounce === 'windup') {
@@ -941,6 +942,15 @@ export function updateEnemies(
           const wl = Math.hypot(wx, wz) || 1;
           moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1), dt, bd.radius, grid);
 
+          // KRAKEN TENTACLE ERUPTION: a telegraphed ground burst at the player's
+          // predicted spot that damages + launches them up (resolved in the loop).
+          if (e.boss === 'octopus' && sees[i] && dist < 45) {
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0) {
+              brain.volleyCd = (desp ? 2 : 3.5) + Math.random() * 2;
+              bossTelegraphs.push({ kind: 'eruption', x: player.x + pvx * 0.5, z: player.z + pvz * 0.5, radius: 3.6, delay: 0.9 });
+            }
+          }
           // WARLORD GRENADE VOLLEY: lob a cluster of arcing grenades to deny the
           // player's ground (independent of the suppressive-fire cadence).
           if (e.boss === 'warrior' && sees[i] && dist > 6 && dist < 40) {

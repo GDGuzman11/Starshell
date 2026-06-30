@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { buildWorld, type World } from './fps/scene';
-import { EYE, MAX_PITCH, stepPlayer, type Player3 } from './fps/physics';
+import { EYE, MAX_PITCH, launchPlayer, pushPlayer, stepPlayer, type Player3 } from './fps/physics';
 import type { Level3D } from './fps/level3d';
 import { updateEnemies, hurtEnemy, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
 import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
@@ -1005,11 +1005,21 @@ export function useFpsLoop(
           // P1 adds the per-kind effect: eruption damage/knockback, pool, etc.).
           if (telegraphs.count > 0) {
             for (const tf of telegraphs.update(now, p)) {
+              // Tentacle Eruption: damage + launch/knock the player if caught.
+              if (tf.kind === 'eruption' && tf.hitPlayer && p.y < 1.6) {
+                p.health = Math.max(0, p.health - 26);
+                snap.hurtAt = now;
+                recoilKick = Math.min(0.22, recoilKick + 0.12);
+                launchPlayer(p, 7.5);
+                pushPlayer(p, p.x - tf.x, p.z - tf.z, 7);
+                if (p.health <= 0) g.status = 'lost';
+              }
               if (world) {
-                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xffae3a, transparent: true, blending: THREE.AdditiveBlending }));
-                fm.position.set(tf.x, 0.4, tf.z);
+                const erupt = tf.kind === 'eruption';
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: erupt ? 0xc08bff : 0xffae3a, transparent: true, blending: THREE.AdditiveBlending }));
+                fm.position.set(tf.x, erupt ? 1.6 : 0.4, tf.z);
                 world.scene.add(fm);
-                flashes.push({ mesh: fm, born: now, r: tf.radius });
+                flashes.push({ mesh: fm, born: now, r: tf.radius * (erupt ? 1.3 : 1) });
               }
             }
           }
@@ -1036,7 +1046,7 @@ export function useFpsLoop(
           }
           if (world && res.bossTelegraphs.length) {
             for (const bt of res.bossTelegraphs) {
-              telegraphs.spawn({ kind: 'pounce', scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: 0x9cff6a }, now);
+              telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'eruption' ? 0xc08bff : 0x9cff6a }, now);
             }
           }
           if (res.damage > 0) {
