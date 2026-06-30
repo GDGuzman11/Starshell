@@ -12,6 +12,7 @@ import type { SpatialGrid } from './level/grid';
 import { type NavGraph, type NavNode, nearestNode, pathTo } from './level/nav';
 import { EYE, groundHeightAt, type Player3 } from './physics';
 import type { EnemyClass } from './enemies/types';
+import { type BossBrainState, makeBossBrain, tickBossBrain } from './boss/brain';
 
 export type Difficulty = 'normal' | 'hard' | 'nightmare';
 
@@ -54,6 +55,7 @@ export interface Enemy {
   path?: number[];
   repath?: number;
   navGoal?: { x: number; z: number };
+  bossBrain?: BossBrainState; // tactical movement brain (bosses only)
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -272,6 +274,29 @@ function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number
 
 const ECLIMB = 3.2; // enemy climb speed
 const EFALL = 8; // enemy drop speed
+const BOSS_CLIMB = 6; // boss haul-up speed when chasing a player onto a ledge
+
+/**
+ * Vertical pursuit for bosses. A boss has no ladder/nav routine like the regular
+ * troops, so without this it gets STUCK at the foot of any raised platform/stage.
+ * This hauls the boss UP onto a reachable ledge just ahead when the player is
+ * above it (jump-up + chase onto stages/stairs/small platforms), and falls/steps
+ * it back DOWN off decks. The climb is capped at the player's own height, so a
+ * boss can only reach places the player legitimately can — it never scales sheer
+ * walls. Call BEFORE the horizontal move so the box-stop stops blocking the
+ * step-on once the boss is high enough.
+ */
+function bossVerticalChase(e: Enemy, lvl: Level3D, player: Player3, dirX: number, dirZ: number, dt: number, grid?: SpatialGrid): void {
+  const reach = 4.5; // how tall a single haul-up can be
+  const here = groundHeightAt(e.x, e.z, lvl, grid, e.y + reach);
+  const ahead = groundHeightAt(e.x + dirX * 2.2, e.z + dirZ * 2.2, lvl, grid, e.y + reach);
+  const playerAbove = player.y > e.y + 1.0;
+  let target = here;
+  if (playerAbove && ahead > here + 0.3) target = Math.min(ahead, player.y + 0.6); // climb toward the ledge the player's on
+  if (target > e.y) e.y = Math.min(target, e.y + BOSS_CLIMB * dt); // haul up
+  else e.y = Math.max(target, e.y - EFALL * dt); // fall / step down
+  e.onDeck = e.y > 0.5;
+}
 
 function onLadderXZ(e: Enemy, l: Ladder): boolean {
   return (
@@ -660,11 +685,13 @@ export function updateEnemies(
       const tgtB = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
       if (tgtB) {
         e.state = 'alert';
-        let wx = tgtB.x - e.x;
-        let wz = tgtB.z - e.z;
-        const td = Math.hypot(wx, wz) || 1;
-        wx /= td;
-        wz /= td;
+        // Tactical movement: the BossBrain picks approach-in-an-arc / strafe /
+        // reposition / dash instead of charging in a straight line.
+        e.bossBrain ??= makeBossBrain();
+        const dist = Math.hypot(player.x - e.x, player.z - e.z);
+        const mv = tickBossBrain(e.bossBrain, e.x, e.z, tgtB.x, tgtB.z, pvx, pvz, dist, dt);
+        let wx = mv.wx;
+        let wz = mv.wz;
         for (let j = 0; j < enemies.length; j++) {
           if (j === i || enemies[j].health <= 0) continue;
           const dx = e.x - enemies[j].x;
@@ -676,8 +703,13 @@ export function updateEnemies(
             wz += (dz / d) * 0.6;
           }
         }
-        moveEnemy(e, lvl, wx, wz, P.speed * 2, dt, bd.radius, grid); // 2× normal enemy speed
-        const dist = Math.hypot(player.x - e.x, player.z - e.z);
+        const wl = Math.hypot(wx, wz) || 1;
+        const ndx = wx / wl;
+        const ndz = wz / wl;
+        // Climb/jump up onto the player's platform (or drop down) BEFORE the
+        // horizontal move so a raised stage no longer stops the boss cold.
+        bossVerticalChase(e, lvl, player, ndx, ndz, dt, grid);
+        moveEnemy(e, lvl, ndx, ndz, P.speed * 2 * mv.speedMul, dt, bd.radius, grid);
         e.fireCd -= dt;
         if (dist < bd.meleeRange) {
           if (e.fireCd <= 0) {
