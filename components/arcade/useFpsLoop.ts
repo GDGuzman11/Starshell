@@ -230,6 +230,7 @@ export function useFpsLoop(
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
     const projectiles = new ProjectileSystem(); // boss/minion projectiles (P0; spawned from P1)
     const telegraphs = new TelegraphSystem(); // ground warning decals (P0; spawned from P1)
+    const bossHazards: { x: number; z: number; r: number; until: number; dps: number; mesh: THREE.Mesh }[] = []; // acid puddles etc. that damage the player
     let recoilKick = 0; // current view recoil (radians), decays to 0
     const grenades: Grenade[] = [];
     const smokes: SmokeFx[] = [];
@@ -278,6 +279,8 @@ export function useFpsLoop(
       zones.length = 0;
       projectiles.clear();
       telegraphs.clear();
+      for (const hz of bossHazards) clearMesh(hz.mesh);
+      bossHazards.length = 0;
     };
 
     const buildFor = (g: FpsGameState) => {
@@ -957,8 +960,31 @@ export function useFpsLoop(
                 fm.position.set(im.x, im.y, im.z);
                 world.scene.add(fm);
                 flashes.push({ mesh: fm, born: now, r: Math.max(1.2, im.splash || 1.2) });
+                // Acid spit leaves a lingering puddle that denies that ground.
+                if (im.kind === 'acid') {
+                  const pm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x6aff7a, transparent: true, opacity: 0.4, depthWrite: false }));
+                  pm.position.set(im.x, 0.06, im.z);
+                  pm.scale.set(2.4, 0.05, 2.4);
+                  world.scene.add(pm);
+                  bossHazards.push({ x: im.x, z: im.z, r: 2.4, until: now + 4200, dps: 14, mesh: pm });
+                }
               }
             }
+          }
+          // Boss ground hazards (acid puddles): damage the player while they stand in one.
+          for (let i = bossHazards.length - 1; i >= 0; i--) {
+            const hz = bossHazards[i];
+            if (now > hz.until) {
+              clearMesh(hz.mesh);
+              bossHazards.splice(i, 1);
+              continue;
+            }
+            if (p.y < 1.2 && Math.hypot(p.x - hz.x, p.z - hz.z) < hz.r) {
+              p.health = Math.max(0, p.health - hz.dps * dt);
+              snap.hurtAt = now;
+              if (p.health <= 0) g.status = 'lost';
+            }
+            (hz.mesh.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.14 * Math.sin(now * 0.006);
           }
           // Ground telegraphs resolving → a visible flash at the epicentre (P0;
           // P1 adds the per-kind effect: eruption damage/knockback, pool, etc.).
@@ -988,6 +1014,11 @@ export function useFpsLoop(
           // Enemies
           const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes, grid ?? undefined, nav ?? undefined);
           for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
+          if (world && res.bossShots.length) {
+            for (const bs of res.bossShots) {
+              projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, radius: 0.42 });
+            }
+          }
           if (res.damage > 0) {
             p.health = Math.max(0, p.health - res.damage);
             snap.hurtAt = now;

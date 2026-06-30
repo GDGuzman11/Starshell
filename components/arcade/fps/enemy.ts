@@ -533,6 +533,21 @@ export interface EnemyTracer {
   color: number;
 }
 
+/** A boss/minion projectile to spawn this frame (the loop adds the scene + mesh
+ *  via the ProjectileSystem). `kind` lets the loop attach an on-impact effect
+ *  (e.g. 'acid' → leaves a puddle). */
+export interface BossShot {
+  kind: string;
+  x: number;
+  y: number;
+  z: number;
+  dir: Vec3;
+  speed: number;
+  dmg: number;
+  color: number;
+  splash: number;
+}
+
 /** Advance all bots with squad tactics: shared sight intel, role-based standoff
  *  + flanking, spacing, and LoS-gated fire. Returns player damage, tracers, and
  *  whether any bot can currently see the player (gates regen). */
@@ -549,13 +564,14 @@ export function updateEnemies(
   smokes: Smoke[],
   grid?: SpatialGrid,
   nav?: NavGraph,
-): { damage: number; tracers: EnemyTracer[]; seen: boolean } {
+): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[] } {
   const P = PARAMS[diff];
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
   const pspeed = Math.hypot(pvx, pvz);
   let damage = 0;
   let seen = false;
   const tracers: EnemyTracer[] = [];
+  const bossShots: BossShot[] = [];
 
   // Pass 1: sightings → personal memory + SHARED squad intel (smoke blocks it).
   const sees = enemies.map((e) => {
@@ -691,9 +707,31 @@ export function updateEnemies(
             tracers.push({ from: [e.x, e.y + bd.scale * 0.5, e.z], to: peye, color: 0xff3344 });
           }
         } else if (sees[i] && e.fireCd <= 0) {
-          e.fireCd = bd.rangeRate;
-          tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
-          if (Math.random() < bd.acc) damage += bd.rangeDmg;
+          if (e.boss === 'xeno') {
+            // ACID SPIT: a lobbed green projectile that LEADS the player's motion
+            // and leaves an acid puddle on impact (handled in the loop). Travels,
+            // so it can be dodged — the boss kites + denies ground with it.
+            e.fireCd = Math.max(bd.rangeRate, 0.9);
+            const muzzleY = e.y + bd.scale * 0.7;
+            const tt = dist / 26;
+            const lx = player.x + pvx * tt * 0.7;
+            const lz = player.z + pvz * tt * 0.7;
+            bossShots.push({
+              kind: 'acid',
+              x: e.x,
+              y: muzzleY,
+              z: e.z,
+              dir: [lx - e.x, player.y + 1.0 - muzzleY, lz - e.z],
+              speed: 26,
+              dmg: Math.round(bd.rangeDmg * 1.4),
+              color: 0x9cff6a,
+              splash: 2.6,
+            });
+          } else {
+            e.fireCd = bd.rangeRate;
+            tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
+            if (Math.random() < bd.acc) damage += bd.rangeDmg;
+          }
         }
       }
       continue;
@@ -852,5 +890,5 @@ export function updateEnemies(
       }
     }
   }
-  return { damage, tracers, seen };
+  return { damage, tracers, seen, bossShots };
 }
