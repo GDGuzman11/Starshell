@@ -16,6 +16,7 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
   const scoped = snap.ads; // any zoom level shows the scope view (snipers go deeper)
   const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
   const stun = Math.max(0, 1 - (now - snap.stunAt) / 1300); // stun/concussion distortion
+  const fog = Math.max(0, 1 - (now - snap.fogAt) / 4500); // Kraken void fog
 
   // Radar geometry: a circular minimap, player centred, forward = up.
   const RAD = 40; // usable px radius
@@ -27,6 +28,13 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 60px 20px rgba(255,40,60,0.55)' }} />
       )}
       {blind > 0 && <div aria-hidden className="absolute inset-0 bg-white" style={{ opacity: blind }} />}
+      {fog > 0 && (
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{ opacity: fog * 0.8, background: 'radial-gradient(circle at 50% 50%, rgba(120,70,180,0.25) 0%, rgba(60,30,110,0.7) 70%, rgba(30,12,60,0.92) 100%)' }}
+        />
+      )}
       {stun > 0 && (
         <div
           aria-hidden

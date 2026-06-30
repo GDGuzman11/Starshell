@@ -697,7 +697,7 @@ export function updateEnemies(
   smokes: Smoke[],
   grid?: SpatialGrid,
   nav?: NavGraph,
-): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[] } {
+): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean } {
   const P = PARAMS[diff];
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
   const pspeed = Math.hypot(pvx, pvz);
@@ -706,6 +706,7 @@ export function updateEnemies(
   const tracers: EnemyTracer[] = [];
   const bossShots: BossShot[] = [];
   const bossTelegraphs: BossTelegraph[] = [];
+  let bossFog = false;
 
   // Pass 1: sightings → personal memory + SHARED squad intel (smoke blocks it).
   const sees = enemies.map((e) => {
@@ -989,6 +990,12 @@ export function updateEnemies(
               if (Math.random() < 0.5) bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.75 });
               else bossTelegraphs.push({ kind: 'pull', x: player.x, z: player.z, radius: 5, delay: 0.8 });
             }
+            // VOID FOG: periodically cloud the player's vision (purple screen fog).
+            brain.fogCd -= dt;
+            if (brain.fogCd <= 0) {
+              brain.fogCd = (desp ? 5 : 8) + Math.random() * 3;
+              bossFog = true;
+            }
           }
           // WARLORD GRENADE VOLLEY: lob a cluster of arcing grenades to deny the
           // player's ground (independent of the suppressive-fire cadence).
@@ -1185,5 +1192,5 @@ export function updateEnemies(
       }
     }
   }
-  return { damage, tracers, seen, bossShots, bossTelegraphs };
+  return { damage, tracers, seen, bossShots, bossTelegraphs, bossFog };
 }

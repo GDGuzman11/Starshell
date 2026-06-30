@@ -95,6 +95,7 @@ export interface FpsSnapshot {
   hurtAt: number;
   flashAt: number; // player flashbanged
   stunAt: number; // player caught in a stun/concussion blast (screen distortion)
+  fogAt: number; // Kraken void fog cast (vision-obscuring overlay)
   radar: { x: number; z: number; boss: boolean }[]; // enemy positions, player-relative
 }
 
@@ -241,7 +242,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -1065,6 +1066,7 @@ export function useFpsLoop(
               projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
             }
           }
+          if (res.bossFog) snap.fogAt = now;
           if (world && res.bossTelegraphs.length) {
             for (const bt of res.bossTelegraphs) {
               telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'pounce' ? 0x9cff6a : 0xc08bff }, now);
