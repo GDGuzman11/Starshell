@@ -236,6 +236,7 @@ export function FpsGame() {
         squad: { lastKnown: null, t: 0, mem: (huntMemRef.current ??= makeHuntMemory()) },
         maxHp,
         god: godRef.current,
+        elapsed: 0,
       };
       setSnap(null);
       setIntro({ level, boss: isBoss });

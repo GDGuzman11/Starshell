@@ -68,6 +68,7 @@ export interface FpsGameState {
   squad: Squad;
   maxHp: number;
   god?: boolean; // dev: invincible (health stays full)
+  elapsed: number; // seconds since the level started (combat lock + boss grace)
 }
 
 export interface FpsSnapshot {
@@ -520,6 +521,7 @@ export function useFpsLoop(
         if (keys.current.has('a') || keys.current.has('arrowleft')) strafe -= 1;
 
         if (g.status === 'playing') {
+          g.elapsed += dt; // level clock for the start-of-match combat lock + boss grace
           if (switchReq.current !== null) {
             const n = g.guns.length;
             const req = switchReq.current;
@@ -625,7 +627,10 @@ export function useFpsLoop(
           }
 
           const fireInput = fireHeld.current || autoFire;
-          const wantShot = gun.auto ? fireInput : fireInput && !prevFire.current;
+          // COMBAT LOCK: no shooting (either side) until the match-intro countdown
+          // finishes (~2.8 s). Movement is free; firing is held.
+          const locked = g.elapsed < 2.8;
+          const wantShot = !locked && (gun.auto ? fireInput : fireInput && !prevFire.current);
           prevFire.current = fireInput;
 
           // Sustained-fire audio (Ripper / Lance Beam): ONE loop while held with
@@ -1059,7 +1064,7 @@ export function useFpsLoop(
           }
 
           // Enemies
-          const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes, grid ?? undefined, nav ?? undefined);
+          const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
           for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
           if (world && res.bossShots.length) {
             for (const bs of res.bossShots) {

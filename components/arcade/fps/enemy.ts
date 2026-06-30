@@ -697,8 +697,13 @@ export function updateEnemies(
   smokes: Smoke[],
   grid?: SpatialGrid,
   nav?: NavGraph,
+  elapsed = 0, // seconds since level start (start-of-match combat lock + boss grace)
 ): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean } {
   const P = PARAMS[diff];
+  // Combat lock: nobody fires until the intro countdown ends. Boss grace: on a boss
+  // level the player gets 10 s to find cover before anything can SEE them.
+  const combatLock = elapsed < 2.8;
+  const grace = elapsed < 10 && enemies.some((e) => e.boss);
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
   const pspeed = Math.hypot(pvx, pvz);
   let damage = 0;
@@ -710,6 +715,7 @@ export function updateEnemies(
 
   // Pass 1: sightings → personal memory + SHARED squad intel (smoke blocks it).
   const sees = enemies.map((e) => {
+    if (grace) return false; // boss-level grace window: no one can acquire the player yet
     if (e.health <= 0) return false;
     if (e.blindT > 0) return false; // flashbanged: can't acquire the player
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
@@ -771,6 +777,7 @@ export function updateEnemies(
   // up close, accuracy falls off with range and with the player's speed.
   const fireAt = (e: Enemy, canSee: boolean): void => {
     e.fireCd -= dt;
+    if (combatLock) return; // start-of-match: hold all enemy fire until the countdown ends
     if (e.fireCd > 0) return;
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
     // BERSERKER: melee claws — strikes only point-blank, no LoS needed (it charges).
