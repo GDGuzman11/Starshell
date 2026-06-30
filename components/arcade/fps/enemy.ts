@@ -551,6 +551,11 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     out.push(dormantAt(makeDestructible(lvl, 'beacon'), 0.7));
     (['rifleman', 'breacher'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.65)));
     (['rifleman', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.35)));
+  } else if (kind === 'octopus') {
+    // KRAKEN ABYSS — crawlers swarm, spores bomb, sentinels guard the core.
+    (['crawler', 'crawler', 'crawler', 'crawler', 'sentinel'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['spore', 'spore', 'crawler'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.65)));
+    (['spore', 'sentinel', 'crawler'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.35)));
   }
   return out;
 }
@@ -835,14 +840,22 @@ export function updateEnemies(
         tz /= tl;
         const perpX = -tz;
         const perpZ = tx;
-        if (e.minion === 'broodling') {
+        const mc = e.minion === 'crawler' || e.minion === 'spore' || e.minion === 'sentinel' ? 0xc08bff : 0x6aff7a;
+        if (e.minion === 'broodling' || e.minion === 'crawler') {
           // Rush + erratic weave; bite on contact.
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
           moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul * aggro, dt, R, grid);
           if (dist < 2.4 && e.fireCd <= 0) {
             e.fireCd = 0.8;
             damage += md.melee;
-            tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: 0x6aff7a });
+            tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: mc });
+          }
+        } else if (e.minion === 'spore') {
+          // VOID SPORE bomber: drift in slowly, then self-destruct in a burst.
+          moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
+          if (dist < 2.8) {
+            damage += md.melee;
+            e.health = 0; // explodes (visual handled in the loop)
           }
         } else if (e.minion === 'spitter') {
           // Standoff acid support: hold mid-range, retreat if rushed, spit acid.
@@ -853,6 +866,16 @@ export function updateEnemies(
             e.fireCd = 1.7;
             const my = e.y + 0.9;
             bossShots.push({ kind: 'acid', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 22, dmg: md.ranged, color: 0x9cff6a, splash: 1.8 });
+          }
+        } else if (e.minion === 'sentinel') {
+          // ABYSS SENTINEL: standoff void bolts (straight, no puddle); guards the Kraken.
+          if (dist < 10) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
+          else if (dist > 20) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
+          else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
+          if (sees[i] && e.fireCd <= 0 && dist < 26) {
+            e.fireCd = 1.5;
+            const my = e.y + 0.9;
+            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 27, dmg: md.ranged, color: 0xc08bff, splash: 0 });
           }
         } else {
           // STALKER: circle wide, then lunge in for a strike (e.track = lunge timer).

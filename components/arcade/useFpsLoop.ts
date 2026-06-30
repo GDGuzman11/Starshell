@@ -1135,8 +1135,17 @@ export function useFpsLoop(
               continue;
             }
             if (e.minion) {
-              // Minion death: a quick shrink + sink.
-              if (s.userData.deadT === undefined) sfx.enemyDie();
+              // Minion death: a quick shrink + sink (Void Spore detonates).
+              if (s.userData.deadT === undefined) {
+                sfx.enemyDie();
+                if (e.minion === 'spore' && world) {
+                  const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xc08bff, transparent: true, blending: THREE.AdditiveBlending }));
+                  fm.position.set(e.x, e.y + 1.1, e.z);
+                  world.scene.add(fm);
+                  flashes.push({ mesh: fm, born: now, r: 3 });
+                  sfx.explosion();
+                }
+              }
               const mdt = (s.userData.deadT = ((s.userData.deadT as number) ?? 0) + dt);
               if (mdt >= 0.7) {
                 s.visible = false;

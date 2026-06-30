@@ -11,24 +11,30 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { accent, box, capsuleZ, coneZ, metal } from '../models/parts';
 
-export type MinionKind = 'broodling' | 'spitter' | 'stalker';
+export type MinionKind = 'broodling' | 'spitter' | 'stalker' | 'crawler' | 'spore' | 'sentinel';
 
 export interface MinionDef {
   hp: number;
   speedMul: number; // × the regular enemy base speed
   scale: number;
   melee: number; // melee damage (0 = none)
-  ranged: number; // acid-spit damage (0 = none)
+  ranged: number; // acid-spit / bolt damage (0 = none)
   color: number;
 }
 
 export const MINIONS: Record<MinionKind, MinionDef> = {
+  // Xenomorph hive (green)
   broodling: { hp: 55, speedMul: 2.0, scale: 1.0, melee: 9, ranged: 0, color: 0x121214 },
   spitter: { hp: 95, speedMul: 1.15, scale: 1.25, melee: 0, ranged: 12, color: 0x2a4a24 },
   stalker: { hp: 120, speedMul: 1.65, scale: 1.4, melee: 15, ranged: 0, color: 0x16161e },
+  // Kraken abyss (purple/void)
+  crawler: { hp: 70, speedMul: 1.7, scale: 1.0, melee: 11, ranged: 0, color: 0x4a2a6a },
+  spore: { hp: 40, speedMul: 0.75, scale: 0.95, melee: 22, ranged: 0, color: 0x7a4ac0 }, // bomber (explodes)
+  sentinel: { hp: 135, speedMul: 0.95, scale: 1.3, melee: 0, ranged: 14, color: 0x3a2060 },
 };
 
 const GREEN = 0x6aff7a;
+const VIOLET = 0xc08bff;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -100,10 +106,77 @@ function buildStalker(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Abyss Crawler: a low purple crab/tentacle creature with glowing tips. */
+function buildCrawler(tier: RenderTier): THREE.Group {
+  const body = metal(0x2a1840, tier, 0.42, 0.65);
+  const glow = accent(VIOLET, tier, 1.6);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.34;
+  core.add(box(0.42, 0.22, 0.42, body, 0, 0, 0)); // shell
+  core.add(box(0.06, 0.05, 0.05, glow, -0.1, 0.07, 0.22)); // eyes
+  core.add(box(0.06, 0.05, 0.05, glow, 0.1, 0.07, 0.22));
+  for (const sx of [-1, 1])
+    for (const sz of [-0.18, 0.18]) {
+      const leg = box(0.04, 0.3, 0.04, body, sx * 0.26, -0.13, sz);
+      leg.rotation.z = sx * 0.6;
+      core.add(leg);
+    }
+  core.add(box(0.05, 0.05, 0.22, glow, 0, 0.02, -0.26)); // glowing tail tip
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Void Spore: a floating purple orb bomber with small tendrils. */
+function buildSpore(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a2060, tier, 0.5, 0.5);
+  const glow = accent(VIOLET, tier, 2.1);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.1; // floats above the ground point
+  core.add(capsuleZ(0.26, 0.06, body, 0, 0, 0)); // orb
+  core.add(box(0.16, 0.16, 0.16, glow, 0, 0, 0.14)); // glowing core
+  for (const a of [0, 1, 2, 3]) {
+    const ang = (a / 4) * Math.PI * 2;
+    core.add(box(0.04, 0.24, 0.04, body, Math.cos(ang) * 0.18, -0.22, Math.sin(ang) * 0.18)); // tendrils
+  }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Abyss Sentinel: a taller squid-like ranged protector. */
+function buildSentinel(tier: RenderTier): THREE.Group {
+  const body = metal(0x2a1840, tier, 0.4, 0.66);
+  const glow = accent(VIOLET, tier, 1.6);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.95;
+  core.add(capsuleZ(0.24, 0.5, body, 0, 0.08, 0)); // mantle
+  core.add(coneZ(0, 0.16, 0.42, body, 0, 0.26, -0.04)); // head point
+  core.add(box(0.05, 0.04, 0.06, glow, -0.08, 0.28, 0.16)); // eyes
+  core.add(box(0.05, 0.04, 0.06, glow, 0.08, 0.28, 0.16));
+  for (const a of [0, 1, 2, 3, 4]) {
+    const ang = (a / 5) * Math.PI * 2;
+    const t = box(0.05, 0.5, 0.05, body, Math.cos(ang) * 0.14, -0.2, Math.sin(ang) * 0.14);
+    core.add(t);
+  }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
-  return buildStalker(tier);
+  if (kind === 'stalker') return buildStalker(tier);
+  if (kind === 'crawler') return buildCrawler(tier);
+  if (kind === 'spore') return buildSpore(tier);
+  return buildSentinel(tier);
 }
 
 /** Per-frame minion animation: a gait/idle sway on the core + a red hit-flash. */
