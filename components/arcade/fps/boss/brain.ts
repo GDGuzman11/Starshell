@@ -14,6 +14,12 @@ export interface BossBrainState {
   strafeSign: 1 | -1;
   losBlockedT: number; // seconds without a clean shot (commit harder / flip to flank)
   flipT: number; // periodic strafe-side flip while holding the line
+  // Pounce (Xenomorph signature lunge): windup → leap → resolve; a miss = vulnerable.
+  pounce: 'none' | 'windup' | 'leap';
+  pounceT: number; // remaining seconds in the current pounce phase
+  pounceX: number; // committed landing spot
+  pounceZ: number;
+  pounceCd: number; // cooldown before the next pounce
 }
 
 export interface BossMove {
@@ -23,7 +29,7 @@ export interface BossMove {
 }
 
 export function makeBossBrain(): BossBrainState {
-  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2 };
+  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2, pounce: 'none', pounceT: 0, pounceX: 0, pounceZ: 0, pounceCd: 4 };
 }
 
 const STAND_MIN = 13; // back off if closer than this

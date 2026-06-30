@@ -10,7 +10,7 @@ import { segBlocked, segHitsSphere, type Vec3 } from './combat';
 import type { Box, Ladder, Level3D } from './level3d';
 import type { SpatialGrid } from './level/grid';
 import { type NavGraph, type NavNode, nearestNode, pathTo } from './level/nav';
-import { EYE, groundHeightAt, type Player3 } from './physics';
+import { EYE, groundHeightAt, type Player3, pushPlayer } from './physics';
 import type { EnemyClass } from './enemies/types';
 import { type BossBrainState, makeBossBrain, tickBossBrain } from './boss/brain';
 import { MINIONS, type MinionKind } from './boss/minions';
@@ -58,6 +58,7 @@ export interface Enemy {
   navGoal?: { x: number; z: number };
   bossBrain?: BossBrainState; // tactical movement brain (bosses only)
   minion?: MinionKind; // boss-faction minion type (drives model + role AI)
+  weakUntil?: number; // timestamp: boss is in a vulnerability window (bonus damage)
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -592,6 +593,16 @@ export interface EnemyTracer {
   color: number;
 }
 
+/** A ground telegraph the boss wants shown this frame (the loop spawns it into the
+ *  TelegraphSystem; the boss resolves its own damage on landing, so the telegraph
+ *  is purely the player's warning). */
+export interface BossTelegraph {
+  x: number;
+  z: number;
+  radius: number;
+  delay: number;
+}
+
 /** A boss/minion projectile to spawn this frame (the loop adds the scene + mesh
  *  via the ProjectileSystem). `kind` lets the loop attach an on-impact effect
  *  (e.g. 'acid' → leaves a puddle). */
@@ -623,7 +634,7 @@ export function updateEnemies(
   smokes: Smoke[],
   grid?: SpatialGrid,
   nav?: NavGraph,
-): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[] } {
+): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[] } {
   const P = PARAMS[diff];
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
   const pspeed = Math.hypot(pvx, pvz);
@@ -631,6 +642,7 @@ export function updateEnemies(
   let seen = false;
   const tracers: EnemyTracer[] = [];
   const bossShots: BossShot[] = [];
+  const bossTelegraphs: BossTelegraph[] = [];
 
   // Pass 1: sightings → personal memory + SHARED squad intel (smoke blocks it).
   const sees = enemies.map((e) => {
@@ -794,56 +806,83 @@ export function updateEnemies(
       if (tgtB) {
         e.state = 'alert';
         e.bossBrain ??= makeBossBrain();
+        const brain = e.bossBrain;
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
-        const mv = tickBossBrain(e.bossBrain, e.x, e.z, tgtB.x, tgtB.z, sees[i], dist, dt);
-        let wx = mv.wx;
-        let wz = mv.wz;
-        for (let j = 0; j < enemies.length; j++) {
-          if (j === i || enemies[j].health <= 0) continue;
-          const dx = e.x - enemies[j].x;
-          const dz = e.z - enemies[j].z;
-          const d2 = dx * dx + dz * dz;
-          if (d2 < 16 && d2 > 0.0001) {
-            const d = Math.sqrt(d2);
-            wx += (dx / d) * 0.6;
-            wz += (dz / d) * 0.6;
-          }
-        }
-        const wl = Math.hypot(wx, wz) || 1;
-        moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul, dt, bd.radius, grid);
         e.fireCd -= dt;
-        if (dist < bd.meleeRange) {
-          // Only if the player rushes the boss into melee range.
-          if (e.fireCd <= 0) {
-            e.fireCd = bd.meleeRate;
-            damage += bd.meleeDmg;
-            tracers.push({ from: [e.x, e.y + bd.scale * 0.5, e.z], to: peye, color: 0xff3344 });
+        brain.pounceCd -= dt;
+
+        // POUNCE (Xenomorph signature): a telegraphed lunge at the predicted spot.
+        // A MISS leaves it exposed (weak-point window) for bonus damage.
+        if (e.boss === 'xeno' && brain.pounce === 'none' && brain.pounceCd <= 0 && sees[i] && dist > 7 && dist < 22) {
+          brain.pounce = 'windup';
+          brain.pounceT = 0.55;
+          brain.pounceX = player.x + pvx * 0.35;
+          brain.pounceZ = player.z + pvz * 0.35;
+          bossTelegraphs.push({ x: brain.pounceX, z: brain.pounceZ, radius: 4, delay: 0.55 });
+        }
+
+        if (brain.pounce === 'windup') {
+          brain.pounceT -= dt; // coil in place so the telegraph reads
+          if (brain.pounceT <= 0) {
+            brain.pounce = 'leap';
+            brain.pounceT = 0.5;
           }
-        } else if (sees[i] && e.fireCd <= 0) {
-          if (e.boss === 'xeno') {
-            // ACID SPIT: a lobbed green projectile that LEADS the player's motion
-            // and leaves an acid puddle on impact (handled in the loop). Travels,
-            // so it can be dodged — the boss kites + denies ground with it.
-            e.fireCd = Math.max(bd.rangeRate, 0.9);
-            const muzzleY = e.y + bd.scale * 0.7;
-            const tt = dist / 26;
-            const lx = player.x + pvx * tt * 0.7;
-            const lz = player.z + pvz * tt * 0.7;
-            bossShots.push({
-              kind: 'acid',
-              x: e.x,
-              y: muzzleY,
-              z: e.z,
-              dir: [lx - e.x, player.y + 1.0 - muzzleY, lz - e.z],
-              speed: 26,
-              dmg: Math.round(bd.rangeDmg * 1.4),
-              color: 0x9cff6a,
-              splash: 2.6,
-            });
-          } else {
-            e.fireCd = bd.rangeRate;
-            tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
-            if (Math.random() < bd.acc) damage += bd.rangeDmg;
+        } else if (brain.pounce === 'leap') {
+          brain.pounceT -= dt;
+          const lx = brain.pounceX - e.x;
+          const lz = brain.pounceZ - e.z;
+          const ll = Math.hypot(lx, lz) || 1;
+          moveEnemy(e, lvl, lx / ll, lz / ll, P.speed * 6.5, dt, bd.radius, grid);
+          if (brain.pounceT <= 0 || ll < 1.6) {
+            const hd = Math.hypot(player.x - e.x, player.z - e.z);
+            if (hd < 4.5) {
+              damage += Math.round(bd.meleeDmg * 1.7); // slam + knock the player back
+              pushPlayer(player, player.x - e.x, player.z - e.z, 9);
+            } else {
+              e.weakUntil = now + 2000; // overshot → exposed core, bonus-damage window
+            }
+            brain.pounce = 'none';
+            brain.pounceCd = 4.5 + Math.random() * 3;
+          }
+        } else {
+          // RANGED KITE (default): standoff movement + acid spit / hitscan fire.
+          const mv = tickBossBrain(brain, e.x, e.z, tgtB.x, tgtB.z, sees[i], dist, dt);
+          let wx = mv.wx;
+          let wz = mv.wz;
+          for (let j = 0; j < enemies.length; j++) {
+            if (j === i || enemies[j].health <= 0) continue;
+            const dx = e.x - enemies[j].x;
+            const dz = e.z - enemies[j].z;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < 16 && d2 > 0.0001) {
+              const d = Math.sqrt(d2);
+              wx += (dx / d) * 0.6;
+              wz += (dz / d) * 0.6;
+            }
+          }
+          const wl = Math.hypot(wx, wz) || 1;
+          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul, dt, bd.radius, grid);
+          if (dist < bd.meleeRange) {
+            if (e.fireCd <= 0) {
+              e.fireCd = bd.meleeRate;
+              damage += bd.meleeDmg;
+              tracers.push({ from: [e.x, e.y + bd.scale * 0.5, e.z], to: peye, color: 0xff3344 });
+            }
+          } else if (sees[i] && e.fireCd <= 0) {
+            if (e.boss === 'xeno') {
+              // ACID SPIT: a lobbed green projectile that LEADS the player + leaves
+              // an acid puddle on impact (handled in the loop).
+              e.fireCd = Math.max(bd.rangeRate, 0.9);
+              const muzzleY = e.y + bd.scale * 0.7;
+              const tt = dist / 26;
+              const lx = player.x + pvx * tt * 0.7;
+              const lz = player.z + pvz * tt * 0.7;
+              bossShots.push({ kind: 'acid', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, player.y + 1.0 - muzzleY, lz - e.z], speed: 26, dmg: Math.round(bd.rangeDmg * 1.4), color: 0x9cff6a, splash: 2.6 });
+            } else {
+              e.fireCd = bd.rangeRate;
+              tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
+              if (Math.random() < bd.acc) damage += bd.rangeDmg;
+            }
           }
         }
       }
@@ -1003,5 +1042,5 @@ export function updateEnemies(
       }
     }
   }
-  return { damage, tracers, seen, bossShots };
+  return { damage, tracers, seen, bossShots, bossTelegraphs };
 }

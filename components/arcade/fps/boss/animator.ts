@@ -17,6 +17,7 @@ export function poseBossModel(
   step: number,
   hitFlash: number,
   now: number,
+  weak = false,
 ): void {
   const parts = model.userData.parts as BossParts | undefined;
   if (!parts) return;
@@ -33,13 +34,18 @@ export function poseBossModel(
   parts.tail.rotation.x = 0.1 + Math.sin(t * 0.8) * 0.1;
   parts.head.rotation.z = Math.sin(t * 1.6) * 0.05;
 
-  // Hit flash → emissive red pulse on the carapace.
+  // Emissive: a green VULNERABLE pulse during the weak-point window, otherwise a
+  // red hit-flash on the carapace.
   const mats = model.userData.bodyMats as THREE.Material[] | undefined;
   if (mats) {
     const hf = hitFlash > 0 ? Math.min(1, hitFlash / 0.12) : 0;
+    const wk = weak ? 0.4 + 0.4 * (0.5 + 0.5 * Math.sin(t * 12)) : 0;
     for (const m of mats) {
       const sm = m as THREE.MeshStandardMaterial;
-      if (sm.emissive) sm.emissive.setRGB(hf * 0.8, hf * 0.12, hf * 0.12);
+      if (sm.emissive) {
+        if (wk > 0) sm.emissive.setRGB(wk * 0.2, wk, wk * 0.35);
+        else sm.emissive.setRGB(hf * 0.8, hf * 0.12, hf * 0.12);
+      }
     }
   }
 }

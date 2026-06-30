@@ -682,7 +682,8 @@ export function useFpsLoop(
                 if (e.health <= 0) continue;
                 const d = Math.hypot(e.x - ix, e.y + 1 - iy, e.z - iz);
                 if (d < gun.splash) {
-                  const dd = Math.round(gun.dmg * (1 - d / gun.splash));
+                  const wm = e.boss && e.weakUntil && now < e.weakUntil ? 2.5 : 1;
+                  const dd = Math.round(gun.dmg * (1 - d / gun.splash) * wm);
                   hurtEnemy(e, dd);
                   g.dmgDealt += dd;
                   e.hitFlash = 0.12;
@@ -710,8 +711,10 @@ export function useFpsLoop(
               }
             } else {
               if (hit) {
-                hurtEnemy(hit, gun.dmg);
-                g.dmgDealt += gun.dmg;
+                // Boss weak-point window (after a missed pounce) = bonus damage.
+                const wm = hit.boss && hit.weakUntil && now < hit.weakUntil ? 2.5 : 1;
+                hurtEnemy(hit, gun.dmg * wm);
+                g.dmgDealt += gun.dmg * wm;
                 g.shotsHit++;
                 hit.hitFlash = 0.12;
                 hit.alarm = 4;
@@ -1026,6 +1029,11 @@ export function useFpsLoop(
               projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, radius: 0.42 });
             }
           }
+          if (world && res.bossTelegraphs.length) {
+            for (const bt of res.bossTelegraphs) {
+              telegraphs.spawn({ kind: 'pounce', scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: 0x9cff6a }, now);
+            }
+          }
           if (res.damage > 0) {
             p.health = Math.max(0, p.health - res.damage);
             snap.hurtAt = now;
@@ -1138,7 +1146,7 @@ export function useFpsLoop(
               // 3D boss: stand on the ground, face the player, animate, flash on hit.
               s.position.set(e.x, e.y, e.z);
               s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z);
-              poseBossModel(s as THREE.Group, e.boss, moving, e.step, e.hitFlash, now);
+              poseBossModel(s as THREE.Group, e.boss, moving, e.step, e.hitFlash, now, e.weakUntil != null && now < e.weakUntil);
             }
           } else if (e.minion) {
             s.position.set(e.x, e.y, e.z);
