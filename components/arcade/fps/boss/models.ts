@@ -128,6 +128,28 @@ function buildWarlord(tier: RenderTier): THREE.Group {
   });
 }
 
+/** Deployable destructible objects (no AI): the Warlord's Command Beacon (a
+ *  glowing pylon that buffs the legion) and Shield Wall (a wide blocking panel). */
+export function buildDestructibleModel(kind: 'beacon' | 'shield', tier: RenderTier): THREE.Group {
+  const root = new THREE.Group();
+  const glow = accent(0xff9a3a, tier, 2.0);
+  if (kind === 'beacon') {
+    const dark = metal(0x2a2620, tier, 0.5, 0.7);
+    root.add(box(0.6, 0.24, 0.6, dark, 0, 0.12, 0)); // base
+    root.add(box(0.16, 1.4, 0.16, dark, 0, 0.9, 0)); // pylon
+    const core = box(0.34, 0.44, 0.34, glow, 0, 1.7, 0); // glowing command core
+    core.name = 'core';
+    root.add(core);
+    root.userData.bodyMats = [dark];
+  } else {
+    const dark = metal(0x3a2e16, tier, 0.5, 0.75);
+    root.add(box(2.8, 2.2, 0.3, dark, 0, 1.1, 0)); // wide shield panel
+    root.add(box(2.8, 0.12, 0.34, glow, 0, 2.05, 0)); // glowing rim
+    root.userData.bodyMats = [dark];
+  }
+  return root;
+}
+
 /** Build the 3D model for a boss, or null to keep the legacy sprite (Kraken until
  *  P3). */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {

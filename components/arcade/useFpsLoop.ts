@@ -10,7 +10,7 @@ import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
 import { bossTex } from './fps/textures';
 import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
 import { poseDeath, poseEnemy } from './fps/enemies/animator';
-import { buildBossModel } from './fps/boss/models';
+import { buildBossModel, buildDestructibleModel } from './fps/boss/models';
 import { poseBossDeath, poseBossModel } from './fps/boss/animator';
 import { MINIONS, buildMinionModel, poseMinion } from './fps/boss/minions';
 import type { GunDef, ThrowDef } from './fps/weapons';
@@ -330,6 +330,11 @@ export function useFpsLoop(
           s.scale.set(1.5 * bd.scale, 2.0 * bd.scale, 1);
           world!.scene.add(s);
           return s;
+        }
+        if (e.destructible) {
+          const m = buildDestructibleModel(e.destructible, tier);
+          world!.scene.add(m);
+          return m;
         }
         if (e.minion) {
           const m = buildMinionModel(e.minion, tier);
@@ -1104,6 +1109,19 @@ export function useFpsLoop(
               }
               continue;
             }
+            if (e.destructible) {
+              // Destroyed deployable: a flash + vanish.
+              if (!s.userData.died && world) {
+                s.userData.died = true;
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xffae3a, transparent: true }));
+                fm.position.set(e.x, e.y + 1.4, e.z);
+                world.scene.add(fm);
+                flashes.push({ mesh: fm, born: now, r: 3 });
+                sfx.explosion();
+              }
+              s.visible = false;
+              continue;
+            }
             if (e.minion) {
               // Minion death: a quick shrink + sink.
               if (s.userData.deadT === undefined) sfx.enemyDie();
@@ -1155,6 +1173,17 @@ export function useFpsLoop(
               s.position.set(e.x, e.y, e.z);
               s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z);
               poseBossModel(s as THREE.Group, e.boss, moving, e.step, e.hitFlash, now, e.weakUntil != null && now < e.weakUntil);
+            }
+          } else if (e.destructible) {
+            // Static deployable: hold position; flash red on hit.
+            s.position.set(e.x, e.y, e.z);
+            const mats = s.userData.bodyMats as THREE.Material[] | undefined;
+            if (mats) {
+              const hf = e.hitFlash > 0 ? Math.min(1, e.hitFlash / 0.12) : 0;
+              for (const m of mats) {
+                const sm = m as THREE.MeshStandardMaterial;
+                if (sm.emissive) sm.emissive.setRGB(hf * 0.8, hf * 0.12, hf * 0.12);
+              }
             }
           } else if (e.minion) {
             s.position.set(e.x, e.y, e.z);
@@ -1253,7 +1282,7 @@ export function useFpsLoop(
                       : 'HUNTING';
               return { name: BOSSES[e.boss!].name, ratio, phase, status, brood: broodCount };
             });
-          snap.enemiesLeft = g.enemies.filter((e) => e.health > 0 && !e.dormant).length;
+          snap.enemiesLeft = g.enemies.filter((e) => e.health > 0 && !e.dormant && !e.destructible).length;
           snap.status = g.status;
           snap.kills = g.kills;
           snap.shotsFired = g.shotsFired;
@@ -1263,7 +1292,7 @@ export function useFpsLoop(
           const sinY = Math.sin(p.yaw);
           const cosY = Math.cos(p.yaw);
           snap.radar = g.enemies
-            .filter((e) => e.health > 0 && !e.dormant)
+            .filter((e) => e.health > 0 && !e.dormant && !e.destructible)
             .map((e) => {
               const dx = e.x - p.x;
               const dz = e.z - p.z;

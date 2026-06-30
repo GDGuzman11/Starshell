@@ -61,6 +61,7 @@ export interface Enemy {
   weakUntil?: number; // timestamp: boss is in a vulnerability window (bonus damage)
   dormant?: boolean; // reinforcement minion not yet woken (hidden, inert)
   wakeAtHp?: number; // boss HP fraction at/below which this reinforcement wakes
+  destructible?: 'beacon' | 'shield'; // a deployable object (no AI), shootable
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -147,6 +148,7 @@ export interface Squad {
   planT?: number; // re-plan / heat-decay cooldown
   lastAlive?: number; // alive bot count last frame (to detect losses)
   aggroUntil?: number; // hive-screech buff window: minions surge faster/aggressive
+  buffUntil?: number; // Warlord Command Beacon: legion accuracy buff while it lives
 }
 
 /** Active smoke cloud — blocks the aliens' line of sight. */
@@ -545,10 +547,20 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
   } else if (kind === 'warrior') {
     // WARLORD LEGION — a real doctrine squad (cover / suppress / flank AI).
     (['rifleman', 'rifleman', 'rifleman', 'suppressor', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(makeDoctrineEnemy(lvl, c, i, rand)));
+    // Command Beacon deploys at 70% HP — buffs the legion's aim until destroyed.
+    out.push(dormantAt(makeDestructible(lvl, 'beacon'), 0.7));
     (['rifleman', 'breacher'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.65)));
     (['rifleman', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.35)));
   }
   return out;
+}
+
+/** A deployable destructible object (no AI) as an Enemy — reuses health, the
+ *  player shot detection, render + health bars. */
+function makeDestructible(lvl: Level3D, kind: 'beacon' | 'shield'): Enemy {
+  const a = lvl.enemySpawn;
+  const hp = kind === 'beacon' ? 220 : 400;
+  return { x: a.x, y: 0, z: a.z, health: hp, maxHealth: hp, shield: 0, maxShield: 0, shieldRegenT: 0, state: 'idle', lastSeen: null, fireCd: 0, hitFlash: 0, wander: 0, step: 0, alarm: 0, weapon: 'rifle', cls: 'rifleman', side: 1, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch: null, destructible: kind };
 }
 
 /** Mark a reinforcement dormant (parked underground until its phase wakes it). */
@@ -769,7 +781,8 @@ export function updateEnemies(
     // Zero-in: the longer they've held LoS on you, the better their aim. Peeking
     // is safe; lingering in the open gets punished.
     const trackRamp = 0.45 + 0.55 * Math.min(1, e.track / 1.4);
-    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade) * trackRamp) damage += W.dmg;
+    const buff = now < (squad.buffUntil ?? 0) ? 1.35 : 1; // Warlord Command Beacon
+    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade) * trackRamp * buff) damage += W.dmg;
   };
 
   // Boss phase manager: wake dormant reinforcements as the boss loses health,
@@ -784,8 +797,12 @@ export function updateEnemies(
         e.y = 0;
         e.z = bossE.z + (Math.random() - 0.5) * 7;
         e.state = 'alert';
-        squad.aggroUntil = now + 4500; // screech
+        if (!e.destructible) squad.aggroUntil = now + 4500; // screech (not for deployables)
       }
+    }
+    // Command Beacon: while a deployed beacon lives, the legion's aim is buffed.
+    if (enemies.some((e) => e.destructible === 'beacon' && !e.dormant && e.health > 0)) {
+      squad.buffUntil = now + 200;
     }
   }
 
@@ -795,6 +812,7 @@ export function updateEnemies(
     if (e.health <= 0) continue;
     if (e.dormant) continue; // reinforcement not yet woken
     if (e.hitFlash > 0) e.hitFlash -= dt;
+    if (e.destructible) continue; // deployable object — no AI, just shootable
     if (e.alarm > 0) e.alarm -= dt;
     // Shield regen: paused for a few seconds after any hit, then slowly refills.
     if (e.shieldRegenT > 0) e.shieldRegenT -= dt;
