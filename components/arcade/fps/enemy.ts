@@ -552,6 +552,8 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['rifleman', 'rifleman', 'rifleman', 'suppressor', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(makeDoctrineEnemy(lvl, c, i, rand)));
     // Command Beacon deploys at 70% HP — buffs the legion's aim until destroyed.
     out.push(dormantAt(makeDestructible(lvl, 'beacon'), 0.7));
+    // Shield Wall deploys at 45% — blocks your shots; flank it or break it.
+    out.push(dormantAt(makeDestructible(lvl, 'shield'), 0.45));
     (['rifleman', 'breacher'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.65)));
     (['rifleman', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.35)));
   } else if (kind === 'octopus') {
@@ -982,7 +984,10 @@ export function updateEnemies(
             // knocked back (brain.pounceCd is unused by the Kraken, reused here).
             if (brain.pounceCd <= 0 && dist < 17) {
               brain.pounceCd = ((desp ? 4 : 6.5) + Math.random() * 2) * eAgg;
-              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.75 });
+              // Alternate the slam (knockback ring) with a PULL ZONE vortex under
+              // the player that drags them toward its centre.
+              if (Math.random() < 0.5) bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.75 });
+              else bossTelegraphs.push({ kind: 'pull', x: player.x, z: player.z, radius: 5, delay: 0.8 });
             }
           }
           // WARLORD GRENADE VOLLEY: lob a cluster of arcing grenades to deny the

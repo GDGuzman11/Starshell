@@ -232,7 +232,7 @@ export function useFpsLoop(
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
     const projectiles = new ProjectileSystem(); // boss/minion projectiles (P0; spawned from P1)
     const telegraphs = new TelegraphSystem(); // ground warning decals (P0; spawned from P1)
-    const bossHazards: { x: number; z: number; r: number; until: number; dps: number; mesh: THREE.Mesh }[] = []; // acid puddles etc. that damage the player
+    const bossHazards: { x: number; z: number; r: number; until: number; dps: number; mesh: THREE.Mesh; pull?: number }[] = []; // acid puddles / pull vortices
     let recoilKick = 0; // current view recoil (radians), decays to 0
     const grenades: Grenade[] = [];
     const smokes: SmokeFx[] = [];
@@ -667,7 +667,7 @@ export function useFpsLoop(
             let hit: Enemy | null = null;
             for (const e of g.enemies) {
               if (e.health <= 0) continue;
-              const hr = e.boss ? BOSSES[e.boss].radius : ENEMY_R;
+              const hr = e.destructible === 'shield' ? 3.0 : e.boss ? BOSSES[e.boss].radius : ENEMY_R; // shield = a wide blocker
               const ecy = e.boss ? BOSSES[e.boss].scale : 1.0;
               const t = raySphere(eye, sdir, [e.x, e.y + ecy, e.z], hr);
               if (t < hitT) {
@@ -995,11 +995,14 @@ export function useFpsLoop(
               bossHazards.splice(i, 1);
               continue;
             }
-            if (p.y < 1.2 && Math.hypot(p.x - hz.x, p.z - hz.z) < hz.r) {
+            const hzd = Math.hypot(p.x - hz.x, p.z - hz.z);
+            if (p.y < 1.2 && hzd < hz.r) {
               p.health = Math.max(0, p.health - hz.dps * dt);
               snap.hurtAt = now;
               if (p.health <= 0 && !g.god) g.status = 'lost';
             }
+            // Pull vortex: drag the player toward the centre while they're in range.
+            if (hz.pull && p.y < 2.5 && hzd < hz.r * 2 && hzd > 0.5) pushPlayer(p, hz.x - p.x, hz.z - p.z, hz.pull);
             (hz.mesh.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.14 * Math.sin(now * 0.006);
           }
           // Ground telegraphs resolving → a visible flash at the epicentre (P0;
@@ -1014,6 +1017,14 @@ export function useFpsLoop(
                 launchPlayer(p, 7.5);
                 pushPlayer(p, p.x - tf.x, p.z - tf.z, 7);
                 if (p.health <= 0 && !g.god) g.status = 'lost';
+              }
+              // Pull Zone: drop a lingering vortex that drags the player to its centre.
+              if (tf.kind === 'pull' && world) {
+                const pm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x8a4ad0, transparent: true, opacity: 0.42, depthWrite: false }));
+                pm.position.set(tf.x, 0.1, tf.z);
+                pm.scale.set(tf.radius, 0.05, tf.radius);
+                world.scene.add(pm);
+                bossHazards.push({ x: tf.x, z: tf.z, r: tf.radius, until: now + 3200, dps: 6, mesh: pm, pull: 9 });
               }
               // Slam Wave: a strong knockback (no launch) if caught in the ring.
               if (tf.kind === 'slam' && tf.hitPlayer && p.y < 2.5) {
@@ -1056,7 +1067,7 @@ export function useFpsLoop(
           }
           if (world && res.bossTelegraphs.length) {
             for (const bt of res.bossTelegraphs) {
-              telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'eruption' ? 0xc08bff : 0x9cff6a }, now);
+              telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'pounce' ? 0x9cff6a : 0xc08bff }, now);
             }
           }
           if (res.damage > 0) {
