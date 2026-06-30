@@ -67,6 +67,7 @@ export interface FpsGameState {
   regenT: number;
   squad: Squad;
   maxHp: number;
+  god?: boolean; // dev: invincible (health stays full)
 }
 
 export interface FpsSnapshot {
@@ -997,7 +998,7 @@ export function useFpsLoop(
             if (p.y < 1.2 && Math.hypot(p.x - hz.x, p.z - hz.z) < hz.r) {
               p.health = Math.max(0, p.health - hz.dps * dt);
               snap.hurtAt = now;
-              if (p.health <= 0) g.status = 'lost';
+              if (p.health <= 0 && !g.god) g.status = 'lost';
             }
             (hz.mesh.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.14 * Math.sin(now * 0.006);
           }
@@ -1012,7 +1013,7 @@ export function useFpsLoop(
                 recoilKick = Math.min(0.22, recoilKick + 0.12);
                 launchPlayer(p, 7.5);
                 pushPlayer(p, p.x - tf.x, p.z - tf.z, 7);
-                if (p.health <= 0) g.status = 'lost';
+                if (p.health <= 0 && !g.god) g.status = 'lost';
               }
               if (world) {
                 const erupt = tf.kind === 'eruption';
@@ -1053,13 +1054,14 @@ export function useFpsLoop(
             p.health = Math.max(0, p.health - res.damage);
             snap.hurtAt = now;
             sfx.hurt();
-            if (p.health <= 0) g.status = 'lost';
+            if (p.health <= 0 && !g.god) g.status = 'lost';
           }
           if (res.seen || res.damage > 0) g.regenT = 0;
           else {
             g.regenT += dt;
             if (g.regenT > 2) p.health = Math.min(g.maxHp, p.health + 24 * dt);
           }
+          if (g.god) p.health = g.maxHp; // dev god-mode: stay topped up after all damage
           // Drive the 3D viewmodel (bob from movement; recoil/flash/reload poses
           // were triggered by the fire/reload hooks above). Drawn after the world.
           viewmodel?.update(dt, Math.hypot(pvx, pvz), g.reloading);

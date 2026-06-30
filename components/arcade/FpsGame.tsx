@@ -72,6 +72,13 @@ export function FpsGame() {
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1 });
   const [dev, setDev] = useState(false); // dev level-warp tools (npm run dev, or ?dev=1 on a deploy)
   const [devLevel, setDevLevel] = useState(5);
+  const [god, setGodState] = useState(false); // dev god-mode (invincible)
+  const godRef = useRef(false);
+  const setGod = useCallback((v: boolean) => {
+    godRef.current = v;
+    setGodState(v);
+    if (gameRef.current) gameRef.current.god = v; // apply live to an in-progress level
+  }, []);
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
@@ -221,6 +228,7 @@ export function FpsGame() {
         regenT: 0,
         squad: { lastKnown: null, t: 0, mem: (huntMemRef.current ??= makeHuntMemory()) },
         maxHp,
+        god: godRef.current,
       };
       setSnap(null);
       setIntro({ level, boss: isBoss });
@@ -466,6 +474,13 @@ export function FpsGame() {
                     WARP ▸
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setGod(!god)}
+                  className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${god ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
+                >
+                  God Mode: {god ? 'ON' : 'OFF'}
+                </button>
               </div>
             )}
             <p className="mt-5 max-w-xs text-center font-pixel text-[6px] leading-relaxed text-white/35 sm:text-[8px]">
