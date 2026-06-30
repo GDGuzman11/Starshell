@@ -21,6 +21,7 @@ type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const LEVELS = 20;
 const ARMOR_COST = 100;
+const GAUNTLET_BOSSES: BossKind[] = ['xeno', 'warrior', 'octopus']; // lvl-20 round order
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
 const campaignEnemies = (level: number, base: number) => Math.min(8, base + Math.floor((level - 1) / 2));
 const campaignDiff = (base: Difficulty, level: number): Difficulty =>
@@ -63,6 +64,9 @@ export function FpsGame() {
   const [runStats, setRunStats] = useState({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
   // Per-level cinematic intro (wave title + countdown), cleared by its own timer.
   const [intro, setIntro] = useState<{ level: number; boss: boolean } | null>(null);
+  // Gauntlet (lvl 20): current round 1-3, and the between-rounds recovery overlay.
+  const gauntletRef = useRef(0);
+  const [recovery, setRecovery] = useState<number | null>(null); // upcoming round shown during recovery
   const [best, setBest] = useState(0);
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
@@ -82,7 +86,7 @@ export function FpsGame() {
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused, onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -202,9 +206,12 @@ export function FpsGame() {
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
       player.health = maxHp;
-      const bossKinds: BossKind[] = level === 20 ? ['xeno', 'warrior', 'octopus'] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
-      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random) : spawnEnemies(lvl, campaignEnemies(level, enemies), level, Math.random);
-      // Boss encounters bring a themed minion squad (Xenomorph hive for now).
+      // Level 20 = the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord → Kraken).
+      const gauntlet = level === 20;
+      const round = gauntlet ? gauntletRef.current || 1 : 0;
+      const bossKinds: BossKind[] = gauntlet ? [GAUNTLET_BOSSES[round - 1]] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
+      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, campaignEnemies(level, enemies), level, Math.random);
+      // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
       gameRef.current = {
         level: lvl,
@@ -243,6 +250,8 @@ export function FpsGame() {
       const ups: Record<string, Upg> = {};
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory(); // fresh learning each new campaign
+      gauntletRef.current = 0;
+      setRecovery(null);
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
@@ -258,6 +267,7 @@ export function FpsGame() {
       const ups: Record<string, Upg> = {};
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory();
+      gauntletRef.current = level === 20 ? 1 : 0;
       setRun({ level, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       if (isTouch && !fsActive) toggleFullscreen();
@@ -291,9 +301,15 @@ export function FpsGame() {
     if (snap.status === 'won') {
       setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills) }));
       if (run.level >= LEVELS) {
-        saveBest(LEVELS);
-        setBest((b) => Math.max(b, LEVELS));
-        setMode('complete');
+        // GAUNTLET: advance through the three enhanced bosses with a recovery window.
+        if (gauntletRef.current > 0 && gauntletRef.current < 3) {
+          gauntletRef.current += 1;
+          setRecovery(gauntletRef.current); // overlay handles the heal + next-round start
+        } else {
+          saveBest(LEVELS);
+          setBest((b) => Math.max(b, LEVELS));
+          setMode('complete');
+        }
       } else {
         setMode('shop');
       }
@@ -402,6 +418,10 @@ export function FpsGame() {
 
         {mode === 'play' && intro && <MatchIntro key={intro.level} level={intro.level} boss={intro.boss} onDone={() => setIntro(null)} />}
 
+        {mode === 'play' && recovery != null && (
+          <RecoveryOverlay key={recovery} round={recovery} onDone={() => { setRecovery(null); startLevel(20, lastLoadout, run.maxHp, run.upgrades); }} />
+        )}
+
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
@@ -509,7 +529,7 @@ export function FpsGame() {
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
-            onNext={() => { const next = run.level + 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
+            onNext={() => { const next = run.level + 1; if (next === 20) gauntletRef.current = 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
             onExit={() => setMode('menu')}
           />
         )}
@@ -614,6 +634,43 @@ function Slider({ label, value, min, max, step, onChange }: { label: string; val
 /** Cinematic per-level intro: wave title + objective + a 3·2·1·GO countdown that
  *  plays over the live arena, then clears itself. Non-blocking (pointer-events-none)
  *  so the player can start moving immediately; reduced-motion skips to GO. */
+/** Gauntlet between-rounds recovery: a breather with a countdown to the next
+ *  enhanced boss (health is fully restored when the next round spawns). */
+function RecoveryOverlay({ round, onDone }: { round: number; onDone: () => void }) {
+  const [n, setN] = useState(6);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  useEffect(() => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      const t = setTimeout(() => onDoneRef.current(), 600);
+      return () => clearTimeout(t);
+    }
+    let cur = 6;
+    setN(6);
+    const iv = setInterval(() => {
+      cur -= 1;
+      setN(cur);
+      if (cur <= 0) {
+        clearInterval(iv);
+        onDoneRef.current();
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
+  const boss = ['XENOMORPH', 'WARLORD', 'KRAKEN'][round - 1] ?? '';
+  return (
+    <div className="gdg-cine absolute inset-0 z-[55] flex flex-col items-center justify-center bg-black/85 px-4 text-center font-pixel [animation:gdg-fade-in_0.4s_ease-out]">
+      <p className="text-[10px] tracking-[0.3em] text-[#ffd27a] sm:text-[13px]">GAUNTLET · ROUND {round} / 3</p>
+      <p className="mt-2 text-[14px] text-[#ff5d6e] sm:text-[20px] [animation:gdg-rise-in_0.5s_ease-out]">ENHANCED {boss} INBOUND</p>
+      <p className="mt-1 text-[7px] tracking-[0.25em] text-[#aef5c8]/80 sm:text-[9px]">RECOVER · SHIELDS RESTORED</p>
+      <p key={n} className="mt-5 text-[40px] leading-none text-white sm:text-[56px] [animation:gdg-count-pop_0.9s_ease-out]">
+        {n > 0 ? n : 'GO'}
+      </p>
+    </div>
+  );
+}
+
 function MatchIntro({ level, boss, onDone }: { level: number; boss: boolean; onDone: () => void }) {
   const [n, setN] = useState(3);
   const onDoneRef = useRef(onDone);

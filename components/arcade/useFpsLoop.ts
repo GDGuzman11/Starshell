@@ -318,7 +318,7 @@ export function useFpsLoop(
           // 3D boss model where one exists (Xenomorph); otherwise the legacy sprite.
           const m3d = buildBossModel(e.boss, tier);
           if (m3d) {
-            m3d.scale.setScalar(bd.scale * 0.62);
+            m3d.scale.setScalar(bd.scale * 0.62 * (e.enh ? 1.3 : 1)); // enhanced gauntlet = bigger
             world!.scene.add(m3d);
             return m3d;
           }

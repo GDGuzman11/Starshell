@@ -62,6 +62,7 @@ export interface Enemy {
   dormant?: boolean; // reinforcement minion not yet woken (hidden, inert)
   wakeAtHp?: number; // boss HP fraction at/below which this reinforcement wakes
   destructible?: 'beacon' | 'shield'; // a deployable object (no AI), shootable
+  enh?: boolean; // ENHANCED gauntlet variant (bigger, faster, more aggressive)
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -495,18 +496,20 @@ export function spawnEnemies(lvl: Level3D, count: number, level: number, rand: (
   return out;
 }
 
-/** Spawn the boss(es) for a boss level (level 20 = all three). */
-export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number): Enemy[] {
+/** Spawn the boss(es) for a boss level. `enhanced` = the gauntlet variant (tougher). */
+export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number, enhanced = false): Enemy[] {
   const a = lvl.enemySpawn;
   return kinds.map((k, i) => {
     const bd = BOSSES[k];
     const ang = (i / Math.max(1, kinds.length)) * Math.PI * 2;
+    const hp = Math.round(bd.health * (enhanced ? 1.4 : 1));
     return {
       x: a.x + Math.cos(ang) * 5 * i,
       y: 0,
       z: a.z + Math.sin(ang) * 5 * i,
-      health: bd.health,
-      maxHealth: bd.health,
+      health: hp,
+      maxHealth: hp,
+      enh: enhanced,
       shield: 0, // bosses are a separate system — no shield (flagged for Gabe)
       maxShield: 0,
       shieldRegenT: 0,
@@ -910,6 +913,8 @@ export function updateEnemies(
         const brain = e.bossBrain;
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
         const desp = e.health / e.maxHealth < 0.15; // desperation phase: faster + pounce-happy
+        const eAgg = e.enh ? 0.65 : 1; // ENHANCED (gauntlet): attacks more often
+        const eSpd = e.enh ? 1.3 : 1; // and moves faster
         e.fireCd -= dt;
         brain.pounceCd -= dt;
 
@@ -944,7 +949,7 @@ export function updateEnemies(
               e.weakUntil = now + 2000; // overshot → exposed core, bonus-damage window
             }
             brain.pounce = 'none';
-            brain.pounceCd = (desp ? 2.5 : 4.5) + Math.random() * (desp ? 1.5 : 3);
+            brain.pounceCd = ((desp ? 2.5 : 4.5) + Math.random() * (desp ? 1.5 : 3)) * eAgg;
           }
         } else {
           // RANGED KITE (default): standoff movement + acid spit / hitscan fire.
@@ -963,20 +968,20 @@ export function updateEnemies(
             }
           }
           const wl = Math.hypot(wx, wz) || 1;
-          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1), dt, bd.radius, grid);
+          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1) * eSpd, dt, bd.radius, grid);
 
           // KRAKEN TENTACLE ERUPTION: a telegraphed ground burst at the player's
           // predicted spot that damages + launches them up (resolved in the loop).
           if (e.boss === 'octopus' && sees[i] && dist < 45) {
             brain.volleyCd -= dt;
             if (brain.volleyCd <= 0) {
-              brain.volleyCd = (desp ? 2 : 3.5) + Math.random() * 2;
+              brain.volleyCd = ((desp ? 2 : 3.5) + Math.random() * 2) * eAgg;
               bossTelegraphs.push({ kind: 'eruption', x: player.x + pvx * 0.5, z: player.z + pvz * 0.5, radius: 3.6, delay: 0.9 });
             }
             // SLAM WAVE: a big shockwave centred on the Kraken — get clear or get
             // knocked back (brain.pounceCd is unused by the Kraken, reused here).
             if (brain.pounceCd <= 0 && dist < 17) {
-              brain.pounceCd = (desp ? 4 : 6.5) + Math.random() * 2;
+              brain.pounceCd = ((desp ? 4 : 6.5) + Math.random() * 2) * eAgg;
               bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.75 });
             }
           }
@@ -985,7 +990,7 @@ export function updateEnemies(
           if (e.boss === 'warrior' && sees[i] && dist > 6 && dist < 40) {
             brain.volleyCd -= dt;
             if (brain.volleyCd <= 0) {
-              brain.volleyCd = (desp ? 3.5 : 5.5) + Math.random() * 2.5;
+              brain.volleyCd = ((desp ? 3.5 : 5.5) + Math.random() * 2.5) * eAgg;
               const muzzleY = e.y + bd.scale * 0.6;
               for (let g = -1; g <= 1; g++) {
                 const lx = player.x + pvx * 0.4 + g * 2.6; // lead + spread the cluster
