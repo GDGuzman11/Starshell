@@ -19,6 +19,7 @@ import { Viewmodel } from './fps/viewmodel';
 import type { RenderTier } from './fps/materials';
 import { SpatialGrid } from './fps/level/grid';
 import { buildNavGraph, type NavGraph } from './fps/level/nav';
+import { ProjectileSystem } from './fps/projectiles';
 
 const RW = 480;
 const RH = 270;
@@ -226,6 +227,7 @@ export function useFpsLoop(
     let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
+    const projectiles = new ProjectileSystem(); // boss/minion projectiles (P0; spawned from P1)
     let recoilKick = 0; // current view recoil (radians), decays to 0
     const grenades: Grenade[] = [];
     const smokes: SmokeFx[] = [];
@@ -272,6 +274,7 @@ export function useFpsLoop(
       smokes.length = 0;
       flashes.length = 0;
       zones.length = 0;
+      projectiles.clear();
     };
 
     const buildFor = (g: FpsGameState) => {
@@ -937,6 +940,23 @@ export function useFpsLoop(
               if (e.health <= 0) g.kills++;
             }
           }
+          // Boss/minion projectiles: advance + resolve impacts (P0 system, fired in P1).
+          if (projectiles.count > 0) {
+            for (const im of projectiles.update(dt, p, g.level, grid ?? undefined)) {
+              if (im.dmg > 0) {
+                p.health = Math.max(0, p.health - im.dmg);
+                snap.hurtAt = now;
+                recoilKick = Math.min(0.16, recoilKick + 0.03); // impact shake
+                sfx.hurt();
+              }
+              if (world) {
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: im.color, transparent: true, blending: THREE.AdditiveBlending }));
+                fm.position.set(im.x, im.y, im.z);
+                world.scene.add(fm);
+                flashes.push({ mesh: fm, born: now, r: Math.max(1.2, im.splash || 1.2) });
+              }
+            }
+          }
           // Frag flash expand/fade
           for (let i = flashes.length - 1; i >= 0; i--) {
             const f = flashes[i];
@@ -1177,6 +1197,7 @@ export function useFpsLoop(
       if (activeLoop) sfx.playWeaponLoopStop(activeLoop);
       world?.dispose();
       ballGeo.dispose();
+      projectiles.dispose();
       viewmodel?.dispose();
       composer?.composer.dispose();
       renderer.dispose();
