@@ -56,6 +56,9 @@ export interface FpsGameState {
   throwCount: number;
   status: 'playing' | 'won' | 'lost';
   kills: number;
+  shotsFired: number;
+  shotsHit: number;
+  dmgDealt: number;
   regenT: number;
   squad: Squad;
   maxHp: number;
@@ -78,6 +81,9 @@ export interface FpsSnapshot {
   enemiesLeft: number;
   status: 'playing' | 'won' | 'lost';
   kills: number;
+  shotsFired: number;
+  shotsHit: number;
+  dmgDealt: number;
   hitAt: number;
   fireAt: number;
   hurtAt: number;
@@ -224,7 +230,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -595,6 +601,7 @@ export function useFpsLoop(
           if (wantShot && g.fireCd <= 0 && g.reloading <= 0 && g.mags[g.active] > 0) {
             g.fireCd = gun.rate;
             g.mags[g.active]--;
+            g.shotsFired++;
             snap.fireAt = now;
             viewmodel?.fire();
             recoilKick = Math.min(0.16, recoilKick + (RECOIL[gun.family] ?? 0.015));
@@ -638,7 +645,9 @@ export function useFpsLoop(
                 if (e.health <= 0) continue;
                 const d = Math.hypot(e.x - ix, e.y + 1 - iy, e.z - iz);
                 if (d < gun.splash) {
-                  e.health -= Math.round(gun.dmg * (1 - d / gun.splash));
+                  const dd = Math.round(gun.dmg * (1 - d / gun.splash));
+                  e.health -= dd;
+                  g.dmgDealt += dd;
                   e.hitFlash = 0.12;
                   e.alarm = 4;
                   e.state = 'alert';
@@ -658,12 +667,15 @@ export function useFpsLoop(
               g.squad.lastKnown = { x: p.x, z: p.z };
               g.squad.t = now;
               if (anyHit) {
+                g.shotsHit++;
                 snap.hitAt = now;
                 sfx.playImpact(gun.id, 'enemy');
               }
             } else {
               if (hit) {
                 hit.health -= gun.dmg;
+                g.dmgDealt += gun.dmg;
+                g.shotsHit++;
                 hit.hitFlash = 0.12;
                 hit.alarm = 4;
                 hit.state = 'alert';
@@ -1063,6 +1075,9 @@ export function useFpsLoop(
           snap.enemiesLeft = g.enemies.filter((e) => e.health > 0).length;
           snap.status = g.status;
           snap.kills = g.kills;
+          snap.shotsFired = g.shotsFired;
+          snap.shotsHit = g.shotsHit;
+          snap.dmgDealt = g.dmgDealt;
           // Radar: enemy positions rotated into player-facing space (forward = up).
           const sinY = Math.sin(p.yaw);
           const cosY = Math.cos(p.yaw);

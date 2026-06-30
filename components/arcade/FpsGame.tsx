@@ -59,6 +59,10 @@ export function FpsGame() {
   const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar', p2: 'rail', sa: 'sidearm', th: 'frag' });
   const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
+  // Cumulative run stats (across all levels of one campaign) for the match-end card.
+  const [runStats, setRunStats] = useState({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
+  // Per-level cinematic intro (wave title + countdown), cleared by its own timer.
+  const [intro, setIntro] = useState<{ level: number; boss: boolean } | null>(null);
   const [best, setBest] = useState(0);
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
@@ -205,11 +209,15 @@ export function FpsGame() {
         throwCount: thrown.count,
         status: 'playing',
         kills: 0,
+        shotsFired: 0,
+        shotsHit: 0,
+        dmgDealt: 0,
         regenT: 0,
         squad: { lastKnown: null, t: 0, mem: (huntMemRef.current ??= makeHuntMemory()) },
         maxHp,
       };
       setSnap(null);
+      setIntro({ level, boss: isBoss });
       setMode('play');
     },
     [enemies, diff],
@@ -222,6 +230,7 @@ export function FpsGame() {
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory(); // fresh learning each new campaign
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
+      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
     },
     [startLevel],
@@ -241,6 +250,14 @@ export function FpsGame() {
   useEffect(() => {
     if (mode !== 'play' || !snap || snap.status === 'playing' || resolvedRef.current) return;
     resolvedRef.current = true;
+    setRunStats((rs) => ({
+      ...rs,
+      kills: rs.kills + snap.kills,
+      shots: rs.shots + snap.shotsFired,
+      hits: rs.hits + snap.shotsHit,
+      dmg: rs.dmg + snap.dmgDealt,
+      endedAt: Date.now(),
+    }));
     if (snap.status === 'won') {
       setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills) }));
       if (run.level >= LEVELS) {
@@ -353,6 +370,8 @@ export function FpsGame() {
           </>
         )}
 
+        {mode === 'play' && intro && <MatchIntro key={intro.level} level={intro.level} boss={intro.boss} onDone={() => setIntro(null)} />}
+
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
@@ -439,28 +458,29 @@ export function FpsGame() {
         )}
 
         {mode === 'complete' && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/75 px-4 text-center font-pixel">
-            <p className="text-[16px] text-[#aef5c8] sm:text-[24px]">CAMPAIGN COMPLETE</p>
-            <p className="text-[9px] text-[#ffd27a] sm:text-[11px]">ALL {LEVELS} LEVELS CLEARED · GOLD ⛀ {run.gold}</p>
-            <button type="button" onClick={() => setMode('menu')} className="mt-4 min-h-[44px] rounded-md border border-white/20 bg-white/5 px-6 font-pixel text-[10px] uppercase text-white/75 hover:bg-white/10 sm:text-[12px]">
-              Menu
-            </button>
-          </div>
+          <RunStatsCard
+            title="CAMPAIGN COMPLETE"
+            titleColor="#aef5c8"
+            subtitle={`ALL ${LEVELS} LEVELS CLEARED`}
+            level={run.level}
+            gold={run.gold}
+            stats={runStats}
+            onRestart={() => beginCampaign(lastLoadout)}
+            onMenu={() => setMode('menu')}
+          />
         )}
 
         {dead && snap && (
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/70 px-4 text-center font-pixel">
-            <p className="text-[16px] text-[#ff5d6e] sm:text-[22px]">YOU DIED</p>
-            <p className="text-[9px] text-white/60 sm:text-[11px]">REACHED LEVEL {run.level} · KILLS {snap.kills}</p>
-            <div className="mt-4 flex gap-2">
-              <button type="button" onClick={() => beginCampaign(lastLoadout)} className="min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-4 font-pixel text-[9px] uppercase text-[#aef5c8] hover:bg-[#aef5c8]/20 sm:text-[11px]">
-                Restart Run
-              </button>
-              <button type="button" onClick={() => setMode('menu')} className="min-h-[44px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[9px] uppercase text-white/70 hover:bg-white/10 sm:text-[11px]">
-                Menu
-              </button>
-            </div>
-          </div>
+          <RunStatsCard
+            title="YOU DIED"
+            titleColor="#ff5d6e"
+            subtitle={`FELL ON LEVEL ${run.level}`}
+            level={run.level}
+            gold={run.gold}
+            stats={runStats}
+            onRestart={() => beginCampaign(lastLoadout)}
+            onMenu={() => setMode('menu')}
+          />
         )}
       </CRTFrame>
 
@@ -520,6 +540,109 @@ function Slider({ label, value, min, max, step, onChange }: { label: string; val
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-1 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
       />
+    </div>
+  );
+}
+
+/** Cinematic per-level intro: wave title + objective + a 3·2·1·GO countdown that
+ *  plays over the live arena, then clears itself. Non-blocking (pointer-events-none)
+ *  so the player can start moving immediately; reduced-motion skips to GO. */
+function MatchIntro({ level, boss, onDone }: { level: number; boss: boolean; onDone: () => void }) {
+  const [n, setN] = useState(3);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const t = setTimeout(() => onDoneRef.current(), 500);
+      return () => clearTimeout(t);
+    }
+    let cur = 3;
+    setN(3);
+    const iv = setInterval(() => {
+      cur -= 1;
+      setN(cur);
+      if (cur <= 0) {
+        clearInterval(iv);
+        setTimeout(() => onDoneRef.current(), 650);
+      }
+    }, 700);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <div className="gdg-cine pointer-events-none absolute inset-0 z-[45] flex flex-col items-center justify-center bg-gradient-to-b from-black/75 via-black/25 to-black/75 font-pixel [animation:gdg-fade-in_0.35s_ease-out]">
+      <p className="text-[11px] tracking-[0.3em] text-[#7fdfff] sm:text-[15px] [animation:gdg-rise-in_0.5s_ease-out]">
+        {boss ? 'BOSS WAVE' : `WAVE ${level}`}
+      </p>
+      <p className="mt-2 text-[7px] tracking-[0.28em] text-white/55 sm:text-[9px] [animation:gdg-rise-in_0.6s_ease-out]">
+        {boss ? 'ELIMINATE THE BOSS' : 'CLEAR ALL HOSTILES'}
+      </p>
+      <p key={n} className="mt-6 text-[44px] leading-none text-white sm:text-[60px] [animation:gdg-count-pop_0.7s_ease-out]">
+        {n > 0 ? n : 'GO'}
+      </p>
+    </div>
+  );
+}
+
+/** Cinematic match-end card: a slow-rising glass panel of run stats (kills, time,
+ *  accuracy, damage) shared by the death + campaign-complete screens. */
+function RunStatsCard({
+  title,
+  titleColor,
+  subtitle,
+  level,
+  gold,
+  stats,
+  onRestart,
+  onMenu,
+}: {
+  title: string;
+  titleColor: string;
+  subtitle: string;
+  level: number;
+  gold: number;
+  stats: { kills: number; shots: number; hits: number; dmg: number; startedAt: number; endedAt: number };
+  onRestart: () => void;
+  onMenu: () => void;
+}) {
+  const secs = stats.startedAt && stats.endedAt ? Math.max(0, Math.round((stats.endedAt - stats.startedAt) / 1000)) : 0;
+  const time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const acc = stats.shots > 0 ? Math.round((stats.hits / stats.shots) * 100) : 0;
+  const rows: [string, string][] = [
+    ['LEVEL', String(level)],
+    ['KILLS', String(stats.kills)],
+    ['TIME', time],
+    ['ACCURACY', `${acc}%`],
+    ['DAMAGE', stats.dmg.toLocaleString()],
+    ['GOLD', `⛀ ${gold}`],
+  ];
+  return (
+    <div className="gdg-cine absolute inset-0 z-50 flex items-center justify-center bg-black/80 px-4 text-center font-pixel [animation:gdg-fade-in_0.5s_ease-out]">
+      <div className="w-full max-w-sm [animation:gdg-rise-in_0.55s_ease-out]">
+        <p className="text-[18px] sm:text-[26px]" style={{ color: titleColor }}>
+          {title}
+        </p>
+        <p className="mt-1 text-[8px] text-white/55 sm:text-[10px]">{subtitle}</p>
+        <div className="mx-auto mt-5 max-w-xs rounded-xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm">
+          {rows.map(([k, v], i) => (
+            <div
+              key={k}
+              className="flex items-center justify-between border-b border-white/[0.06] py-1.5 last:border-0 [animation:gdg-fade-in_0.4s_ease-out_both]"
+              style={{ animationDelay: `${0.25 + i * 0.08}s` }}
+            >
+              <span className="text-[8px] text-white/45 sm:text-[9px]">{k}</span>
+              <span className="text-[11px] text-white sm:text-[13px]">{v}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 flex justify-center gap-2">
+          <button type="button" onClick={onRestart} className="min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-4 font-pixel text-[9px] uppercase text-[#aef5c8] hover:bg-[#aef5c8]/20 sm:text-[11px]">
+            Restart Run
+          </button>
+          <button type="button" onClick={onMenu} className="min-h-[44px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[9px] uppercase text-white/70 hover:bg-white/10 sm:text-[11px]">
+            Menu
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
