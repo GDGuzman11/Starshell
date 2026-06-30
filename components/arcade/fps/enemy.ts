@@ -533,31 +533,49 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
   });
 }
 
-/** Spawn a boss's themed minion squad near the boss end. Xenomorph hive only for
- *  now (Warlord/Kraken get theirs in P2/P3). The boss-death win condition means
- *  these don't have to be cleared to finish the level. */
+/** Spawn a boss's themed squad near the boss end (Kraken gets its own in P3). The
+ *  boss-death win condition means these don't have to be cleared to finish. */
 export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => number): Enemy[] {
-  if (kind !== 'xeno') return [];
   const out: Enemy[] = [];
-  // Phase 1 — the starting hive (active immediately).
-  (['broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'spitter', 'spitter'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
-  // Phase 2 — wakes at 65% boss HP: stalkers arrive to flank.
-  (['stalker', 'stalker', 'stalker'] as MinionKind[]).forEach((mk, i) => {
-    const m = makeMinion(lvl, mk, i, rand);
-    m.dormant = true;
-    m.wakeAtHp = 0.65;
-    m.y = -100; // parked underground until woken (out of shots/zones)
-    out.push(m);
-  });
-  // Phase 3 — wakes at 35%: a fresh brood burst.
-  (['broodling', 'broodling', 'broodling', 'spitter'] as MinionKind[]).forEach((mk, i) => {
-    const m = makeMinion(lvl, mk, i, rand);
-    m.dormant = true;
-    m.wakeAtHp = 0.35;
-    m.y = -100;
-    out.push(m);
-  });
+  if (kind === 'xeno') {
+    // XENOMORPH HIVE — themed alien minions.
+    (['broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'broodling', 'spitter', 'spitter'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['stalker', 'stalker', 'stalker'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.65)));
+    (['broodling', 'broodling', 'broodling', 'spitter'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.35)));
+  } else if (kind === 'warrior') {
+    // WARLORD LEGION — a real doctrine squad (cover / suppress / flank AI).
+    (['rifleman', 'rifleman', 'rifleman', 'suppressor', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(makeDoctrineEnemy(lvl, c, i, rand)));
+    (['rifleman', 'breacher'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.65)));
+    (['rifleman', 'engineer'] as EnemyClass[]).forEach((c, i) => out.push(dormantAt(makeDoctrineEnemy(lvl, c, i, rand), 0.35)));
+  }
   return out;
+}
+
+/** Mark a reinforcement dormant (parked underground until its phase wakes it). */
+function dormantAt(e: Enemy, wakeAtHp: number): Enemy {
+  e.dormant = true;
+  e.wakeAtHp = wakeAtHp;
+  e.y = -100;
+  return e;
+}
+
+/** A regular doctrine enemy of a given class, positioned near the boss end. */
+function makeDoctrineEnemy(lvl: Level3D, cls: EnemyClass, idx: number, rand: () => number): Enemy {
+  const a = lvl.enemySpawn;
+  const half = lvl.size / 2;
+  let x = a.x;
+  let z = a.z;
+  for (let g = 0; g < 60; g++) {
+    const ang = rand() * Math.PI * 2;
+    const rad = 4 + rand() * Math.max(10, lvl.size * 0.2);
+    x = a.x + Math.cos(ang) * rad;
+    z = a.z + Math.sin(ang) * rad;
+    if (Math.abs(x) < half - 3 && Math.abs(z) < half - 3 && !blocked(lvl, x, z)) break;
+  }
+  const hp = ENEMY_HP * CLASS[cls].hp;
+  const perch = cls === 'marksman' ? assignPerch(lvl, x, z) : null;
+  const weapon: WeaponKind = cls === 'suppressor' ? 'mg' : cls === 'marksman' ? 'rifle' : WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)];
+  return { x, y: 0, z, health: hp, maxHealth: hp, shield: hp * SHIELD_FRAC, maxShield: hp * SHIELD_FRAC, shieldRegenT: 0, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon, cls, side: (idx % 2 === 0 ? 1 : -1) as 1 | -1, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch };
 }
 
 function makeMinion(lvl: Level3D, mk: MinionKind, idx: number, rand: () => number): Enemy {
