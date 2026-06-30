@@ -10,6 +10,8 @@ import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
 import { bossTex } from './fps/textures';
 import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
 import { poseDeath, poseEnemy } from './fps/enemies/animator';
+import { buildBossModel } from './fps/boss/models';
+import { poseBossDeath, poseBossModel } from './fps/boss/animator';
 import type { GunDef, ThrowDef } from './fps/weapons';
 import { sfx } from './engine/audio';
 import { makeComposer } from './fps/postfx';
@@ -301,12 +303,19 @@ export function useFpsLoop(
       const bossCache: Partial<Record<string, THREE.CanvasTexture>> = {};
       sprites = g.enemies.map((e) => {
         if (e.boss) {
+          const bd = BOSSES[e.boss];
+          // 3D boss model where one exists (Xenomorph); otherwise the legacy sprite.
+          const m3d = buildBossModel(e.boss, tier);
+          if (m3d) {
+            m3d.scale.setScalar(bd.scale * 0.62);
+            world!.scene.add(m3d);
+            return m3d;
+          }
           if (!bossCache[e.boss]) {
             const t = mk(bossTex(e.boss));
             bossCache[e.boss] = t;
             bossTexes.push(t);
           }
-          const bd = BOSSES[e.boss];
           const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: bossCache[e.boss]!, transparent: true }));
           s.scale.set(1.5 * bd.scale, 2.0 * bd.scale, 1);
           world!.scene.add(s);
@@ -977,9 +986,30 @@ export function useFpsLoop(
           barFill[i].visible = showBar;
           barShield[i].visible = showBar && e.shield > 0;
           if (!alive) {
-            // Death: bosses just vanish; 3D enemies topple over then disappear.
+            // Death: sprite bosses vanish; 3D bosses + enemies topple then go.
             if (e.boss) {
-              s.visible = false;
+              if (s instanceof THREE.Sprite) {
+                s.visible = false;
+                continue;
+              }
+              // 3D boss death: a slow topple + reactor flash, then disappear.
+              if (s.userData.deadT === undefined) sfx.enemyDie();
+              const bdt = (s.userData.deadT = ((s.userData.deadT as number) ?? 0) + dt);
+              if (bdt >= 2.2) {
+                s.visible = false;
+                continue;
+              }
+              s.visible = true;
+              s.position.set(e.x, e.y, e.z);
+              poseBossDeath(s as THREE.Group, bdt);
+              if (!s.userData.died && world) {
+                s.userData.died = true;
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0x9cff6a, transparent: true }));
+                fm.position.set(e.x, e.y + BOSSES[e.boss].scale * 0.6, e.z);
+                world.scene.add(fm);
+                flashes.push({ mesh: fm, born: now, r: BOSSES[e.boss].scale * 1.6 });
+                sfx.explosion();
+              }
               continue;
             }
             if (s.userData.deadT === undefined) sfx.enemyDie();
@@ -1009,11 +1039,18 @@ export function useFpsLoop(
           const moving = moveSpeed > 1.4;
 
           if (e.boss) {
-            const cy = BOSSES[e.boss].scale;
-            const bob = Math.abs(Math.sin(e.step * 3.0)) * 0.3;
-            s.position.set(e.x, e.y + cy + bob, e.z);
-            const mat = (s as THREE.Sprite).material as THREE.SpriteMaterial;
-            mat.color.setHex(e.hitFlash > 0 ? 0xff7777 : 0xffffff);
+            if (s instanceof THREE.Sprite) {
+              const cy = BOSSES[e.boss].scale;
+              const bob = Math.abs(Math.sin(e.step * 3.0)) * 0.3;
+              s.position.set(e.x, e.y + cy + bob, e.z);
+              const mat = s.material as THREE.SpriteMaterial;
+              mat.color.setHex(e.hitFlash > 0 ? 0xff7777 : 0xffffff);
+            } else {
+              // 3D boss: stand on the ground, face the player, animate, flash on hit.
+              s.position.set(e.x, e.y, e.z);
+              s.rotation.y = Math.atan2(p.x - e.x, p.z - e.z);
+              poseBossModel(s as THREE.Group, e.boss, moving, e.step, e.hitFlash, now);
+            }
           } else {
             // 3D model: stand on the ground, face the player, animate, flash on hit.
             s.position.set(e.x, e.y, e.z);
