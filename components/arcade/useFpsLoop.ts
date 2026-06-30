@@ -160,9 +160,16 @@ export function useFpsLoop(
     const MIN_H = 150;
     const MAX_H = 430;
     const resize = () => {
-      const cw = canvas.clientWidth || RW;
-      const ch = canvas.clientHeight || RH;
+      // Measure the host (the game screen), not the canvas — the canvas carries the
+      // small render-buffer attributes, so reading its own client size can be wrong.
+      const host = canvas.parentElement;
+      const cw = host?.clientWidth || canvas.clientWidth || window.innerWidth || RW;
+      const ch = host?.clientHeight || canvas.clientHeight || window.innerHeight || RH;
       const aspect = cw / ch || RW / RH;
+      // Lock the canvas DISPLAY size to the host so it always fills edge-to-edge
+      // (the low-res buffer is then upscaled by the browser).
+      canvas.style.width = `${cw}px`;
+      canvas.style.height = `${ch}px`;
       const h = Math.max(MIN_H, Math.min(MAX_H, Math.round(BASE_H * renderScale)));
       const w = Math.round(h * aspect);
       renderer.setSize(w, h, false);
@@ -358,7 +365,7 @@ export function useFpsLoop(
     // Keep the render buffer + camera matched to the live canvas size (dynamic
     // viewport, address-bar collapse, orientation change, safe-area shifts).
     const ro = new ResizeObserver(() => resize());
-    ro.observe(canvas);
+    ro.observe(canvas.parentElement ?? canvas); // observe the host, not the canvas we restyle
     const onViewport = () => resize();
     window.addEventListener('orientationchange', onViewport);
     window.addEventListener('resize', onViewport);
