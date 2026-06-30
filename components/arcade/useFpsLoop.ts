@@ -32,6 +32,10 @@ const AF_RANGE: Record<string, number> = { rifle: 46, mg: 40, laser: 46, pistol:
 // Bullet spread (radians) at the hip — wide and "sprayy" un-zoomed, tightens
 // hard when scoped so the scope is what makes shots land dead-centre.
 const SPREAD: Record<string, number> = { rifle: 0.026, mg: 0.044, laser: 0.016, pistol: 0.032, launcher: 0.018, sniper: 0.004 };
+// Per-shot camera recoil KICK (radians the view jolts up, then recovers). This
+// is the cue that reads through the scope — snipers & launchers (the slow, heavy
+// secondaries) kick hard so each shot/cycle is obvious; autos stay snappy.
+const RECOIL: Record<string, number> = { rifle: 0.016, mg: 0.011, laser: 0.009, pistol: 0.03, launcher: 0.1, sniper: 0.085 };
 // How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),
 // everything else gets a single ADS zoom. Sidearms (pistols) included = 1.
 const maxZoomFor = (gun: GunDef) => (gun.scoped ? 3 : 1);
@@ -212,6 +216,7 @@ export function useFpsLoop(
     let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
+    let recoilKick = 0; // current view recoil (radians), decays to 0
     const grenades: Grenade[] = [];
     const smokes: SmokeFx[] = [];
     const flashes: Flash[] = [];
@@ -328,9 +333,9 @@ export function useFpsLoop(
         new THREE.Vector3(from[0], from[1], from[2]),
         new THREE.Vector3(to[0], to[1], to[2]),
       ]);
-      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending }));
       world.scene.add(line);
-      tracers.push({ line, geo, until: performance.now() + 55 });
+      tracers.push({ line, geo, until: performance.now() + 90 });
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -592,6 +597,7 @@ export function useFpsLoop(
             g.mags[g.active]--;
             snap.fireAt = now;
             viewmodel?.fire();
+            recoilKick = Math.min(0.16, recoilKick + (RECOIL[gun.family] ?? 0.015));
             if (!sfx.isLoopWeapon(gun.id)) sfx.playWeaponFire(gun.id, gun.family);
             // Spread: wide & sprayy from the hip, tightening hard with each zoom
             // step (a scope is what makes the bullet land dead-centre). Applied to
@@ -620,6 +626,7 @@ export function useFpsLoop(
               }
             }
             addTracer([eye[0] + sfx2 * 0.4, eye[1] - 0.12, eye[2] + sfz2 * 0.4], [eye[0] + sfx2 * hitT, eye[1] + sfy2 * hitT, eye[2] + sfz2 * hitT], gun.color);
+            const zoomBoost = 1 + zoomLevel.current * 0.5; // impacts/explosions read bigger when scoped
             if (gun.splash) {
               // Explosive: detonate at the impact point and splash-damage everyone
               // in radius (falloff to the edge), regardless of the direct ray hit.
@@ -642,10 +649,10 @@ export function useFpsLoop(
                 }
               }
               if (world) {
-                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: gun.color, transparent: true }));
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: gun.color, transparent: true, blending: THREE.AdditiveBlending }));
                 fm.position.set(ix, iy, iz);
                 world.scene.add(fm);
-                flashes.push({ mesh: fm, born: now, r: gun.splash });
+                flashes.push({ mesh: fm, born: now, r: gun.splash * zoomBoost });
               }
               sfx.explosion();
               g.squad.lastKnown = { x: p.x, z: p.z };
@@ -654,18 +661,33 @@ export function useFpsLoop(
                 snap.hitAt = now;
                 sfx.playImpact(gun.id, 'enemy');
               }
-            } else if (hit) {
-              hit.health -= gun.dmg;
-              hit.hitFlash = 0.12;
-              hit.alarm = 4;
-              hit.state = 'alert';
-              hit.lastSeen = { x: p.x, z: p.z };
-              hit.barUntil = now + 2500;
-              g.squad.lastKnown = { x: p.x, z: p.z };
-              g.squad.t = now;
-              snap.hitAt = now;
-              sfx.playImpact(gun.id, 'enemy');
-              if (hit.health <= 0) g.kills++;
+            } else {
+              if (hit) {
+                hit.health -= gun.dmg;
+                hit.hitFlash = 0.12;
+                hit.alarm = 4;
+                hit.state = 'alert';
+                hit.lastSeen = { x: p.x, z: p.z };
+                hit.barUntil = now + 2500;
+                g.squad.lastKnown = { x: p.x, z: p.z };
+                g.squad.t = now;
+                snap.hitAt = now;
+                sfx.playImpact(gun.id, 'enemy');
+                if (hit.health <= 0) g.kills++;
+              }
+              // Always leave a visible impact at the point of contact (enemy OR
+              // wall) so you can see where the round landed — bigger for snipers
+              // and when scoped.
+              if (world) {
+                const ipx = eye[0] + sfx2 * hitT;
+                const ipy = eye[1] + sfy2 * hitT;
+                const ipz = eye[2] + sfz2 * hitT;
+                const base = (hit ? (gun.family === 'sniper' ? 2.2 : 1.3) : 0.7) * zoomBoost;
+                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: hit ? gun.color : 0xffe6b0, transparent: true, blending: THREE.AdditiveBlending }));
+                fm.position.set(ipx, ipy, ipz);
+                world.scene.add(fm);
+                flashes.push({ mesh: fm, born: now, r: base });
+              }
             }
           } else if (wantShot && g.mags[g.active] <= 0 && g.reloading <= 0 && g.reserves[g.active] > 0) {
             g.reloading = gun.reload;
@@ -992,9 +1014,12 @@ export function useFpsLoop(
           }
         }
 
+        // Recoil recovery — snappy settle so the kick reads per shot, then gone.
+        recoilKick -= recoilKick * Math.min(1, dt * 7);
+        if (recoilKick < 0.0002) recoilKick = 0;
         camera.position.set(p.x, p.y + EYE, p.z);
         camera.rotation.y = p.yaw;
-        camera.rotation.x = p.pitch;
+        camera.rotation.x = p.pitch + recoilKick;
         if (world) {
           if (composer) composer.composer.render(dt);
           else renderer.render(world.scene, camera);
