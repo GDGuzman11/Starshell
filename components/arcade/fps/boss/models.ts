@@ -18,11 +18,11 @@ import { buildHumanoid } from '../enemies/models/humanoid';
 import type { BossKind } from '../enemy';
 
 export interface BossParts {
-  head: THREE.Group;
-  torso: THREE.Group;
-  legL: THREE.Group;
-  legR: THREE.Group;
-  tail?: THREE.Group; // Xenomorph only
+  head?: THREE.Group;
+  torso?: THREE.Group;
+  legL?: THREE.Group; // humanoid / xeno
+  legR?: THREE.Group;
+  tail?: THREE.Group; // Xenomorph
 }
 
 /** XENOMORPH — the Hive Hunter. Black glossy biomechanical predator: elongated
@@ -150,10 +150,58 @@ export function buildDestructibleModel(kind: 'beacon' | 'shield', tier: RenderTi
   return root;
 }
 
-/** Build the 3D model for a boss, or null to keep the legacy sprite (Kraken until
- *  P3). */
+/** KRAKEN — the Living Arena. A huge purple/black mantle with glowing eyes, an
+ *  exposed violet core (weak point), and six writhing tentacles with bright tips. */
+function buildKraken(tier: RenderTier): THREE.Group {
+  const body = metal(0x2a1840, tier, 0.42, 0.65);
+  const dark = metal(0x140a22, tier, 0.5, 0.6);
+  const glow = accent(0xc08bff, tier, 1.9); // void violet
+  const root = new THREE.Group();
+
+  // Bulbous mantle.
+  const torso = new THREE.Group();
+  torso.position.y = 1.5;
+  torso.add(capsuleZ(0.62, 0.5, body, 0, 0, 0));
+  torso.add(box(0.1, 0.13, 0.06, glow, -0.24, 0.05, 0.46)); // eyes
+  torso.add(box(0.1, 0.13, 0.06, glow, 0.24, 0.05, 0.46));
+  const core = box(0.32, 0.32, 0.2, glow, 0, -0.24, 0.4); // exposed core (weak point)
+  core.name = 'core';
+  torso.add(core);
+  root.add(torso);
+
+  // Six writhing tentacles radiating from the base.
+  const tentacles: THREE.Group[] = [];
+  const N = 6;
+  for (let i = 0; i < N; i++) {
+    const t = new THREE.Group();
+    t.rotation.y = (i / N) * Math.PI * 2;
+    t.position.y = 0.95;
+    let seg: THREE.Group = t;
+    let r = 0.17;
+    for (let k = 0; k < 4; k++) {
+      const s = new THREE.Group();
+      s.position.set(0, -0.12, 0.32);
+      s.rotation.x = 0.5;
+      s.add(box(r, r, 0.34, k % 2 ? dark : body, 0, 0, 0.17));
+      seg.add(s);
+      seg = s;
+      r *= 0.78;
+    }
+    seg.add(box(0.07, 0.07, 0.22, glow, 0, 0, 0.13)); // glowing claw tip
+    tentacles.push(t);
+    root.add(t);
+  }
+
+  root.userData.parts = { torso } satisfies BossParts;
+  root.userData.tentacles = tentacles;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** Build the 3D model for a boss (all three are 3D now). */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
   if (kind === 'warrior') return buildWarlord(tier);
+  if (kind === 'octopus') return buildKraken(tier);
   return null;
 }

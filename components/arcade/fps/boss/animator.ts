@@ -23,18 +23,22 @@ export function poseBossModel(
   if (!parts) return;
   const t = now * 0.001;
 
-  // Idle breathing sway + leg gait.
-  parts.torso.rotation.z = Math.sin(t * 1.4) * 0.04;
+  // Idle breathing sway + leg gait (parts vary by boss shape).
+  if (parts.torso) parts.torso.rotation.z = Math.sin(t * 1.4) * 0.04;
   const gait = moving ? Math.sin(step * 2.4) : 0;
-  parts.legL.rotation.x = gait * 0.5;
-  parts.legR.rotation.x = -gait * 0.5;
+  if (parts.legL) parts.legL.rotation.x = gait * 0.5;
+  if (parts.legR) parts.legR.rotation.x = -gait * 0.5;
 
   // Restless tail (Xenomorph) + head sway.
   if (parts.tail) {
     parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;
     parts.tail.rotation.x = 0.1 + Math.sin(t * 0.8) * 0.1;
   }
-  parts.head.rotation.z = Math.sin(t * 1.6) * 0.05;
+  if (parts.head) parts.head.rotation.z = Math.sin(t * 1.6) * 0.05;
+
+  // Writhing tentacles (Kraken).
+  const tentacles = model.userData.tentacles as THREE.Group[] | undefined;
+  if (tentacles) for (let i = 0; i < tentacles.length; i++) tentacles[i].rotation.z = Math.sin(t * 1.3 + i * 1.1) * 0.18;
 
   // Emissive: a green VULNERABLE pulse during the weak-point window, otherwise a
   // red hit-flash on the carapace.
