@@ -21,6 +21,9 @@ export interface Enemy {
   z: number;
   health: number;
   maxHealth: number;
+  shield: number; // absorbs damage before health; slowly regenerates out of combat
+  maxShield: number;
+  shieldRegenT: number; // seconds until shield regen resumes (reset on every hit)
   state: 'idle' | 'alert';
   lastSeen: { x: number; z: number } | null;
   fireCd: number;
@@ -51,6 +54,27 @@ export interface Enemy {
   path?: number[];
   repath?: number;
   navGoal?: { x: number; z: number };
+}
+
+// Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
+// damage before health, and slowly regenerates a few seconds after last being hit
+// (so breaking line-of-sight lets a squad re-armour). Bosses are excluded (they're
+// a separate system with their own large HP pools).
+export const SHIELD_FRAC = 0.75;
+const SHIELD_REGEN_DELAY = 4; // s out of combat before the shield starts refilling
+const SHIELD_REGEN_FRAC = 0.09; // of maxShield per second once regenerating (~11s to full)
+
+/** Apply damage, depleting the shield first then health, and pause shield regen.
+ *  Carries overflow from a big hit straight through into health. */
+export function hurtEnemy(e: Enemy, amount: number): void {
+  if (amount <= 0) return;
+  e.shieldRegenT = SHIELD_REGEN_DELAY;
+  if (e.shield > 0) {
+    const absorbed = Math.min(e.shield, amount);
+    e.shield -= absorbed;
+    amount -= absorbed;
+  }
+  if (amount > 0) e.health -= amount;
 }
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
@@ -456,7 +480,7 @@ export function spawnEnemies(lvl: Level3D, count: number, level: number, rand: (
     const perch = cls === 'marksman' ? assignPerch(lvl, x, z) : null;
     const weapon: WeaponKind = cls === 'suppressor' ? 'mg' : cls === 'marksman' ? 'rifle' : WEAPON_KEYS[Math.floor(rand() * WEAPON_KEYS.length)];
     const side: 1 | -1 = out.length % 2 === 0 ? 1 : -1;
-    out.push({ x, y: 0, z, health: hp, maxHealth: hp, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon, cls, side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
+    out.push({ x, y: 0, z, health: hp, maxHealth: hp, shield: hp * SHIELD_FRAC, maxShield: hp * SHIELD_FRAC, shieldRegenT: 0, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon, cls, side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch });
   }
   return out;
 }
@@ -473,6 +497,9 @@ export function spawnBosses(lvl: Level3D, kinds: BossKind[], rand: () => number)
       z: a.z + Math.sin(ang) * 5 * i,
       health: bd.health,
       maxHealth: bd.health,
+      shield: 0, // bosses are a separate system — no shield (flagged for Gabe)
+      maxShield: 0,
+      shieldRegenT: 0,
       state: 'idle' as const,
       lastSeen: null,
       fireCd: rand() * 0.5,
@@ -622,6 +649,9 @@ export function updateEnemies(
     if (e.health <= 0) continue;
     if (e.hitFlash > 0) e.hitFlash -= dt;
     if (e.alarm > 0) e.alarm -= dt;
+    // Shield regen: paused for a few seconds after any hit, then slowly refills.
+    if (e.shieldRegenT > 0) e.shieldRegenT -= dt;
+    else if (e.shield < e.maxShield) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * SHIELD_REGEN_FRAC * dt);
 
     // Bosses: relentless pursuit to melee range; ranged attack at distance,
     // melee (claws/sword/tentacles) up close. Smart = high accuracy.

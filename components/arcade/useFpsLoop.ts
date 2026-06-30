@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { buildWorld, type World } from './fps/scene';
 import { EYE, MAX_PITCH, stepPlayer, type Player3 } from './fps/physics';
 import type { Level3D } from './fps/level3d';
-import { updateEnemies, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
+import { updateEnemies, hurtEnemy, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
 import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
 import { bossTex } from './fps/textures';
 import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
@@ -88,6 +88,7 @@ export interface FpsSnapshot {
   fireAt: number;
   hurtAt: number;
   flashAt: number; // player flashbanged
+  stunAt: number; // player caught in a stun/concussion blast (screen distortion)
   radar: { x: number; z: number; boss: boolean }[]; // enemy positions, player-relative
 }
 
@@ -219,6 +220,7 @@ export function useFpsLoop(
     let sprites: THREE.Object3D[] = [];
     let barBg: THREE.Sprite[] = [];
     let barFill: THREE.Sprite[] = [];
+    let barShield: THREE.Sprite[] = [];
     let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
@@ -230,7 +232,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -244,13 +246,14 @@ export function useFpsLoop(
         if (s instanceof THREE.Sprite) (s.material as THREE.Material).dispose();
         else disposeEnemyModel(s); // a 3D model Group
       }
-      for (const s of [...barBg, ...barFill]) {
+      for (const s of [...barBg, ...barFill, ...barShield]) {
         world?.scene.remove(s);
         (s.material as THREE.Material).dispose();
       }
       sprites = [];
       barBg = [];
       barFill = [];
+      barShield = [];
       for (const t of bossTexes) t.dispose();
       bossTexes = [];
       for (const t of tracers) {
@@ -326,6 +329,15 @@ export function useFpsLoop(
         const s = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xaef5c8, transparent: true, depthWrite: false }));
         s.scale.set(1.4, 0.13, 1);
         s.renderOrder = 11;
+        s.visible = false;
+        world!.scene.add(s);
+        return s;
+      });
+      // Thin shield bar sitting just above the health bar (cyan).
+      barShield = g.enemies.map(() => {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x7fdfff, transparent: true, depthWrite: false }));
+        s.scale.set(1.4, 0.08, 1);
+        s.renderOrder = 12;
         s.visible = false;
         world!.scene.add(s);
         return s;
@@ -646,7 +658,7 @@ export function useFpsLoop(
                 const d = Math.hypot(e.x - ix, e.y + 1 - iy, e.z - iz);
                 if (d < gun.splash) {
                   const dd = Math.round(gun.dmg * (1 - d / gun.splash));
-                  e.health -= dd;
+                  hurtEnemy(e, dd);
                   g.dmgDealt += dd;
                   e.hitFlash = 0.12;
                   e.alarm = 4;
@@ -673,7 +685,7 @@ export function useFpsLoop(
               }
             } else {
               if (hit) {
-                hit.health -= gun.dmg;
+                hurtEnemy(hit, gun.dmg);
                 g.dmgDealt += gun.dmg;
                 g.shotsHit++;
                 hit.hitFlash = 0.12;
@@ -734,7 +746,7 @@ export function useFpsLoop(
                   if (e.health <= 0) continue;
                   const d = Math.hypot(e.x - bx, e.y + 1 - by, e.z - bz);
                   if (d < radius) {
-                    e.health -= Math.round(dmg * (1 - d / radius));
+                    hurtEnemy(e, Math.round(dmg * (1 - d / radius)));
                     e.hitFlash = 0.12;
                     e.alarm = 4;
                     e.state = 'alert';
@@ -812,6 +824,11 @@ export function useFpsLoop(
                   const tl = Math.hypot(tx, tz) || 1;
                   if (tl < s.radius && (tx / tl) * fx + (tz / tl) * fz > 0.2) snap.flashAt = now;
                 }
+                if (s.stun) {
+                  // Stun/concussion blast disorients the player (screen distortion)
+                  // regardless of facing if they're inside the radius.
+                  if (Math.hypot(cx - p.x, cz - p.z) < s.radius) snap.stunAt = now;
+                }
               }
               // Lingering zones.
               if (t.zone && world) {
@@ -859,7 +876,7 @@ export function useFpsLoop(
               for (const e of g.enemies) {
                 if (e.health <= 0) continue;
                 if (Math.hypot(e.x - s.x, e.z - s.z) < s.r) {
-                  e.health -= s.dps * dt;
+                  hurtEnemy(e, s.dps * dt);
                   e.hitFlash = Math.max(e.hitFlash, 0.05);
                   if (e.health <= 0) g.kills++;
                 }
@@ -906,7 +923,7 @@ export function useFpsLoop(
             if (e.blindT > 0) e.blindT -= dt;
             if (e.burnT > 0) {
               e.burnT -= dt;
-              e.health -= e.burnDps * dt;
+              hurtEnemy(e, e.burnDps * dt);
               e.hitFlash = Math.max(e.hitFlash, 0.05);
               if (e.health <= 0) g.kills++;
             }
@@ -958,6 +975,7 @@ export function useFpsLoop(
           const showBar = alive && !e.boss && now < e.barUntil; // bosses use the top bar
           barBg[i].visible = showBar;
           barFill[i].visible = showBar;
+          barShield[i].visible = showBar && e.shield > 0;
           if (!alive) {
             // Death: bosses just vanish; 3D enemies topple over then disappear.
             if (e.boss) {
@@ -1015,6 +1033,10 @@ export function useFpsLoop(
             barFill[i].position.set(e.x, by, e.z);
             barFill[i].scale.x = 1.4 * ratio;
             (barFill[i].material as THREE.SpriteMaterial).color.setHex(ratio > 0.5 ? 0xaef5c8 : ratio > 0.25 ? 0xffd27a : 0xff5d6e);
+            if (e.shield > 0 && e.maxShield > 0) {
+              barShield[i].position.set(e.x, by + 0.17, e.z);
+              barShield[i].scale.x = 1.4 * Math.max(0, e.shield / e.maxShield);
+            }
           }
         }
         for (let i = tracers.length - 1; i >= 0; i--) {

@@ -15,6 +15,7 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
   const hurt = now - snap.hurtAt < 320;
   const scoped = snap.ads; // any zoom level shows the scope view (snipers go deeper)
   const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
+  const stun = Math.max(0, 1 - (now - snap.stunAt) / 1300); // stun/concussion distortion
 
   // Radar geometry: a circular minimap, player centred, forward = up.
   const RAD = 40; // usable px radius
@@ -26,6 +27,18 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 60px 20px rgba(255,40,60,0.55)' }} />
       )}
       {blind > 0 && <div aria-hidden className="absolute inset-0 bg-white" style={{ opacity: blind }} />}
+      {stun > 0 && (
+        <div
+          aria-hidden
+          className="gdg-stun absolute inset-0"
+          style={{
+            opacity: Math.min(1, stun + 0.15),
+            backdropFilter: `blur(${(3 * stun).toFixed(2)}px) hue-rotate(${Math.round(55 * stun)}deg) saturate(${(1 + stun).toFixed(2)})`,
+            WebkitBackdropFilter: `blur(${(3 * stun).toFixed(2)}px) hue-rotate(${Math.round(55 * stun)}deg) saturate(${(1 + stun).toFixed(2)})`,
+            boxShadow: 'inset 0 0 140px 50px rgba(90,130,255,0.4)',
+          }}
+        />
+      )}
 
       {/* Radar / minimap (player centred, forward = up) */}
       <div className="absolute left-3 top-11 h-[88px] w-[88px] rounded-full border border-[#7fdfff]/30 bg-black/45 sm:top-12">

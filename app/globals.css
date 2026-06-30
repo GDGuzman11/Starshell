@@ -113,3 +113,30 @@ body {
     animation-delay: 0s !important;
   }
 }
+
+@keyframes gdg-stun-wobble {
+  0%,
+  100% {
+    transform: translate(0, 0) skew(0deg, 0deg);
+  }
+  25% {
+    transform: translate(-1.5%, 1%) skew(1.2deg, -0.6deg);
+  }
+  50% {
+    transform: translate(1.5%, -1%) skew(-1deg, 0.8deg);
+  }
+  75% {
+    transform: translate(-1%, -1.5%) skew(0.5deg, -1deg);
+  }
+}
+
+.gdg-stun {
+  animation: gdg-stun-wobble 0.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gdg-stun {
+    animation: none !important;
+  }
+}
