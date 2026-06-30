@@ -23,9 +23,9 @@ export interface MinionDef {
 }
 
 export const MINIONS: Record<MinionKind, MinionDef> = {
-  broodling: { hp: 55, speedMul: 1.55, scale: 0.6, melee: 9, ranged: 0, color: 0x121214 },
-  spitter: { hp: 95, speedMul: 0.85, scale: 0.85, melee: 0, ranged: 12, color: 0x2a4a24 },
-  stalker: { hp: 120, speedMul: 1.2, scale: 0.95, melee: 15, ranged: 0, color: 0x16161e },
+  broodling: { hp: 55, speedMul: 2.0, scale: 1.0, melee: 9, ranged: 0, color: 0x121214 },
+  spitter: { hp: 95, speedMul: 1.15, scale: 1.25, melee: 0, ranged: 12, color: 0x2a4a24 },
+  stalker: { hp: 120, speedMul: 1.65, scale: 1.4, melee: 15, ranged: 0, color: 0x16161e },
 };
 
 const GREEN = 0x6aff7a;
