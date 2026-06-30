@@ -13,7 +13,7 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
   const flash = now - snap.fireAt < 70;
   const hit = now - snap.hitAt < 180;
   const hurt = now - snap.hurtAt < 320;
-  const scoped = snap.ads && snap.scoped;
+  const scoped = snap.ads; // any zoom level shows the scope view (snipers go deeper)
   const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
 
   // Radar geometry: a circular minimap, player centred, forward = up.
@@ -51,13 +51,25 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         })}
       </div>
 
-      {/* Sniper scope */}
+      {/* Zoom scope — a big circle filling almost the whole screen, dark only in
+          the corners, with a clearly visible crosshair (gap + centre dot). */}
       {scoped && (
         <div aria-hidden className="absolute inset-0">
-          <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, transparent 0%, transparent 27%, rgba(0,0,0,0.96) 30%)' }} />
-          <div className="absolute left-1/2 top-1/2 h-px w-40 -translate-x-1/2 -translate-y-1/2 bg-[#aef5c8]/70" />
-          <div className="absolute left-1/2 top-1/2 h-40 w-px -translate-x-1/2 -translate-y-1/2 bg-[#aef5c8]/70" />
-          <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-[#ff5d6e]" />
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(circle closest-side at 50% 50%, transparent 0%, transparent 84%, rgba(0,0,0,0.55) 91%, rgba(0,0,0,0.94) 100%)' }}
+          />
+          {/* scope ring */}
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#aef5c8]/35"
+            style={{ width: 'min(94vw, 94vh)', height: 'min(94vw, 94vh)' }}
+          />
+          {/* crosshair ticks with a centre gap */}
+          <span className="absolute left-1/2 w-[3px] -translate-x-1/2 bg-[#aef5c8]" style={{ top: 'calc(50% - 110px)', height: 86 }} />
+          <span className="absolute left-1/2 w-[3px] -translate-x-1/2 bg-[#aef5c8]" style={{ top: 'calc(50% + 24px)', height: 86 }} />
+          <span className="absolute top-1/2 h-[3px] -translate-y-1/2 bg-[#aef5c8]" style={{ left: 'calc(50% - 110px)', width: 86 }} />
+          <span className="absolute top-1/2 h-[3px] -translate-y-1/2 bg-[#aef5c8]" style={{ left: 'calc(50% + 24px)', width: 86 }} />
+          <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ff5d6e]" />
         </div>
       )}
 

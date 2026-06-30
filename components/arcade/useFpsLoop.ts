@@ -24,6 +24,18 @@ const LOOK_SENS = 0.0024;
 const RANGE = 200;
 const ENEMY_R = 0.7;
 
+// Touch auto-fire engagement range per weapon family. Snipers never auto-fire
+// from the hip (they only engage when scoped — handled separately); the rest
+// open up only once a target is inside their effective band, so a rifle won't
+// snipe across the whole arena. The band widens when you deliberately zoom.
+const AF_RANGE: Record<string, number> = { rifle: 46, mg: 40, laser: 46, pistol: 30, launcher: 60, sniper: RANGE };
+// Bullet spread (radians) at the hip — wide and "sprayy" un-zoomed, tightens
+// hard when scoped so the scope is what makes shots land dead-centre.
+const SPREAD: Record<string, number> = { rifle: 0.026, mg: 0.044, laser: 0.016, pistol: 0.032, launcher: 0.018, sniper: 0.004 };
+// How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),
+// everything else gets a single ADS zoom. Sidearms (pistols) included = 1.
+const maxZoomFor = (gun: GunDef) => (gun.scoped ? 3 : 1);
+
 export interface FpsGameState {
   level: Level3D;
   player: Player3;
@@ -106,8 +118,11 @@ export function useFpsLoop(
     switchReq.current = dir > 0 ? 'next' : 'prev';
   }, []);
   const cycleZoom = useCallback(() => {
-    zoomLevel.current = (zoomLevel.current + 1) % 3;
-  }, []);
+    const g = gameRef.current;
+    const gun = g?.guns[g.active];
+    const steps = gun ? maxZoomFor(gun) + 1 : 2;
+    zoomLevel.current = (zoomLevel.current + 1) % steps;
+  }, [gameRef]);
   const setSensitivity = useCallback((v: number) => {
     sens.current = v;
   }, []);
@@ -345,8 +360,13 @@ export function useFpsLoop(
     const onMouseDown = (e: MouseEvent) => {
       if (!lockedNow()) return;
       if (e.button === 0) fireHeld.current = true;
-      // Right-click is a TOGGLE: hip → zoom → deep zoom → hip (not hold).
-      if (e.button === 2) zoomLevel.current = (zoomLevel.current + 1) % 3;
+      // Right-click is a TOGGLE through this weapon's zoom steps (snipers 3, rest 1).
+      if (e.button === 2) {
+        const g = gameRef.current;
+        const gun = g?.guns[g.active];
+        const steps = gun ? maxZoomFor(gun) + 1 : 2;
+        zoomLevel.current = (zoomLevel.current + 1) % steps;
+      }
     };
     const onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) fireHeld.current = false;
@@ -460,11 +480,13 @@ export function useFpsLoop(
 
           g.ads = zoomLevel.current > 0;
           const wantFov =
-            zoomLevel.current === 2
-              ? Math.max(14, gun.adsFov * 0.62)
-              : zoomLevel.current === 1
-                ? gun.adsFov
-                : gun.hipFov;
+            zoomLevel.current >= 3
+              ? Math.max(9, gun.adsFov * 0.42)
+              : zoomLevel.current === 2
+                ? Math.max(13, gun.adsFov * 0.64)
+                : zoomLevel.current === 1
+                  ? gun.adsFov
+                  : gun.hipFov;
           if (Math.abs(camera.fov - wantFov) > 0.1) {
             camera.fov = wantFov;
             camera.updateProjectionMatrix();
@@ -522,16 +544,25 @@ export function useFpsLoop(
 
           let autoFire = false;
           if (isTouch) {
-            // Fire only when the CENTRED shot would actually connect — the same
-            // raySphere the shot uses, so it's distance-correct at ANY zoom (a fixed
-            // angular cone fired on far enemies the dead-centre shot then missed). A
-            // small radius margin keeps it responsive on touch.
+            // Distance-gated auto-fire. Snipers (and other scoped weapons) only
+            // engage when you've actually zoomed in — never from the hip. Every
+            // other weapon opens up only once a target is inside its effective
+            // band (AF_RANGE), so a rifle won't auto-snipe across the map; the
+            // band widens when you deliberately zoom. The test is the same
+            // raySphere the shot uses, so "fires" ⟺ "the centred shot connects".
+            const zoomed = zoomLevel.current > 0;
+            const afRange = gun.scoped
+              ? zoomed
+                ? RANGE
+                : 0
+              : (AF_RANGE[gun.family] ?? 45) * (zoomed ? 1.7 : 1);
             for (const e of g.enemies) {
+              if (afRange <= 0) break;
               if (e.health <= 0) continue;
               const ecy = e.boss ? BOSSES[e.boss].scale : 1.0;
-              const hr = (e.boss ? BOSSES[e.boss].radius : ENEMY_R) * 1.35;
+              const hr = (e.boss ? BOSSES[e.boss].radius : ENEMY_R) * 1.3;
               const tc: Vec3 = [e.x, e.y + ecy, e.z];
-              if (raySphere(eye, dir, tc, hr) < RANGE && !segBlocked(eye, tc, g.level, grid ?? undefined)) {
+              if (raySphere(eye, dir, tc, hr) < afRange && !segBlocked(eye, tc, g.level, grid ?? undefined)) {
                 autoFire = true;
                 break;
               }
@@ -562,26 +593,39 @@ export function useFpsLoop(
             snap.fireAt = now;
             viewmodel?.fire();
             if (!sfx.isLoopWeapon(gun.id)) sfx.playWeaponFire(gun.id, gun.family);
-            const wallD = rayWallDist(eye, dir, g.level, RANGE, grid ?? undefined);
+            // Spread: wide & sprayy from the hip, tightening hard with each zoom
+            // step (a scope is what makes the bullet land dead-centre). Applied to
+            // the SHOT direction only — the auto-fire test above used the centred
+            // ray, so un-zoomed fire visibly scatters around the crosshair.
+            const zf = zoomLevel.current >= 3 ? 0.04 : zoomLevel.current === 2 ? 0.12 : zoomLevel.current === 1 ? 0.24 : 1;
+            const spr = (SPREAD[gun.family] ?? 0.02) * zf;
+            const syaw = p.yaw + (Math.random() - Math.random()) * spr;
+            const spitch = p.pitch + (Math.random() - Math.random()) * spr;
+            const scp = Math.cos(spitch);
+            const sfx2 = -scp * Math.sin(syaw);
+            const sfy2 = Math.sin(spitch);
+            const sfz2 = -scp * Math.cos(syaw);
+            const sdir: Vec3 = [sfx2, sfy2, sfz2];
+            const wallD = rayWallDist(eye, sdir, g.level, RANGE, grid ?? undefined);
             let hitT = wallD;
             let hit: Enemy | null = null;
             for (const e of g.enemies) {
               if (e.health <= 0) continue;
               const hr = e.boss ? BOSSES[e.boss].radius : ENEMY_R;
               const ecy = e.boss ? BOSSES[e.boss].scale : 1.0;
-              const t = raySphere(eye, dir, [e.x, e.y + ecy, e.z], hr);
+              const t = raySphere(eye, sdir, [e.x, e.y + ecy, e.z], hr);
               if (t < hitT) {
                 hitT = t;
                 hit = e;
               }
             }
-            addTracer([eye[0] + fx * 0.4, eye[1] - 0.12, eye[2] + fz * 0.4], [eye[0] + fx * hitT, eye[1] + fy * hitT, eye[2] + fz * hitT], gun.color);
+            addTracer([eye[0] + sfx2 * 0.4, eye[1] - 0.12, eye[2] + sfz2 * 0.4], [eye[0] + sfx2 * hitT, eye[1] + sfy2 * hitT, eye[2] + sfz2 * hitT], gun.color);
             if (gun.splash) {
               // Explosive: detonate at the impact point and splash-damage everyone
               // in radius (falloff to the edge), regardless of the direct ray hit.
-              const ix = eye[0] + fx * hitT;
-              const iy = eye[1] + fy * hitT;
-              const iz = eye[2] + fz * hitT;
+              const ix = eye[0] + sfx2 * hitT;
+              const iy = eye[1] + sfy2 * hitT;
+              const iz = eye[2] + sfz2 * hitT;
               let anyHit = false;
               for (const e of g.enemies) {
                 if (e.health <= 0) continue;
@@ -956,7 +1000,7 @@ export function useFpsLoop(
           else renderer.render(world.scene, camera);
           // 3D viewmodel overlay — pixelated (same buffer), depth-cleared so it
           // never clips world geometry. Hidden under the sniper scope overlay.
-          if (viewmodel && !(g.guns[g.active].scoped && zoomLevel.current > 0)) viewmodel.render(renderer);
+          if (viewmodel && zoomLevel.current === 0) viewmodel.render(renderer);
         }
 
         // Dynamic resolution: nudge the internal buffer to hold ~55-60 fps.
