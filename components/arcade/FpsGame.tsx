@@ -70,6 +70,8 @@ export function FpsGame() {
   const fsActive = fullscreen || pseudoFs;
   const [showSettings, setShowSettings] = useState(false);
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1 });
+  const [dev, setDev] = useState(false); // dev level-warp tools (npm run dev, or ?dev=1 on a deploy)
+  const [devLevel, setDevLevel] = useState(5);
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
@@ -81,6 +83,8 @@ export function FpsGame() {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       const s = Number(localStorage.getItem('starshell.sens'));
       if (Number.isFinite(s) && s > 0) setSensitivityState(s);
+      const q = new URLSearchParams(window.location.search);
+      setDev(q.has('dev') || process.env.NODE_ENV !== 'production');
     } catch {
       /* ignore */
     }
@@ -234,6 +238,22 @@ export function FpsGame() {
       startLevel(1, lo, 100, ups);
     },
     [startLevel],
+  );
+
+  // DEV: jump straight into any level (default loadout) to inspect it — bosses
+  // especially — without playing through. Gated to dev / ?dev=1.
+  const devWarp = useCallback(
+    (level: number) => {
+      const lo = lastLoadout;
+      const ups: Record<string, Upg> = {};
+      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      huntMemRef.current = makeHuntMemory();
+      setRun({ level, gold: 0, maxHp: 100, upgrades: ups });
+      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      if (isTouch && !fsActive) toggleFullscreen();
+      startLevel(level, lo, 100, ups);
+    },
+    [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
   );
 
   const buyUpgrade = useCallback((gunId: string, key: UpgradeKey) => {
@@ -416,6 +436,36 @@ export function FpsGame() {
             <button type="button" onClick={() => setShowSettings(true)} className="mt-3 min-h-[36px] font-pixel text-[8px] uppercase text-white/50 transition-colors hover:text-white sm:text-[9px]">
               ⚙ Settings
             </button>
+
+            {dev && (
+              <div className="mt-4 flex flex-col items-center gap-2 rounded-md border border-[#ffd27a]/30 bg-[#ffd27a]/[0.05] px-3 py-2">
+                <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO LEVEL</p>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {([[5, 'XENO'], [10, 'WARLORD'], [15, 'KRAKEN'], [20, 'GAUNTLET']] as [number, string][]).map(([lv, name]) => (
+                    <button
+                      key={lv}
+                      type="button"
+                      onClick={() => devWarp(lv)}
+                      className="min-h-[32px] rounded border border-[#ffd27a]/40 bg-black/30 px-2 font-pixel text-[7px] text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/15"
+                    >
+                      {lv} {name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setDevLevel((n) => Math.max(1, n - 1))} className="h-7 w-7 rounded border border-white/20 font-pixel text-[11px] text-white/70 hover:bg-white/10">
+                    −
+                  </button>
+                  <span className="w-14 text-center font-pixel text-[8px] text-white/80">LVL {devLevel}</span>
+                  <button type="button" onClick={() => setDevLevel((n) => Math.min(20, n + 1))} className="h-7 w-7 rounded border border-white/20 font-pixel text-[11px] text-white/70 hover:bg-white/10">
+                    +
+                  </button>
+                  <button type="button" onClick={() => devWarp(devLevel)} className="min-h-[32px] rounded border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-3 font-pixel text-[8px] text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
+                    WARP ▸
+                  </button>
+                </div>
+              </div>
+            )}
             <p className="mt-5 max-w-xs text-center font-pixel text-[6px] leading-relaxed text-white/35 sm:text-[8px]">
               {isTouch ? 'LEFT STICK MOVE · RIGHT LOOK · AUTO-FIRE ON TARGET' : 'CLICK TO CAPTURE MOUSE, THEN AIM + FIRE'}
             </p>
