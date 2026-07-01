@@ -224,7 +224,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const themeName = useMemo(() => THEME_LIST.find((t) => t.id === theme)?.name ?? theme, [theme]);
 
   return (
-    <div className="flex h-full w-full flex-col items-center gap-3 overflow-auto bg-[#05070c] p-4 text-white/80 sm:flex-row sm:items-start sm:justify-center">
+    <div className="absolute inset-0 z-40 flex flex-col items-center gap-3 overflow-auto bg-[#05070c] p-4 text-white/80 sm:flex-row sm:items-start sm:justify-center">
       <div className="flex flex-col items-center gap-2">
         <canvas
           ref={canvasRef}
