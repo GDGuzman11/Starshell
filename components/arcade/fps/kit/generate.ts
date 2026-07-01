@@ -13,6 +13,10 @@ import { rng } from '../rand';
 import type { ModuleMeta } from './types';
 import { barricade, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
+import { cellToWorld, MODULE_KINDS, ROTATIONS, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
+import { placeModule } from './transform';
+
+type GP = { x: number; y: number; z: number }[];
 
 const WALL_H = 4.5;
 
@@ -151,4 +155,84 @@ export function makeModularArena(count: number, seed: number): Level3D {
   }
 
   return { boxes, ladders, ramps, pads: [], ziplines: [], spawn, enemySpawn, grapplePoints, modules, size, seed };
+}
+
+/** Place one module of `kind` at (cx,cz) rotated `rot`, via the origin-build +
+ *  transform pipeline. Dispatches the differing builder signatures. */
+function placeKind(kind: ModuleKind, cx: number, cz: number, rot: Rot, levels: number, boxes: Box[], ladders: Ladder[], ramps: Ramp[], gps: GP, rand: () => number): ModuleMeta {
+  switch (kind) {
+    case 'barracks':
+      return placeModule((b, l, r, g) => barracksModule(b, l, r, g, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'watchtower':
+      return placeModule((b, l, r, g) => watchTowerModule(b, l, r, g, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'command':
+      return placeModule((b, l, r, g) => commandCenterModule(b, l, r, g, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'apartment':
+      return placeModule((b, l, r, g) => apartmentBlockModule(b, l, r, g, 0, 0, levels), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'ruin':
+      return placeModule((b, l, r, g) => ruinModule(b, l, r, g, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'bunker':
+      return placeModule((b, l, r, g) => bunkerModule(b, l, r, g, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+  }
+}
+
+/**
+ * Build a playable Level3D from a hand-authored LevelLayout: boundary walls +
+ * spawns (from the layout or derived) + each placement (rotated) + light street
+ * clutter in the gaps. Deterministic given the layout's seed. Carries the theme.
+ */
+export function buildFromLayout(layout: LevelLayout): Level3D {
+  const r = rng(layout.seed);
+  const size = layout.size;
+  const half = size / 2;
+  const boxes: Box[] = [];
+  const ladders: Ladder[] = [];
+  const ramps: Ramp[] = [];
+  const grapplePoints: GP = [];
+  const modules: ModuleMeta[] = [];
+
+  const spawn = layout.spawn ? { x: cellToWorld(layout.spawn.gx), z: cellToWorld(layout.spawn.gz), yaw: Math.PI } : { x: 0, z: -half * 0.86, yaw: Math.PI };
+  const enemySpawn = layout.enemySpawn ? { x: cellToWorld(layout.enemySpawn.gx), z: cellToWorld(layout.enemySpawn.gz) } : { x: 0, z: half * 0.86 };
+
+  // Arena boundary.
+  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
+  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
+  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
+  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
+
+  const occupied: { x: number; z: number; rad: number }[] = [];
+  for (const pl of layout.placements) {
+    const cx = cellToWorld(pl.gx);
+    const cz = cellToWorld(pl.gz);
+    modules.push(placeKind(pl.module, cx, cz, pl.rot, pl.params?.levels ?? 3, boxes, ladders, ramps, grapplePoints, r));
+    occupied.push({ x: cx, z: cz, rad: 13 });
+  }
+
+  // Light street clutter in the empty spaces (skips buildings + spawns).
+  const clutter = Math.round(size / 8);
+  for (let i = 0; i < clutter; i++) {
+    const x = (r() * 2 - 1) * (half - 6);
+    const z = (r() * 2 - 1) * (half - 6);
+    if (Math.hypot(x - spawn.x, z - spawn.z) < 14 || Math.hypot(x - enemySpawn.x, z - enemySpawn.z) < 14) continue;
+    if (occupied.some((o) => Math.abs(x - o.x) < o.rad && Math.abs(z - o.z) < o.rad)) continue;
+    const roll = r();
+    if (roll < 0.5) rubble(boxes, x, z, 2.6, r);
+    else if (roll < 0.8) wreck(boxes, x, z, r);
+    else debris(boxes, x, z, 3, 4, r);
+  }
+
+  return { boxes, ladders, ramps, pads: [], ziplines: [], spawn, enemySpawn, grapplePoints, modules, theme: layout.theme, size, seed: layout.seed };
+}
+
+/** DEV rotation-test layout: every module kind (columns) at every rotation (rows),
+ *  so each can be walked to confirm rotated ramps still climb + ladders still exit
+ *  onto their deck + openings line up. Used by the dev "Layout Test" toggle. */
+export function makeSampleLayout(theme = 'wartorn'): LevelLayout {
+  const placements: Placement[] = [];
+  MODULE_KINDS.forEach((kind: ModuleKind, ci) => {
+    ROTATIONS.forEach((rot: Rot, ri) => {
+      placements.push({ module: kind, gx: ci * 2 - 5, gz: ri * 2 - 3, rot, params: kind === 'apartment' ? { levels: 3 } : undefined });
+    });
+  });
+  return { v: 1, theme, size: 200, seed: 12345, placements };
 }

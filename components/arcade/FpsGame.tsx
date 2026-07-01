@@ -11,7 +11,7 @@ import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
-import { makeModularArena } from './fps/kit/generate';
+import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
@@ -101,6 +101,12 @@ export function FpsGame() {
   const setKit = useCallback((v: boolean) => {
     kitRef.current = v;
     setKitState(v);
+  }, []);
+  const [layoutTest, setLayoutTestState] = useState(false); // dev: rotation-test layout
+  const layoutTestRef = useRef(false);
+  const setLayoutTest = useCallback((v: boolean) => {
+    layoutTestRef.current = v;
+    setLayoutTestState(v);
   }, []);
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
@@ -223,7 +229,7 @@ export function FpsGame() {
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
       const mapCount = isBoss ? 5 : mapCountFor(squads);
-      const lvl = kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed);
+      const lvl = layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed);
       if (devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
@@ -540,6 +546,13 @@ export function FpsGame() {
                     className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${kit ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
                   >
                     Kit Arena: {kit ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLayoutTest(!layoutTest)}
+                    className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${layoutTest ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
+                  >
+                    Layout Test: {layoutTest ? 'ON' : 'OFF'}
                   </button>
                 </div>
                 <p className="mt-1 font-pixel text-[6px] tracking-[0.2em] text-white/40">THEME</p>
