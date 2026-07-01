@@ -7,9 +7,10 @@
  */
 import * as THREE from 'three';
 import type { Box, Level3D } from './level3d';
-import { getTextures, groundTex } from './textures';
+import { getTextures, getThemedTextures, groundTex } from './textures';
 import { rng } from './rand';
 import { makeWallMaterial, makeGroundMaterial, type RenderTier } from './materials';
+import { themeById } from './kit/themes';
 
 export interface World {
   scene: THREE.Scene;
@@ -38,14 +39,15 @@ const SKIES: string[][] = [
   ['#101a14', '#2a5e44', '#5bc48f'],
 ];
 
-/** Soft vertical light-shade gradient (equirect canvas → sky sphere). */
-function skyTexture(seed: number): HTMLCanvasElement {
+/** Soft vertical light-shade gradient (equirect canvas → sky sphere). A theme
+ *  passes its own [zenith, mid, horizon]; otherwise one is seeded from SKIES. */
+function skyTexture(seed: number, themeSky?: readonly [string, string, string]): HTMLCanvasElement {
   const r = rng(seed ^ 0x51ed);
   const c = document.createElement('canvas');
   c.width = 16;
   c.height = 256;
   const x = c.getContext('2d')!;
-  const pal = SKIES[Math.floor(r() * SKIES.length)];
+  const pal = themeSky ?? SKIES[Math.floor(r() * SKIES.length)];
   const g = x.createLinearGradient(0, 0, 0, c.height);
   g.addColorStop(0, pal[0]);
   g.addColorStop(0.55, pal[1]);
@@ -56,9 +58,10 @@ function skyTexture(seed: number): HTMLCanvasElement {
 }
 
 export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World {
+  const theme = themeById(level.theme); // undefined = original seeded look
   const scene = new THREE.Scene();
   // Slightly deeper fog gives the bloomed neon more atmosphere to read against.
-  scene.fog = new THREE.Fog('#0e1426', level.size * 0.5, level.size * 2.1);
+  scene.fog = new THREE.Fog(theme?.fog ?? '#0e1426', level.size * 0.5, level.size * 2.1);
 
   // Bright, even lighting so the arena reads clearly.
   scene.add(new THREE.HemisphereLight('#cfe0ff', '#3a4366', 1.7));
@@ -69,8 +72,8 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
 
   const disposables: { dispose: () => void }[] = [];
 
-  // Soft seeded sky (no stars), unfogged so it stays vivid.
-  const sky = new THREE.CanvasTexture(skyTexture(level.seed));
+  // Soft sky (no stars), unfogged so it stays vivid. Theme-driven if set.
+  const sky = new THREE.CanvasTexture(skyTexture(level.seed, theme?.sky));
   sky.colorSpace = THREE.SRGBColorSpace;
   const skyMesh = new THREE.Mesh(
     new THREE.SphereGeometry(level.size * 3, 24, 16),
@@ -80,7 +83,7 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
   disposables.push(skyMesh.geometry, skyMesh.material as THREE.Material, sky);
 
   // Ground
-  const gtex = tex(groundTex(), level.size);
+  const gtex = tex(groundTex(theme?.ground), level.size);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(level.size, level.size),
     makeGroundMaterial(gtex, tier),
@@ -94,7 +97,7 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
   // are AABBs, so a shared unit cube scaled/translated per instance is exact.
   // Each box records its (instancedMesh, index) so `hideBox` can collapse a
   // destroyed structure by zeroing its instance matrix.
-  const canvases = getTextures();
+  const canvases = theme ? getThemedTextures(theme.panels) : getTextures();
   const mats = canvases.map((c) => makeWallMaterial(tex(c), tier));
   disposables.push(...mats);
   const unitBox = new THREE.BoxGeometry(1, 1, 1);

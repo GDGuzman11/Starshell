@@ -59,19 +59,20 @@ function hazard(): Tex {
   return c;
 }
 
-/** Tiling floor grid — dark metal deck with glowing seams. */
-export function groundTex(): Tex {
+/** Tiling floor grid — dark metal deck with glowing seams. Defaults to the
+ *  original palette; a theme passes its own {base, seam}. */
+export function groundTex(pal: { base: string; seam: string } = { base: '#0e1018', seam: '#243047' }): Tex {
   const c = document.createElement('canvas');
   c.width = TEX_SIZE;
   c.height = TEX_SIZE;
   const x = c.getContext('2d')!;
-  x.fillStyle = '#0e1018';
+  x.fillStyle = pal.base;
   x.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
   for (let i = 0; i < 300; i++) {
     x.fillStyle = `rgba(255,255,255,${Math.random() * 0.04})`;
     x.fillRect(Math.random() * TEX_SIZE, Math.random() * TEX_SIZE, 1, 1);
   }
-  x.strokeStyle = '#243047';
+  x.strokeStyle = pal.seam;
   x.lineWidth = 2;
   x.strokeRect(0, 0, TEX_SIZE, TEX_SIZE);
   return c;
@@ -230,7 +231,7 @@ export function bossTex(kind: 'xeno' | 'warrior' | 'octopus'): Tex {
 }
 
 let cache: Tex[] | null = null;
-/** Lazily build the texture set (client-only). */
+/** Lazily build the default texture set (client-only). */
 export function getTextures(): Tex[] {
   if (cache) return cache;
   cache = [
@@ -240,4 +241,10 @@ export function getTextures(): Tex[] {
     hazard(), // hazard stripes
   ];
   return cache;
+}
+
+/** Build a THEMED wall texture set (3 panel variants + the shared hazard stripes).
+ *  Not cached — a level is built once, and themes vary per level. */
+export function getThemedTextures(panels: { base: string; seam: string; rivet: string }[]): Tex[] {
+  return [panel(panels[0].base, panels[0].seam, panels[0].rivet), panel(panels[1].base, panels[1].seam, panels[1].rivet), panel(panels[2].base, panels[2].seam, panels[2].rivet), hazard()];
 }

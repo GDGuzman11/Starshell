@@ -87,6 +87,8 @@ export interface Level3D {
   grapplePoints?: { x: number; y: number; z: number }[];
   /** Modular-kit structures + their nav/AI hints (present on modular arenas). */
   modules?: ModuleMeta[];
+  /** Visual theme id (sky/fog/textures). Undefined = the original seeded look. */
+  theme?: string;
   size: number;
   seed: number;
 }

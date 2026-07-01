@@ -16,6 +16,7 @@ import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
+import { THEME_LIST } from './fps/kit/themes';
 
 type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
@@ -88,6 +89,12 @@ export function FpsGame() {
     godRef.current = v;
     setGodState(v);
     if (gameRef.current) gameRef.current.god = v; // apply live to an in-progress level
+  }, []);
+  const [devTheme, setDevThemeState] = useState<string>(''); // dev: force a map theme ('' = default)
+  const devThemeRef = useRef<string>('');
+  const setDevTheme = useCallback((v: string) => {
+    devThemeRef.current = v;
+    setDevThemeState(v);
   }, []);
   const [kit, setKitState] = useState(false); // dev: load the modular KIT test arena
   const kitRef = useRef(false);
@@ -217,6 +224,7 @@ export function FpsGame() {
       const isBoss = level % 5 === 0;
       const mapCount = isBoss ? 5 : mapCountFor(squads);
       const lvl = kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed);
+      if (devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
@@ -533,6 +541,17 @@ export function FpsGame() {
                   >
                     Kit Arena: {kit ? 'ON' : 'OFF'}
                   </button>
+                </div>
+                <p className="mt-1 font-pixel text-[6px] tracking-[0.2em] text-white/40">THEME</p>
+                <div className="flex flex-wrap gap-1">
+                  <button type="button" onClick={() => setDevTheme('')} className={`min-h-[26px] rounded border px-2 font-pixel text-[7px] uppercase transition-colors ${devTheme === '' ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                    DEFAULT
+                  </button>
+                  {THEME_LIST.map((t) => (
+                    <button key={t.id} type="button" onClick={() => setDevTheme(t.id)} className={`min-h-[26px] rounded border px-2 font-pixel text-[7px] uppercase transition-colors ${devTheme === t.id ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                      {t.id}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
