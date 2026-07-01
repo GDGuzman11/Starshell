@@ -8,7 +8,7 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import type { Box, Ladder, Level3D, Ramp } from '../level3d';
+import { type Box, type Ladder, type Level3D, type Ramp, roofGrapplePoints } from '../level3d';
 import { rng } from '../rand';
 import { DIM } from './types';
 import { catwalk, crate, doorwayWall, floorSlab, ladder, railing, roof, stairRun, wall, windowBand } from './atoms';
@@ -79,11 +79,12 @@ export function makeKitTestArena(seed: number): Level3D {
     crate(boxes, x, z, 1.2 + r() * 0.6);
   }
 
-  // Rooftop grapple points (both barracks roofs at 2×floorStep) + the platform.
+  // Rooftop grapple points on the EDGES (visible from the ground) — both barracks
+  // roofs (2×floorStep) + the platform.
   const grapplePoints = [
-    { x: -6, y: 2 * DIM.floorStep + 0.05, z: 0 },
-    { x: 16, y: 2 * DIM.floorStep + 0.05, z: 0 },
-    { x: plX, y: plH + 0.05, z: plZ },
+    ...roofGrapplePoints(-6, 0, 6, 2 * DIM.floorStep + 0.05),
+    ...roofGrapplePoints(16, 0, 5, 2 * DIM.floorStep + 0.05),
+    ...roofGrapplePoints(plX, plZ, 4, plH + 0.05),
   ];
 
   return { boxes, ladders, ramps, pads: [], ziplines: [], spawn, enemySpawn, grapplePoints, size, seed };

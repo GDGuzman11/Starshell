@@ -608,14 +608,16 @@ export function useFpsLoop(
               let best: { x: number; y: number; z: number } | null = null;
               let bestDot = 0.955; // ~17° aim cone
               for (const gp of pts) {
+                // Aim toward the floating ring marker (above the roof edge) so the
+                // LoS clears the railing and reads from the ground.
                 const dx = gp.x - p.x;
-                const dy = gp.y + 1.0 - (p.y + EYE);
+                const dy = gp.y + 1.6 - (p.y + EYE);
                 const dz = gp.z - p.z;
                 const d = Math.hypot(dx, dy, dz);
                 if (d > 24 || d < 3) continue; // near the building only
                 const dot = (dx * fx + dy * fy + dz * fz) / d;
                 if (dot < bestDot) continue;
-                if (segBlocked(eye, [gp.x, gp.y + 0.6, gp.z], g.level, grid ?? undefined)) continue;
+                if (segBlocked(eye, [gp.x, gp.y + 1.5, gp.z], g.level, grid ?? undefined)) continue;
                 bestDot = dot;
                 best = gp;
               }
