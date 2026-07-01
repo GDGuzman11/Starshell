@@ -330,8 +330,9 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     flash('BATTLEFIELD GENERATED');
   };
   const doExportCampaign = () => {
-    const lines = campaign.map((s, i) => (s.authored ? `  ${i + 1}: ${JSON.stringify(s.layout)},` : null)).filter((l): l is string => l !== null);
-    const block = `// Paste into CAMPAIGN in components/arcade/fps/kit/levels.ts (keyed by authored level #):\n${lines.join('\n')}`;
+    const authored = campaign.map((s, i) => ({ slot: s, level: i + 1 })).filter((e) => e.slot.authored);
+    // Code block for pasting into levels.ts (clipboard + console).
+    const block = `// Paste into CAMPAIGN in components/arcade/fps/kit/levels.ts (keyed by authored level #):\n${authored.map((e) => `  ${e.level}: ${JSON.stringify(e.slot.layout)},`).join('\n')}`;
     try {
       navigator.clipboard?.writeText(block);
     } catch {
@@ -339,7 +340,19 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     }
     // eslint-disable-next-line no-console
     console.log(block);
-    flash(`EXPORTED ${lines.length} LEVEL(S) → clipboard + console`);
+    // Download a JSON file so it can be dropped into the repo for review/baking.
+    try {
+      const json = JSON.stringify({ v: LAYOUT_VERSION, levels: authored.map((e) => ({ level: e.level, layout: e.slot.layout })) }, null, 2);
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'starshell-campaign.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore */
+    }
+    flash(`EXPORTED ${authored.length} LEVEL(S) → file + clipboard`);
   };
 
   const themeName = useMemo(() => THEME_LIST.find((t) => t.id === theme)?.name ?? theme, [theme]);
