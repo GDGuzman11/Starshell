@@ -10,6 +10,7 @@
  * scales with the chosen enemy count.
  */
 import { rng } from './rand';
+import type { ModuleMeta } from './kit/types';
 
 export interface Box {
   x: number;
@@ -84,6 +85,8 @@ export interface Level3D {
   /** Rooftop/perch points the player can GRAPPLE to (aim near one + press grapple).
    *  Each is a safe standing spot on top of a building (feet height). */
   grapplePoints?: { x: number; y: number; z: number }[];
+  /** Modular-kit structures + their nav/AI hints (present on modular arenas). */
+  modules?: ModuleMeta[];
   size: number;
   seed: number;
 }
