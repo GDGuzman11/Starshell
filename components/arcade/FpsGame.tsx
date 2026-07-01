@@ -12,7 +12,7 @@ import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
-import { resolveLevel, campaignTotalLevels, isBossLevel, isGauntletLevel, bossKindFor } from './fps/kit/levels';
+import { resolveLevel, buildBossArena, campaignTotalLevels, isBossLevel, isGauntletLevel, bossKindFor, GAUNTLET_ORDER } from './fps/kit/levels';
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
@@ -58,6 +58,7 @@ export function FpsGame() {
   const gameRef = useRef<FpsGameState | null>(null);
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
   const sandboxRef = useRef(false); // editor "Play" sandbox → win/lose returns to the editor
+  const bossOverrideRef = useRef<BossKind | null>(null); // dev: force a specific boss on warp
   // Squad learning, persisted across a run's levels (reset on a new campaign) so
   // later fights hunt the player smarter. The SAME object feeds every level's squad.
   const huntMemRef = useRef<HuntMemory | null>(null);
@@ -78,6 +79,7 @@ export function FpsGame() {
   const gauntletRef = useRef(0);
   const [recovery, setRecovery] = useState<number | null>(null); // upcoming round shown during recovery
   const [best, setBest] = useState(0);
+  const [campaignLen, setCampaignLen] = useState(20); // display only; real value read on mount (client)
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
   const [pseudoFs, setPseudoFs] = useState(false); // CSS fallback (iOS Safari)
@@ -122,6 +124,7 @@ export function FpsGame() {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       const s = Number(localStorage.getItem('starshell.sens'));
       if (Number.isFinite(s) && s > 0) setSensitivityState(s);
+      setCampaignLen(campaignTotalLevels()); // client-only (reads localStorage) → avoids SSR mismatch
       // Dev tools (God Mode / level-warp / Kit Arena / Level Editor) are LOCAL-DEV
       // ONLY — they never appear on the deployed public site, and there is no URL
       // that unlocks them. Author + test levels locally; only the results ship.
@@ -231,12 +234,12 @@ export function FpsGame() {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const total = campaignTotalLevels(); // flexible campaign length (follows authored levels)
-      const isBoss = isBossLevel(level, total);
+      const forcedBoss = bossOverrideRef.current; // dev: warp straight into a specific boss
+      const isBoss = forcedBoss != null || isBossLevel(level, total);
       const mapCount = isBoss ? 5 : mapCountFor(squads);
-      // Level source: an editor sandbox preset wins; then the dev toggles (rotation
-      // sample / war-torn city); otherwise the campaign resolver (a baked authored
-      // layout for this level, or the procedural arena fallback).
-      const lvl = presetLevel ?? (layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : resolveLevel(level, mapCount, seed));
+      // Level source: a forced boss (dev) → its arena; then editor sandbox preset; then
+      // dev toggles (rotation sample / war-torn city); otherwise the campaign resolver.
+      const lvl = presetLevel ?? (forcedBoss ? buildBossArena(forcedBoss, mapCount, seed) : layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : resolveLevel(level, mapCount, seed));
       if (!presetLevel && devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override (preset carries its own)
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
@@ -244,9 +247,9 @@ export function FpsGame() {
       player.health = maxHp;
       // The FINAL level is the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord →
       // Kraken). Regular boss levels (every 5th) cycle through the three boss kinds.
-      const gauntlet = isGauntletLevel(level, total);
+      const gauntlet = forcedBoss == null && isGauntletLevel(level, total);
       const round = gauntlet ? gauntletRef.current || 1 : 0;
-      const bossKinds: BossKind[] = gauntlet ? [GAUNTLET_BOSSES[round - 1]] : [bossKindFor(level)];
+      const bossKinds: BossKind[] = forcedBoss ? [forcedBoss] : gauntlet ? [GAUNTLET_BOSSES[round - 1]] : [bossKindFor(level)];
       const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, Math.random);
       // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
@@ -333,6 +336,26 @@ export function FpsGame() {
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       if (isTouch && !fsActive) toggleFullscreen();
       startLevel(level, lo, 100, ups);
+    },
+    [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
+  );
+
+  // DEV: warp straight into a specific BOSS + its bespoke arena (to test each boss
+  // regardless of where it lands in the cycle). Win/lose returns to the menu.
+  const devWarpBoss = useCallback(
+    (kind: BossKind) => {
+      const lo = lastLoadout;
+      const ups: Record<string, Upg> = {};
+      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      huntMemRef.current = makeHuntMemory();
+      gauntletRef.current = 0;
+      sandboxRef.current = false;
+      setRun({ level: 5, gold: 0, maxHp: 100, upgrades: ups });
+      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      if (isTouch && !fsActive) toggleFullscreen();
+      bossOverrideRef.current = kind; // startLevel reads this synchronously
+      startLevel(5, lo, 100, ups);
+      bossOverrideRef.current = null; // one-shot: only this warp is forced
     },
     [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
   );
@@ -495,7 +518,7 @@ export function FpsGame() {
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
-            <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignTotalLevels()}-LEVEL CAMPAIGN</p>
+            <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>
             {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
 
             <p className="mt-5 font-pixel text-[7px] text-white/45 sm:text-[8px]">DIFFICULTY</p>
@@ -543,6 +566,14 @@ export function FpsGame() {
                 <button type="button" onClick={() => setMode('editor')} className="min-h-[30px] rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-4 font-pixel text-[8px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
                   ▸ Level Editor
                 </button>
+                <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO BOSS</p>
+                <div className="flex flex-wrap justify-center gap-1">
+                  {GAUNTLET_ORDER.map((k) => (
+                    <button key={k} type="button" onClick={() => devWarpBoss(k)} className="min-h-[26px] rounded border border-[#ff9a3a]/50 bg-[#ff9a3a]/10 px-2 font-pixel text-[7px] uppercase text-[#ff9a3a] transition-colors hover:bg-[#ff9a3a]/20">
+                      {k}
+                    </button>
+                  ))}
+                </div>
                 <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO LEVEL</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {([[5, 'XENO'], [10, 'WARLORD'], [15, 'KRAKEN'], [20, 'GAUNTLET']] as [number, string][]).map(([lv, name]) => (
