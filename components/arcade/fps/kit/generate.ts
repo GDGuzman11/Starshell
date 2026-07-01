@@ -11,7 +11,7 @@
 import type { Box, Ladder, Level3D, Ramp } from '../level3d';
 import { rng } from '../rand';
 import type { ModuleMeta } from './types';
-import { catwalk, crate } from './atoms';
+import { crate } from './atoms';
 import { barracksModule, bunkerModule, commandCenterModule, watchTowerModule } from './modules';
 
 const WALL_H = 4.5;
@@ -22,7 +22,7 @@ const WALL_H = 4.5;
  *  each module's nav/AI hints via `modules`. */
 export function makeKitTestArena(seed: number): Level3D {
   const r = rng(seed);
-  const size = 108;
+  const size = 160;
   const half = size / 2;
   const boxes: Box[] = [];
   const ladders: Ladder[] = [];
@@ -39,17 +39,14 @@ export function makeKitTestArena(seed: number): Level3D {
   boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
   boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
 
-  // One of each core module, spaced on a rough grid around the centre.
+  // One of each (bigger) core module, well spaced around the centre.
   modules.push(commandCenterModule(boxes, ladders, ramps, grapplePoints, 0, 0));
-  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, -26, -8));
-  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, 26, 8));
-  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, -24, 22));
-  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, 24, -22));
-  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, 26));
-  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, -26));
-
-  // A 2nd-floor catwalk from the left barracks deck toward the command mezzanine.
-  catwalk(boxes, -17, -8, 10, 'x', 4);
+  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, -42, -14));
+  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, 42, 14));
+  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, -44, 34));
+  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, 44, -34));
+  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, 50));
+  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, -50));
 
   // Scattered cover crates (clear of spawns + structures).
   for (let i = 0; i < 12; i++) {

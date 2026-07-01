@@ -1,43 +1,69 @@
 /**
  * Kit MODULES — believable military structures assembled ONLY from atoms. Each
  * builder emits geometry into the shared arrays AND returns `ModuleMeta` (the
- * nav/AI hints: per-floor walkable rects, doorways, stair ends, roof, connectors)
- * so P3 can navigate them and place bridges. Every vertical link lands at a real
- * opening (floorWithHole) ≥ 3× the player's width, and every rooftop gets ONE
- * centre-facing grapple point.
+ * nav/AI hints) so P3 can navigate them and place bridges.
+ *
+ * VERTICAL RULE (important): an interior ramp climbs from one floor to the next
+ * and the floor above has an opening whose footprint EXACTLY matches the ramp
+ * (`rampFloor`), so there is never a gap beside the ramp to fall through, and the
+ * ramp lands flush on the solid floor. Ramps sit in the MIDDLE of the (large)
+ * footprint with clear space around them, never against a perimeter wall. Each
+ * rooftop gets ONE centre-facing grapple point.
  *
  * Imported ONLY by the /arcade chunk.
  */
 import type { Box, Ladder, Ramp } from '../level3d';
 import { roofGrapplePoint } from '../level3d';
-import { DIM } from './types';
+import { DIM, TEX } from './types';
 import type { ModuleMeta, Rect } from './types';
-import { crate, doorwayWall, floorSlab, floorWithHole, halfWall, railing, roof, stairRun, wall, windowBand } from './atoms';
+import { crate, doorwayWall, floorSlab, floorWithHole, halfWall, railing, wall, windowBand } from './atoms';
 
 type GP = { x: number; y: number; z: number }[];
 const F = DIM.floorStep; // 4 m between floors
+const RUN = 6; // interior ramp horizontal run (compact, fits centrally)
+const RW = 3.2; // interior ramp width == the floor-opening width (no fall-through)
 
-/** BARRACKS — a 2-storey building: an enclosed ground room (doorways front+back,
- *  windowed sides) with an INTERIOR ramp through a floor opening up to an open,
- *  railed 2nd-floor firing deck + a rooftop grapple point. */
+/** Build the solid floor at `yHi` over `W×D`, but with an opening that EXACTLY
+ *  matches the ramp footprint, and a ramp under it climbing `yLo→yHi` centred at
+ *  (cx, oz), landing flush on the floor. `oz` places the ramp in the −z/+z half so
+ *  stacked floors switchback without conflicting. Returns the ramp's end points. */
+function rampFloor(
+  boxes: Box[],
+  ramps: Ramp[],
+  cx: number,
+  cz: number,
+  W: number,
+  D: number,
+  yLo: number,
+  yHi: number,
+  oz: number,
+): { x0: number; z0: number; y0: number; x1: number; z1: number; y1: number } {
+  floorWithHole(boxes, cx, cz, W, D, yHi, cx, oz, RUN, RW); // opening == ramp footprint
+  ramps.push({ x: cx, z: oz, sx: RUN, sz: RW, yLo, yHi, dir: '+x', tex: TEX.rail });
+  return { x0: cx - RUN / 2, z0: oz, y0: yLo, x1: cx + RUN / 2, z1: oz, y1: yHi };
+}
+
+/** Open-deck rails around a floor edge. */
+function edgeRails(boxes: Box[], cx: number, cz: number, W: number, D: number, y: number): void {
+  railing(boxes, cx, cz - D / 2, W, 'x', y);
+  railing(boxes, cx, cz + D / 2, W, 'x', y);
+  railing(boxes, cx - W / 2, cz, D, 'z', y);
+  railing(boxes, cx + W / 2, cz, D, 'z', y);
+}
+
+/** BARRACKS — a big 2-storey building: enclosed ground room (doorways front+back,
+ *  windowed sides) with a central interior ramp up to an open railed firing deck. */
 export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 12;
-  const D = 10;
+  const W = 22;
+  const D = 18;
   const hw = W / 2;
   const hd = D / 2;
-  // Ground perimeter.
   doorwayWall(boxes, cx, cz - hd, W, 'x', DIM.wallH, 0); // front −z
   doorwayWall(boxes, cx, cz + hd, W, 'x', DIM.wallH, 0); // back +z
   windowBand(boxes, cx - hw, cz, D, 'z', 0);
   windowBand(boxes, cx + hw, cz, D, 'z', 0);
-  // 2nd floor with a stair opening along the −x edge + an interior ramp up to it.
-  const holeCx = cx - hw + 1.8;
-  floorWithHole(boxes, cx, cz, W, D, F, holeCx, cz, 3.6, 4);
-  stairRun(ramps, holeCx, cz, 3.6, '+x', 0, F); // lands flush at the deck near edge
-  // Open railed firing deck (open front −z).
-  railing(boxes, cx, cz + hd, W, 'x', F);
-  railing(boxes, cx - hw, cz, D, 'z', F);
-  railing(boxes, cx + hw, cz, D, 'z', F);
+  const s = rampFloor(boxes, ramps, cx, cz, W, D, 0, F, cz); // central ramp to the deck
+  edgeRails(boxes, cx, cz, W, D, F);
   gps.push(roofGrapplePoint(cx, cz, Math.min(hw, hd), F + 0.05));
   const rect: Rect = [cx - hw, cz - hd, cx + hw, cz + hd];
   return {
@@ -55,7 +81,7 @@ export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], 
       { x: cx, z: cz - hd, y: 0 },
       { x: cx, z: cz + hd, y: 0 },
     ],
-    stairs: [{ x0: holeCx, z0: cz, y0: 0, x1: holeCx + 1.8, z1: cz, y1: F }],
+    stairs: [s],
     roof: { y: F, rect },
     connectors: [
       { side: 'S', x: cx, z: cz - hd, y: F },
@@ -64,30 +90,32 @@ export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], 
   };
 }
 
-/** WATCH TOWER — a tall slim tower: two enclosed storeys reached by an INTERIOR
- *  ramp switchback through floor openings, topped by an open railed sniper deck +
- *  grapple point. Small footprint so it reads as a lookout. */
+/** WATCH TOWER — a large 3-level lookout: enclosed ground + mid floors (windowed),
+ *  two central interior ramps switchbacking (front half then back half) up to an
+ *  open railed sniper deck on top + a grapple point. */
 export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 8;
+  const W = 24;
   const hw = W / 2;
-  const top = 2 * F; // open deck at 8 m
+  const top = 2 * F; // sniper deck at 8 m
   // Corner columns full height.
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) boxes.push({ x: cx + sx * (hw - 0.3), y: (top + 0.6) / 2, z: cz + sz * (hw - 0.3), sx: 0.5, sy: top + 0.6, sz: 0.5, tex: 0 });
-  // Two windowed storeys (open front −z on the ground for entry).
-  windowBand(boxes, cx + hw, cz, W, 'z', 0);
-  windowBand(boxes, cx - hw, cz, W, 'z', 0);
+  // Ground storey: front doorway (−z), windowed elsewhere.
+  doorwayWall(boxes, cx, cz - hw, W, 'x', DIM.wallH, 0);
   wall(boxes, cx, cz + hw, W, 'x', DIM.wallH, 0);
-  windowBand(boxes, cx - hw, cz, W, 'z', F);
-  windowBand(boxes, cx + hw, cz, W, 'z', F);
-  wall(boxes, cx, cz + hw, W, 'x', DIM.wallH, F);
-  // Floor 1 + floor 2 (deck) each with a stair opening + a ramp up to it, on
-  // alternating sides for a switchback.
-  floorWithHole(boxes, cx, cz, W, W, F, cx - hw + 1.8, cz, 3.4, 3.4);
-  stairRun(ramps, cx - hw + 1.8, cz, 3.4, '+x', 0, F);
-  roof(boxes, cx, cz, W, W, top); // open sniper deck
-  // (the deck IS reached from floor 1 via a second ramp through a roof opening)
-  floorWithHole(boxes, cx, cz, W, W, top, cx + hw - 1.8, cz, 3.4, 3.4);
-  stairRun(ramps, cx + hw - 1.8, cz, 3.4, '-x', F, top);
+  windowBand(boxes, cx - hw, cz, W, 'z', 0);
+  windowBand(boxes, cx + hw, cz, W, 'z', 0);
+  // Mid storey walls (windowed all round).
+  for (const [x, z, len, ax] of [
+    [cx, cz - hw, W, 'x'],
+    [cx, cz + hw, W, 'x'],
+    [cx - hw, cz, W, 'z'],
+    [cx + hw, cz, W, 'z'],
+  ] as [number, number, number, 'x' | 'z'][])
+    windowBand(boxes, x, z, len, ax, F);
+  // Two switchback ramps: ground→mid (front half), mid→top (back half).
+  const s1 = rampFloor(boxes, ramps, cx, cz, W, W, 0, F, cz - 6);
+  const s2 = rampFloor(boxes, ramps, cx, cz, W, W, F, top, cz + 6);
+  edgeRails(boxes, cx, cz, W, W, top); // open sniper deck
   gps.push(roofGrapplePoint(cx, cz, hw, top + 0.05));
   const rect: Rect = [cx - hw, cz - hw, cx + hw, cz + hw];
   return {
@@ -103,44 +131,30 @@ export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[]
       { y: top, rect },
     ],
     doorways: [{ x: cx, z: cz - hw, y: 0 }],
-    stairs: [
-      { x0: cx - hw + 1.8, z0: cz, y0: 0, x1: cx - hw + 3.6, z1: cz, y1: F },
-      { x0: cx + hw - 1.8, z0: cz, y0: F, x1: cx + hw - 3.6, z1: cz, y1: top },
-    ],
+    stairs: [s1, s2],
     roof: { y: top, rect },
     connectors: [{ side: 'S', x: cx, z: cz - hw, y: top }],
   };
 }
 
-/** COMMAND CENTER — a big central hub: an open ground hall (doorways on all four
- *  sides for flanking) with a 2nd-floor MEZZANINE ring around a central atrium
- *  (reached by two interior ramps), a rooftop, and edge cover. The map's anchor. */
+/** COMMAND CENTER — a big central hub: an open ground hall with a doorway on all
+ *  four sides (flankable), a central interior ramp up to an open 2nd-floor gallery
+ *  deck (railed), a rooftop grapple point, and ground cover. The map's anchor. */
 export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 18;
+  const W = 30;
   const hw = W / 2;
-  // Ground perimeter: a doorway on every side (flankable), windows between.
   doorwayWall(boxes, cx, cz - hw, W, 'x', DIM.wallH, 0);
   doorwayWall(boxes, cx, cz + hw, W, 'x', DIM.wallH, 0);
   doorwayWall(boxes, cx - hw, cz, W, 'z', DIM.wallH, 0);
   doorwayWall(boxes, cx + hw, cz, W, 'z', DIM.wallH, 0);
-  // 2nd-floor mezzanine ring: a floor with a big central atrium opening.
-  floorWithHole(boxes, cx, cz, W, W, F, cx, cz, W * 0.5, W * 0.5);
-  // Mezzanine rail around the atrium + outer edge.
-  const inner = W * 0.25;
-  railing(boxes, cx, cz - inner, W * 0.5, 'x', F);
-  railing(boxes, cx, cz + inner, W * 0.5, 'x', F);
-  railing(boxes, cx - inner, cz, W * 0.5, 'z', F);
-  railing(boxes, cx + inner, cz, W * 0.5, 'z', F);
-  // Two interior ramps up to the mezzanine (opposite corners → openings in the ring).
-  stairRun(ramps, cx - hw + 2, cz - hw + 3, 4, '+x', 0, F);
-  stairRun(ramps, cx + hw - 2, cz + hw - 3, 4, '-x', 0, F);
-  // Rooftop over the ring (leaving the atrium open to the sky) — a combat deck.
-  roof(boxes, cx, cz - (inner + W * 0.125), W, W * 0.25, 2 * F);
-  roof(boxes, cx, cz + (inner + W * 0.125), W, W * 0.25, 2 * F);
-  // Edge cover crates on the ground.
-  crate(boxes, cx - hw + 2, cz + hw - 2);
-  crate(boxes, cx + hw - 2, cz - hw + 2);
-  gps.push(roofGrapplePoint(cx, cz, hw, 2 * F + 0.05));
+  const s = rampFloor(boxes, ramps, cx, cz, W, W, 0, F, cz); // central ramp to the gallery
+  edgeRails(boxes, cx, cz, W, W, F);
+  // Ground cover crates in the hall corners.
+  crate(boxes, cx - hw + 3, cz + hw - 3);
+  crate(boxes, cx + hw - 3, cz - hw + 3);
+  crate(boxes, cx - hw + 3, cz - hw + 3);
+  crate(boxes, cx + hw - 3, cz + hw - 3);
+  gps.push(roofGrapplePoint(cx, cz, hw, F + 0.05));
   const rect: Rect = [cx - hw, cz - hw, cx + hw, cz + hw];
   return {
     kind: 'command',
@@ -148,10 +162,10 @@ export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ram
     cz,
     sx: W,
     sz: W,
-    height: 2 * F,
+    height: F,
     floors: [
       { y: 0, rect },
-      { y: F, rect: [cx - hw, cz - hw, cx + hw, cz + hw] },
+      { y: F, rect },
     ],
     doorways: [
       { x: cx, z: cz - hw, y: 0 },
@@ -159,11 +173,8 @@ export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ram
       { x: cx - hw, z: cz, y: 0 },
       { x: cx + hw, z: cz, y: 0 },
     ],
-    stairs: [
-      { x0: cx - hw + 2, z0: cz - hw + 3, y0: 0, x1: cx - hw + 6, z1: cz - hw + 3, y1: F },
-      { x0: cx + hw - 2, z0: cz + hw - 3, y0: 0, x1: cx + hw - 6, z1: cz + hw - 3, y1: F },
-    ],
-    roof: { y: 2 * F, rect },
+    stairs: [s],
+    roof: { y: F, rect },
     connectors: [
       { side: 'S', x: cx, z: cz - hw, y: F },
       { side: 'N', x: cx, z: cz + hw, y: F },
@@ -173,16 +184,16 @@ export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ram
   };
 }
 
-/** BUNKER — ground-level cover: a U of half-walls with a low hard roof (head
- *  cover) + a crate. No verticality; a strongpoint to fight from/around. */
+/** BUNKER — ground-level cover: a U of half-walls with a low hard head-cover roof
+ *  + a crate. No verticality; a strongpoint to fight from/around. */
 export function bunkerModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 8;
+  const W = 10;
   const hw = W / 2;
-  const h = DIM.halfH; // 2 m walls (waist/chest cover)
+  const h = DIM.halfH; // 2 m walls
   halfWall(boxes, cx, cz + hw, W, 'x', 0); // back
   halfWall(boxes, cx - hw, cz, W, 'z', 0); // −x
   halfWall(boxes, cx + hw, cz, W, 'z', 0); // +x (open front −z)
-  floorSlab(boxes, cx, cz, W, W, h + DIM.floorT); // low hard roof for head cover
+  floorSlab(boxes, cx, cz, W, W, h + DIM.floorT); // low hard roof
   crate(boxes, cx, cz, 1.4);
   const rect: Rect = [cx - hw, cz - hw, cx + hw, cz + hw];
   return {
@@ -193,7 +204,7 @@ export function bunkerModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _
     sz: W,
     height: h,
     floors: [{ y: 0, rect }],
-    doorways: [{ x: cx, z: cz - hw, y: 0 }], // open front
+    doorways: [{ x: cx, z: cz - hw, y: 0 }],
     stairs: [],
     connectors: [],
   };
