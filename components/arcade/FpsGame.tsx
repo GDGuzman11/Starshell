@@ -11,7 +11,7 @@ import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
-import { makeKitTestArena } from './fps/kit/generate';
+import { makeModularArena } from './fps/kit/generate';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
@@ -208,7 +208,8 @@ export function FpsGame() {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
-      const lvl = kitRef.current ? makeKitTestArena(seed) : makeArena3D(isBoss ? 5 : campaignEnemies(level, enemies), seed);
+      const count = isBoss ? 5 : campaignEnemies(level, enemies);
+      const lvl = kitRef.current ? makeModularArena(count, seed) : makeArena3D(count, seed);
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);

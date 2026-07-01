@@ -16,7 +16,7 @@ import type { Box, Ladder, Ramp } from '../level3d';
 import { roofGrapplePoint } from '../level3d';
 import { DIM, TEX } from './types';
 import type { ModuleMeta, Rect } from './types';
-import { crate, doorwayWall, floorSlab, floorWithHole, halfWall, railing, wall, windowBand } from './atoms';
+import { crate, debris, doorwayWall, floorSlab, floorWithHole, halfWall, railing, rubble, wall, windowBand } from './atoms';
 
 type GP = { x: number; y: number; z: number }[];
 const F = DIM.floorStep; // 4 m between floors
@@ -181,6 +181,82 @@ export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ram
       { side: 'W', x: cx - hw, z: cz, y: F },
       { side: 'E', x: cx + hw, z: cz, y: F },
     ],
+  };
+}
+
+/** APARTMENT BLOCK — a downtown mid-rise: a windowed multi-storey building with a
+ *  front doorway, interior switchback ramps up through floor openings, and a flat
+ *  railed roof + grapple point. The bread-and-butter of the city grid. */
+export function apartmentBlockModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number, levels = 3): ModuleMeta {
+  const W = 20;
+  const D = 16;
+  const hw = W / 2;
+  const hd = D / 2;
+  const top = levels * F;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) boxes.push({ x: cx + sx * (hw - 0.3), y: (top + 0.6) / 2, z: cz + sz * (hd - 0.3), sx: 0.5, sy: top + 0.6, sz: 0.5, tex: 0 });
+  // Windowed perimeter per storey (front doorway on the ground).
+  for (let st = 0; st < levels; st++) {
+    const yb = st * F;
+    if (st === 0) doorwayWall(boxes, cx, cz - hd, W, 'x', DIM.wallH, yb);
+    else windowBand(boxes, cx, cz - hd, W, 'x', yb);
+    windowBand(boxes, cx, cz + hd, W, 'x', yb);
+    windowBand(boxes, cx - hw, cz, D, 'z', yb);
+    windowBand(boxes, cx + hw, cz, D, 'z', yb);
+  }
+  // Switchback interior ramps up every level (alternating halves).
+  const stairs = [];
+  for (let f = 0; f < levels; f++) stairs.push(rampFloor(boxes, ramps, cx, cz, W, D, f * F, (f + 1) * F, cz + (f % 2 === 0 ? -4 : 4)));
+  edgeRails(boxes, cx, cz, W, D, top);
+  gps.push(roofGrapplePoint(cx, cz, Math.min(hw, hd), top + 0.05));
+  const rect: Rect = [cx - hw, cz - hd, cx + hw, cz + hd];
+  const floors = [{ y: 0, rect }];
+  for (let f = 1; f <= levels; f++) floors.push({ y: f * F, rect });
+  return { kind: 'apartment', cx, cz, sx: W, sz: D, height: top, floors, doorways: [{ x: cx, z: cz - hd, y: 0 }], stairs, roof: { y: top, rect }, connectors: [{ side: 'S', x: cx, z: cz - hd, y: top }] };
+}
+
+/** RUIN — a bombed-out Stalingrad shell: perimeter walls blown into gapped
+ *  segments of varied height, an exposed 2nd-floor fragment, and rubble heaped
+ *  inside + around. Pure cover + a broken climb; no clean roof/grapple. */
+export function ruinModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gps: GP, cx: number, cz: number, rand: () => number, W = 18, D = 16): ModuleMeta {
+  const hw = W / 2;
+  const hd = D / 2;
+  const brokenWall = (x: number, z: number, len: number, along: 'x' | 'z') => {
+    const seg = 4;
+    const slen = len / seg;
+    for (let i = 0; i < seg; i++) {
+      if (rand() < 0.38) continue; // blown gap
+      const h = rand() < 0.45 ? DIM.wallH : DIM.halfH + rand() * 1.4; // some collapsed to half
+      const t = (i - (seg - 1) / 2) * slen;
+      if (along === 'x') wall(boxes, x + t, z, slen, 'x', h, 0);
+      else wall(boxes, x, z + t, slen, 'z', h, 0);
+    }
+  };
+  brokenWall(cx, cz - hd, W, 'x');
+  brokenWall(cx, cz + hd, W, 'x');
+  brokenWall(cx - hw, cz, D, 'z');
+  brokenWall(cx + hw, cz, D, 'z');
+  // Exposed 2nd-floor fragment in one corner + a rubble ramp of debris up to it.
+  floorSlab(boxes, cx + hw * 0.35, cz - hd * 0.3, W * 0.42, D * 0.42, F);
+  rubble(boxes, cx + hw * 0.35, cz - hd * 0.3 - D * 0.28, 3.2, rand);
+  // Interior + base rubble.
+  rubble(boxes, cx - hw * 0.3, cz + hd * 0.3, 3, rand);
+  rubble(boxes, cx, cz, 2.6, rand);
+  debris(boxes, cx, cz, Math.max(hw, hd) * 0.9, 5, rand);
+  const rect: Rect = [cx - hw, cz - hd, cx + hw, cz + hd];
+  return {
+    kind: 'ruin',
+    cx,
+    cz,
+    sx: W,
+    sz: D,
+    height: F,
+    floors: [
+      { y: 0, rect },
+      { y: F, rect: [cx + hw * 0.35 - W * 0.21, cz - hd * 0.3 - D * 0.21, cx + hw * 0.35 + W * 0.21, cz - hd * 0.3 + D * 0.21] },
+    ],
+    doorways: [],
+    stairs: [],
+    connectors: [],
   };
 }
 

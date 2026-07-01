@@ -179,3 +179,61 @@ export function crate(boxes: Box[], x: number, z: number, s = 1.4, tex: number =
 export function pillar(boxes: Box[], x: number, z: number, h: number, s = 1, tex: number = TEX.wall): void {
   boxes.push({ x, y: h / 2, z, sx: s, sy: h, sz: s, tex });
 }
+
+// ── War-torn / Stalingrad debris (all AABB boxes, procedural) ─────────────────
+
+/** A rubble mound — a heap of broken masonry (stacked, offset, shrinking boxes)
+ *  that reads as collapsed structure and gives waist-to-chest cover. */
+export function rubble(boxes: Box[], cx: number, cz: number, size: number, rand: () => number): void {
+  const n = 4 + Math.floor(rand() * 4);
+  for (let i = 0; i < n; i++) {
+    const s = size * (0.35 + rand() * 0.55) * (1 - i / (n + 3));
+    const ox = (rand() * 2 - 1) * size * 0.55;
+    const oz = (rand() * 2 - 1) * size * 0.55;
+    const h = Math.max(0.5, s * (0.5 + rand() * 0.7));
+    boxes.push({ x: cx + ox, y: h / 2, z: cz + oz, sx: s, sy: h, sz: s * (0.7 + rand() * 0.6), tex: 1 });
+  }
+}
+
+/** Scattered small debris chunks over an area (low cover / clutter). */
+export function debris(boxes: Box[], cx: number, cz: number, spread: number, count: number, rand: () => number): void {
+  for (let i = 0; i < count; i++) {
+    const s = 0.5 + rand() * 1.1;
+    boxes.push({
+      x: cx + (rand() * 2 - 1) * spread,
+      y: s * 0.35,
+      z: cz + (rand() * 2 - 1) * spread,
+      sx: s,
+      sy: s * 0.7,
+      sz: s * (0.7 + rand() * 0.5),
+      tex: 1,
+    });
+  }
+}
+
+/** A street barricade — a low line of piled cover (sandbags / wreckage). */
+export function barricade(boxes: Box[], cx: number, cz: number, len: number, along: Axis, rand: () => number): void {
+  const seg = Math.max(2, Math.round(len / 2));
+  for (let i = 0; i < seg; i++) {
+    const t = (i + 0.5) / seg - 0.5;
+    const h = 1.1 + rand() * 0.5;
+    boxes.push({
+      x: along === 'x' ? cx + t * len : cx + (rand() * 2 - 1) * 0.3,
+      y: h / 2,
+      z: along === 'z' ? cz + t * len : cz + (rand() * 2 - 1) * 0.3,
+      sx: along === 'x' ? len / seg : 1.4,
+      sy: h,
+      sz: along === 'z' ? len / seg : 1.4,
+      tex: 1,
+    });
+  }
+}
+
+/** A burnt-out vehicle hulk — a wide low body + a smaller cab, hard cover. */
+export function wreck(boxes: Box[], cx: number, cz: number, rand: () => number): void {
+  const long = rand() < 0.5 ? 'x' : 'z';
+  const L = 3 + rand() * 1.5;
+  const Wv = 1.8 + rand() * 0.5;
+  boxes.push({ x: cx, y: 0.7, z: cz, sx: long === 'x' ? L : Wv, sy: 1.4, sz: long === 'z' ? L : Wv, tex: 0 }); // body
+  boxes.push({ x: cx, y: 1.9, z: cz - (long === 'z' ? L * 0.15 : 0), sx: long === 'x' ? L * 0.5 : Wv, sy: 1.0, sz: long === 'z' ? L * 0.5 : Wv, tex: 0 }); // cab
+}
