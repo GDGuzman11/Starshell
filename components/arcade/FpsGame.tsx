@@ -11,6 +11,7 @@ import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
+import { makeKitTestArena } from './fps/kit/generate';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
@@ -82,6 +83,12 @@ export function FpsGame() {
     godRef.current = v;
     setGodState(v);
     if (gameRef.current) gameRef.current.god = v; // apply live to an in-progress level
+  }, []);
+  const [kit, setKitState] = useState(false); // dev: load the modular KIT test arena
+  const kitRef = useRef(false);
+  const setKit = useCallback((v: boolean) => {
+    kitRef.current = v;
+    setKitState(v);
   }, []);
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
@@ -201,7 +208,7 @@ export function FpsGame() {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
-      const lvl = makeArena3D(isBoss ? 5 : campaignEnemies(level, enemies), seed);
+      const lvl = kitRef.current ? makeKitTestArena(seed) : makeArena3D(isBoss ? 5 : campaignEnemies(level, enemies), seed);
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
@@ -495,13 +502,22 @@ export function FpsGame() {
                     WARP ▸
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setGod(!god)}
-                  className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${god ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
-                >
-                  God Mode: {god ? 'ON' : 'OFF'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGod(!god)}
+                    className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${god ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
+                  >
+                    God: {god ? 'ON' : 'OFF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKit(!kit)}
+                    className={`min-h-[30px] rounded border px-3 font-pixel text-[8px] uppercase transition-colors ${kit ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/20 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}
+                  >
+                    Kit Arena: {kit ? 'ON' : 'OFF'}
+                  </button>
+                </div>
               </div>
             )}
             <p className="mt-5 max-w-xs text-center font-pixel text-[6px] leading-relaxed text-white/35 sm:text-[8px]">
