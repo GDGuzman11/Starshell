@@ -18,7 +18,7 @@ import { makeBattlefieldLayout } from '../fps/kit/generate';
 import { loadCampaign, saveCampaign, validateLayout } from '../fps/kit/storage';
 
 const CANVAS = 440;
-const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate'];
+const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate', 'healthcrate'];
 // Regular bosses cycle at every 5th campaign level; the campaign ends on a GAUNTLET.
 const BOSS_CYCLE = ['XENOMORPH', 'WARLORD', 'KRAKEN'];
 const bossNameAt = (level: number) => BOSS_CYCLE[(((Math.floor(level / 5) - 1) % 3) + 3) % 3];
@@ -59,8 +59,9 @@ const MOD_COLOR: Record<ModuleKind, string> = {
   station: '#7affa0',
   ammocrate: '#ffcf5a',
   shieldcrate: '#5ad0ff',
+  healthcrate: '#ff5d8a',
 };
-const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK', coverwall: 'WALL', sandbags: 'SAND', container: 'CONT', barrier: 'BARR', dragonteeth: 'TEETH', fueltank: 'TANK', commtower: 'ANT', guardpost: 'POST', crates: 'CRAT', rubble: 'RUBL', wreck: 'WRCK', station: 'STN', ammocrate: 'AMMO', shieldcrate: 'SHLD' };
+const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK', coverwall: 'WALL', sandbags: 'SAND', container: 'CONT', barrier: 'BARR', dragonteeth: 'TEETH', fueltank: 'TANK', commtower: 'ANT', guardpost: 'POST', crates: 'CRAT', rubble: 'RUBL', wreck: 'WRCK', station: 'STN', ammocrate: 'AMMO', shieldcrate: 'SHLD', healthcrate: 'HP' };
 
 export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -308,18 +309,14 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     const cxB = cellToWorld(B.gx);
     const czB = cellToWorld(B.gz);
     const fpB = footprintOf(B);
+    // Any-angle bridge: footprint-edge to footprint-edge along the A→B direction.
     const dx = cxB - cxA;
     const dz = czB - czA;
-    let span: BridgeSpan;
-    if (Math.abs(dx) >= Math.abs(dz)) {
-      if (Math.abs(dz) > 8) return flash('align the two buildings on a row');
-      const z = (czA + czB) / 2;
-      span = { x0: cxA + Math.sign(dx) * (fpA.w / 2), z0: z, x1: cxB - Math.sign(dx) * (fpB.w / 2), z1: z, y: rhA };
-    } else {
-      if (Math.abs(dx) > 8) return flash('align the two buildings on a column');
-      const cxm = (cxA + cxB) / 2;
-      span = { x0: cxm, z0: czA + Math.sign(dz) * (fpA.d / 2), x1: cxm, z1: czB - Math.sign(dz) * (fpB.d / 2), y: rhA };
-    }
+    const L = Math.hypot(dx, dz) || 1;
+    const ux = dx / L;
+    const uz = dz / L;
+    const edge = (fp: { w: number; d: number }) => 1 / Math.max(Math.abs(ux) / (fp.w / 2), Math.abs(uz) / (fp.d / 2));
+    const span: BridgeSpan = { x0: cxA + ux * edge(fpA), z0: czA + uz * edge(fpA), x1: cxB - ux * edge(fpB), z1: czB - uz * edge(fpB), y: rhA };
     setBridges((bs) => [...bs, span]);
     flash('BRIDGE SNAPPED');
   };
@@ -550,7 +547,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
           <div className="flex flex-wrap gap-1">
             {RESUPPLY_KINDS.map((k) => (
               <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className="min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors" style={{ borderColor: tool === k ? MOD_COLOR[k] : 'rgba(255,255,255,0.15)', background: tool === k ? MOD_COLOR[k] + '22' : 'rgba(255,255,255,0.04)', color: MOD_COLOR[k] }}>
-                {k === 'station' ? '⊕ STATION' : k === 'ammocrate' ? '▣ AMMO' : '◆ SHIELD'}
+                {k === 'station' ? '⊕ STATION' : k === 'ammocrate' ? '▣ AMMO' : k === 'shieldcrate' ? '◆ SHIELD' : '✚ HEALTH'}
               </button>
             ))}
           </div>
@@ -562,7 +559,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
               SELECT
             </button>
           </div>
-          {tool === 'bridge' && <p className="text-[7px] text-[#ffd27a]/80">Click two aligned, same-height buildings to span a bridge. SELECT + click a bridge to delete.</p>}
+          {tool === 'bridge' && <p className="text-[7px] text-[#ffd27a]/80">Click two same-height buildings to span a bridge (any angle). SELECT + click a bridge to delete.</p>}
 
           <div className="flex flex-wrap items-center gap-1">
             <button type="button" onClick={rotateSel} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">ROTATE {selected == null ? `↻${rot}°` : ''}</button>

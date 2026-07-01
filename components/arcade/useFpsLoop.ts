@@ -102,7 +102,7 @@ export interface FpsSnapshot {
   stunAt: number; // player caught in a stun/concussion blast (screen distortion)
   fogAt: number; // Kraken void fog cast (vision-obscuring overlay)
   grappleReady: boolean; // a rooftop grapple point is aimable right now
-  radar: { x: number; z: number; boss: boolean }[]; // enemy positions, player-relative
+  radar: { x: number; z: number; boss: boolean; kind?: 'ammo' | 'shield' | 'health' }[]; // enemies + pickups, player-relative
 }
 
 interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; mesh: THREE.Mesh }
@@ -315,7 +315,7 @@ export function useFpsLoop(
       // (Re)build the enemy nav graph for this level (grid-accelerated).
       nav = buildNavGraph(g.level, grid);
       // Collect resupply points (stations + ammo/shield crates) placed in the level.
-      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate').map((m) => ({ kind: m.kind, x: m.cx, z: m.cz, cd: 0, tick: 0 }));
+      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate' || m.kind === 'healthcrate').map((m) => ({ kind: m.kind, x: m.cx, z: m.cz, cd: 0, tick: 0 }));
       // Build the composer once; afterwards just repoint the RenderPass at the
       // new scene (do NOT recreate the renderer or the whole composer).
       if (!composer) {
@@ -1257,10 +1257,13 @@ export function useFpsLoop(
                   rp.tick = 0; // reset so re-entering pulses immediately
                 }
               } else {
+                // Floating pickup — walk over it (non-solid). Grants a burst, then
+                // recharges after a short cooldown.
                 rp.cd -= dt;
                 if (near < 2.4 && rp.cd <= 0) {
                   if (rp.kind === 'ammocrate') refillAmmo(0.5);
-                  else p.armor = Math.min(p.maxArmor, p.armor + 50);
+                  else if (rp.kind === 'shieldcrate') p.armor = Math.min(p.maxArmor, p.armor + 50);
+                  else p.health = Math.min(g.maxHp, p.health + 50); // healthcrate
                   rp.cd = 8; // cooldown before it recharges
                   snap.pickupAt = now;
                   sfx.swap();
@@ -1564,6 +1567,14 @@ export function useFpsLoop(
               const forward = -dx * sinY - dz * cosY;
               return { x: right, z: forward, boss: e.boss != null };
             });
+          // Ammo / shield / health pickups on the radar (colour-coded).
+          for (const rp of resupply) {
+            const kind = rp.kind === 'ammocrate' ? 'ammo' : rp.kind === 'shieldcrate' ? 'shield' : rp.kind === 'healthcrate' ? 'health' : null;
+            if (!kind) continue;
+            const dx = rp.x - p.x;
+            const dz = rp.z - p.z;
+            snap.radar.push({ x: dx * cosY - dz * sinY, z: -dx * sinY - dz * cosY, boss: false, kind });
+          }
           onSnapshot({ ...snap });
         }
       }

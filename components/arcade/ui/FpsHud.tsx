@@ -63,11 +63,12 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
             px = (px / m) * RAD;
             py = (py / m) * RAD;
           }
+          const pickupColor = r.kind === 'ammo' ? '#ffcf5a' : r.kind === 'shield' ? '#5ad0ff' : r.kind === 'health' ? '#ff5d8a' : '';
           return (
             <div
               key={i}
-              className={`absolute rounded-full ${r.boss ? 'h-2 w-2 bg-[#ff9a3a]' : 'h-1.5 w-1.5 bg-[#ff5d6e]'}`}
-              style={{ left: `calc(50% + ${px}px)`, top: `calc(50% + ${py}px)`, transform: 'translate(-50%,-50%)' }}
+              className={`absolute ${r.kind ? 'h-1.5 w-1.5 rounded-[1px]' : r.boss ? 'h-2 w-2 rounded-full bg-[#ff9a3a]' : 'h-1.5 w-1.5 rounded-full bg-[#ff5d6e]'}`}
+              style={{ left: `calc(50% + ${px}px)`, top: `calc(50% + ${py}px)`, transform: 'translate(-50%,-50%)', backgroundColor: r.kind ? pickupColor : undefined }}
             />
           );
         })}

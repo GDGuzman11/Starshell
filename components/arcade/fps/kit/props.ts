@@ -117,18 +117,21 @@ export function stationProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
   return propMeta('station', cx, cz, W, W, h);
 }
 
-/** An AMMO crate — auto-grabbed when you're right beside it (bursts ammo, then
- *  briefly cools down). Amber marker in-world. */
-export function ammoCrateProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
-  boxes.push({ x: cx, y: 0.9, z: cz, sx: 2, sy: 1.8, sz: 2, tex: TEX.panel });
-  boxes.push({ x: cx, y: 1.85, z: cz, sx: 2.15, sy: 0.18, sz: 2.15, tex: TEX.rail }); // lid band
-  return propMeta('ammocrate', cx, cz, 2, 2, 2);
+// AMMO / SHIELD / HEALTH pickups are NON-SOLID floating grabs — no box to shoot or
+// bump into. They emit no geometry; the game draws a floating marker (scene.ts) and
+// auto-collects them on proximity + shows them on the radar (useFpsLoop).
+
+/** An AMMO pickup — walk over it to refill ammo (amber). */
+export function ammoCrateProp(_boxes: Box[], cx: number, cz: number): ModuleMeta {
+  return propMeta('ammocrate', cx, cz, 2, 2, 1.5);
 }
 
-/** A SHIELD crate — auto-grabbed when you're right beside it (bursts overshield,
- *  then briefly cools down). Cyan marker in-world. */
-export function shieldCrateProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
-  boxes.push({ x: cx, y: 0.9, z: cz, sx: 2, sy: 1.8, sz: 2, tex: TEX.panel });
-  boxes.push({ x: cx, y: 1.85, z: cz, sx: 2.15, sy: 0.18, sz: 2.15, tex: TEX.rail });
-  return propMeta('shieldcrate', cx, cz, 2, 2, 2);
+/** A SHIELD pickup — walk over it to refill overshield (cyan). */
+export function shieldCrateProp(_boxes: Box[], cx: number, cz: number): ModuleMeta {
+  return propMeta('shieldcrate', cx, cz, 2, 2, 1.5);
+}
+
+/** A HEALTH pickup — walk over it to restore health (red). */
+export function healthCrateProp(_boxes: Box[], cx: number, cz: number): ModuleMeta {
+  return propMeta('healthcrate', cx, cz, 2, 2, 1.5);
 }

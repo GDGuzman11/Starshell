@@ -11,9 +11,9 @@
 import type { Box, Ladder, Level3D, Ramp } from '../level3d';
 import { rng } from '../rand';
 import type { ModuleMeta } from './types';
-import { barricade, bridge, crate, debris, rubble, wreck } from './atoms';
+import { barricade, bridge, crate, debris, floorSlab, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
-import { ammoCrateProp, barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, shieldCrateProp, stationProp, wreckProp } from './props';
+import { ammoCrateProp, barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, healthCrateProp, rubbleProp, sandbagProp, shieldCrateProp, stationProp, wreckProp } from './props';
 import { cellToWorld, CELL, footprintOf, LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type BridgeSpan, type BuildingKind, type LevelLayout, type ModuleKind, type Placement, type PropKind, type Rot } from './layout';
 import { placeModule } from './transform';
 
@@ -204,6 +204,27 @@ function placeKind(kind: ModuleKind, cx: number, cz: number, rot: Rot, levels: n
       return placeModule((b) => ammoCrateProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
     case 'shieldcrate':
       return placeModule((b) => shieldCrateProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'healthcrate':
+      return placeModule((b) => healthCrateProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+  }
+}
+
+/** A flush walkable bridge between two roof points at height `y`, at ANY angle:
+ *  axis-aligned spans get one clean railed slab; diagonal spans are tiled from small
+ *  overlapping slabs (AABB-safe + walkable, chunky-pixel look). */
+function bridgeSpan(boxes: Box[], x0: number, z0: number, x1: number, z1: number, y: number): void {
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  const len = Math.hypot(dx, dz);
+  if (len < 0.5) return;
+  if (Math.abs(dx) < 0.8 || Math.abs(dz) < 0.8) {
+    bridge(boxes, (x0 + x1) / 2, (z0 + z1) / 2, len, Math.abs(dx) >= Math.abs(dz) ? 'x' : 'z', y);
+    return;
+  }
+  const n = Math.max(2, Math.ceil(len / 1.6));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    floorSlab(boxes, x0 + dx * t, z0 + dz * t, 3.4, 3.4, y);
   }
 }
 
@@ -240,13 +261,7 @@ export function buildFromLayout(layout: LevelLayout): Level3D {
   }
 
   // Bridges — a flush walkable span between two building roofs (top surface at y).
-  for (const br of layout.bridges ?? []) {
-    const along = Math.abs(br.x1 - br.x0) >= Math.abs(br.z1 - br.z0) ? 'x' : 'z';
-    const cx = (br.x0 + br.x1) / 2;
-    const cz = (br.z0 + br.z1) / 2;
-    const len = Math.hypot(br.x1 - br.x0, br.z1 - br.z0);
-    bridge(boxes, cx, cz, len, along, br.y);
-  }
+  for (const br of layout.bridges ?? []) bridgeSpan(boxes, br.x0, br.z0, br.x1, br.z1, br.y);
 
   // Light street clutter in the empty spaces (skips buildings + spawns).
   const clutter = Math.round(size / 8);
@@ -277,28 +292,26 @@ export function makeSampleLayout(theme = 'wartorn'): LevelLayout {
   return { v: 1, theme, size: 200, seed: 12345, placements };
 }
 
+type BNode = { gx: number; gz: number; module: ModuleKind; rot: Rot; params?: { levels?: number } };
+
 /**
- * PURPOSEFUL battlefield randomizer → an editable LevelLayout (not random noise):
- * a central command anchor, buildings scattered on an even grid with variety +
- * spacing, bridges connecting aligned same-height building pairs, and cover placed
- * STRATEGICALLY in the lanes between structures (dense down the central approach) so
- * crossing open ground always has something to hide behind, plus a few tall sightline
- * breakers. Loads into the editor so it can be hand-tweaked.
+ * PURPOSEFUL battlefield randomizer → an editable LevelLayout. Each roll picks a
+ * LAYOUT PATTERN (grid / square-ring / rows / random / spider-web / X / semicircle)
+ * for a connected same-height BARRACKS compound bridged together (any-angle bridges),
+ * uses the WHOLE map, mixes in varied building types, then fills the lanes with cover,
+ * sightline breakers, and ≥10 each of ammo / shield / health pickups + a station.
  */
 export function makeBattlefieldLayout(theme: string, size: number, seed: number): LevelLayout {
   const r = rng(seed);
   const pick = <T,>(a: T[]): T => a[Math.floor(r() * a.length)];
   const half = size / 2;
-  // Building anchors on an even grid spanning the WHOLE map (out to ~one building's
-  // half-width from the walls), so the arena is used edge-to-edge, not just the centre.
-  const reach = Math.max(2, Math.floor((half - 12) / CELL));
-  const cells: number[] = [];
-  for (let g = -reach; g <= reach; g++) if (g % 2 === 0) cells.push(g);
+  const reach = Math.max(3, Math.floor((half - 12) / CELL));
   const spawns = [
     { x: 0, z: -half * 0.86 },
     { x: 0, z: half * 0.86 },
   ];
-  const nearSpawn = (gx: number, gz: number) => spawns.some((s) => Math.hypot(cellToWorld(gx) - s.x, cellToWorld(gz) - s.z) < 22);
+  const nearSpawn = (gx: number, gz: number) => spawns.some((s) => Math.hypot(cellToWorld(gx) - s.x, cellToWorld(gz) - s.z) < 24);
+  const inBounds = (gx: number, gz: number) => Math.abs(cellToWorld(gx)) <= half - 12 && Math.abs(cellToWorld(gz)) <= half - 12;
 
   const placements: Placement[] = [];
   const bridges: BridgeSpan[] = [];
@@ -307,87 +320,133 @@ export function makeBattlefieldLayout(theme: string, size: number, seed: number)
   const free = (gx: number, gz: number) => !occupied.has(key(gx, gz));
   const claim = (gx: number, gz: number) => occupied.add(key(gx, gz));
 
-  // A HEIGHT-4 building compound (command + BARRACKS) filling the whole even grid at
-  // bridge-spacing (2 cells apart), all axis-aligned + the same roof height — so any
-  // orthogonal neighbours can be (and are) bridged. This guarantees well over 8
-  // aligned, same-height, connectable buildings spread across the map.
-  const H4 = 4;
-  const h4cells: { gx: number; gz: number; pi: number }[] = [];
-  placements.push({ module: 'command', gx: 0, gz: 0, rot: 0 });
-  claim(0, 0);
-  h4cells.push({ gx: 0, gz: 0, pi: 0 });
-  for (const gx of cells) {
-    for (const gz of cells) {
-      if ((gx === 0 && gz === 0) || nearSpawn(gx, gz) || !free(gx, gz)) continue;
-      placements.push({ module: 'barracks', gx, gz, rot: 0 }); // rot 0 → clean bridge edges
-      h4cells.push({ gx, gz, pi: placements.length - 1 });
-      claim(gx, gz);
-    }
-  }
-
-  // VARIETY: swap a minority of the barracks for taller towers / apartments / ruins
-  // for silhouette, but never drop the same-height compound below a safe count (keeps
-  // the ≥8 bridgeable guarantee). Converted cells are excluded from the compound.
-  const variety: BuildingKind[] = ['watchtower', 'apartment', 'ruin', 'bunker'];
-  const converted = new Set<string>();
-  let keep = h4cells.length - 1; // exclude the command hub from the swap budget
-  for (const c of h4cells) {
-    if (c.pi === 0) continue; // never convert the command hub
-    if (keep <= 10) break; // always leave a compound of ≥10 (well above 8)
-    if (r() < 0.3) {
-      const kind = pick(variety);
-      placements[c.pi] = { module: kind, gx: c.gx, gz: c.gz, rot: pick([0, 90, 180, 270]) as Rot, params: kind === 'apartment' ? { levels: 2 + Math.floor(r() * 3) } : undefined };
-      converted.add(key(c.gx, c.gz));
-      keep--;
-    }
-  }
-
-  // Bridge every orthogonal neighbour pair still in the height-4 compound (each once).
-  const compound = new Map<string, Placement>();
-  for (const c of h4cells) if (!converted.has(key(c.gx, c.gz))) compound.set(key(c.gx, c.gz), placements[c.pi]);
-  const bridgeBetween = (A: Placement, B: Placement) => {
-    const cxA = cellToWorld(A.gx);
-    const czA = cellToWorld(A.gz);
-    const fpA = footprintOf(A);
-    const cxB = cellToWorld(B.gx);
-    const czB = cellToWorld(B.gz);
-    const fpB = footprintOf(B);
-    if (Math.abs(cxB - cxA) >= Math.abs(czB - czA)) bridges.push({ x0: cxA + Math.sign(cxB - cxA) * (fpA.w / 2), z0: czA, x1: cxB - Math.sign(cxB - cxA) * (fpB.w / 2), z1: czA, y: H4 });
-    else bridges.push({ x0: cxA, z0: czA + Math.sign(czB - czA) * (fpA.d / 2), x1: cxA, z1: czB - Math.sign(czB - czA) * (fpB.d / 2), y: H4 });
+  // Place a connected building at a WORLD point, snapped to a 32 m (even-cell) grid so
+  // buildings never overlap. Returns the node (or null if it didn't fit).
+  const placeB = (wx: number, wz: number, kind: BuildingKind = 'barracks'): BNode | null => {
+    const gx = Math.round(wx / (CELL * 2)) * 2;
+    const gz = Math.round(wz / (CELL * 2)) * 2;
+    if (!inBounds(gx, gz) || nearSpawn(gx, gz) || !free(gx, gz)) return null;
+    const node: BNode = { gx, gz, module: kind, rot: 0 };
+    placements.push(node);
+    claim(gx, gz);
+    return node;
   };
-  for (const [k, A] of compound) {
-    const [gx, gz] = k.split(',').map(Number);
-    const east = compound.get(key(gx + 2, gz));
-    if (east) bridgeBetween(A, east);
-    const south = compound.get(key(gx, gz + 2));
-    if (south) bridgeBetween(A, south);
-  }
+  // A flush any-angle bridge between two building roofs (footprint-edge to edge).
+  const connect = (a: BNode | null, b: BNode | null) => {
+    if (!a || !b || (a.gx === b.gx && a.gz === b.gz)) return;
+    const cxA = cellToWorld(a.gx);
+    const czA = cellToWorld(a.gz);
+    const fpA = footprintOf(a);
+    const cxB = cellToWorld(b.gx);
+    const czB = cellToWorld(b.gz);
+    const fpB = footprintOf(b);
+    const dx = cxB - cxA;
+    const dz = czB - czA;
+    const L = Math.hypot(dx, dz) || 1;
+    const ux = dx / L;
+    const uz = dz / L;
+    const edge = (fp: { w: number; d: number }) => 1 / Math.max(Math.abs(ux) / (fp.w / 2), Math.abs(uz) / (fp.d / 2));
+    bridges.push({ x0: cxA + ux * edge(fpA), z0: czA + uz * edge(fpA), x1: cxB - ux * edge(fpB), z1: czB - uz * edge(fpB), y: 4 });
+  };
 
-  // Strategic cover in the ODD-cell lanes between the buildings, across the whole map —
-  // denser down the central approach so crossing open ground always has cover.
-  const coverPool: PropKind[] = ['barrier', 'sandbags', 'dragonteeth', 'rubble', 'container', 'wreck', 'crates', 'coverwall'];
-  for (let gx = -reach; gx <= reach; gx++) {
-    for (let gz = -reach; gz <= reach; gz++) {
-      if ((gx % 2 === 0 && gz % 2 === 0) || nearSpawn(gx, gz) || !free(gx, gz)) continue;
-      const p = gx === 0 ? 0.6 : 0.34;
-      if (r() < p) {
-        placements.push({ module: pick(coverPool), gx, gz, rot: pick([0, 90]) as Rot });
-        claim(gx, gz);
-      }
+  // Command hub at the centre (roof height 4 — bridge-compatible with the barracks).
+  const hub = placeB(0, 0, 'command');
+  const R = Math.min(half - 28, half * 0.62);
+  const pattern = pick(['grid', 'square', 'rows', 'random', 'web', 'x', 'semicircle'] as const);
+
+  if (pattern === 'grid') {
+    const g: BNode[] = [];
+    for (let gx = -reach; gx <= reach; gx += 2) for (let gz = -reach; gz <= reach; gz += 2) if (!(gx === 0 && gz === 0)) { const n = placeB(cellToWorld(gx), cellToWorld(gz)); if (n) g.push(n); }
+    if (hub) g.push(hub);
+    for (const a of g) for (const b of g) if ((b.gx - a.gx === 2 && b.gz === a.gz) || (b.gz - a.gz === 2 && b.gx === a.gx)) connect(a, b);
+  } else if (pattern === 'square') {
+    const ring: BNode[] = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const cx = Math.cos(a);
+      const sz = Math.sin(a);
+      const m = Math.max(Math.abs(cx), Math.abs(sz)); // square (max-norm) perimeter
+      const n = placeB((cx / m) * R, (sz / m) * R);
+      if (n && !ring.some((p) => p.gx === n.gx && p.gz === n.gz)) ring.push(n);
     }
+    for (let i = 0; i < ring.length; i++) connect(ring[i], ring[(i + 1) % ring.length]);
+  } else if (pattern === 'rows') {
+    for (const rz of [-R * 0.55, R * 0.05, R * 0.6]) {
+      const row: BNode[] = [];
+      for (let x = -R; x <= R; x += CELL * 2) { const n = placeB(x, rz); if (n) row.push(n); }
+      for (let i = 0; i < row.length - 1; i++) connect(row[i], row[i + 1]);
+    }
+  } else if (pattern === 'random') {
+    const placed: BNode[] = [];
+    for (let i = 0; i < 9; i++) { const n = placeB((r() * 2 - 1) * R, (r() * 2 - 1) * R); if (n) placed.push(n); }
+    for (let i = 1; i < placed.length; i++) {
+      let best = 0;
+      let bd = Infinity;
+      for (let j = 0; j < i; j++) { const d = Math.hypot(placed[i].gx - placed[j].gx, placed[i].gz - placed[j].gz); if (d < bd) { bd = d; best = j; } }
+      connect(placed[i], placed[best]); // nearest-neighbour tree → all connected
+    }
+  } else if (pattern === 'web') {
+    const ring: BNode[] = [];
+    const N = 6;
+    for (let i = 0; i < N; i++) { const a = (i / N) * Math.PI * 2; const n = placeB(Math.cos(a) * R, Math.sin(a) * R); if (n) ring.push(n); }
+    for (const n of ring) connect(hub, n); // spokes
+    for (let i = 0; i < ring.length; i++) connect(ring[i], ring[(i + 1) % ring.length]); // web
+  } else if (pattern === 'x') {
+    for (const [ax, az] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const inner = placeB(ax * R * 0.45, az * R * 0.45);
+      const outer = placeB(ax * R * 0.9, az * R * 0.9);
+      connect(hub, inner);
+      connect(inner, outer);
+    }
+  } else {
+    const N = 7; // semicircle arc
+    const arc: BNode[] = [];
+    for (let i = 0; i < N; i++) { const a = Math.PI * (i / (N - 1)); const n = placeB(Math.cos(a) * R, Math.sin(a) * R * 0.7 - R * 0.2); if (n) arc.push(n); }
+    for (let i = 0; i < arc.length - 1; i++) connect(arc[i], arc[i + 1]);
   }
 
-  // Tall sightline breakers + resupply (station + ammo + shield) out in the field.
-  for (const kind of ['fueltank', 'commtower', 'station', 'ammocrate', 'shieldcrate'] as PropKind[]) {
-    for (let t = 0; t < 24; t++) {
-      const gx = pick([-1, 1]) * (1 + Math.floor(r() * reach));
-      const gz = pick([-1, 1]) * (1 + Math.floor(r() * reach));
+  // Guarantee a connected cluster of ≥4: if the pattern couldn't fit enough, drop a
+  // small connected block near the centre.
+  if (bridges.length < 3) {
+    const fb: BNode[] = [];
+    for (const [dx, dz] of [[2, 0], [0, 2], [2, 2], [4, 0]]) { const n = placeB(cellToWorld(dx), cellToWorld(dz)); if (n) fb.push(n); }
+    for (const n of fb) connect(hub, n);
+  }
+
+  // VARIETY: scatter non-connected buildings of random types across free even cells.
+  const variety: BuildingKind[] = ['watchtower', 'apartment', 'ruin', 'bunker'];
+  for (let gx = -reach; gx <= reach; gx += 2) for (let gz = -reach; gz <= reach; gz += 2) {
+    if (nearSpawn(gx, gz) || !free(gx, gz) || !inBounds(gx, gz)) continue;
+    if (r() < 0.26) { const k = pick(variety); placements.push({ module: k, gx, gz, rot: pick([0, 90, 180, 270]) as Rot, params: k === 'apartment' ? { levels: 2 + Math.floor(r() * 3) } : undefined }); claim(gx, gz); }
+  }
+
+  // Cover in the odd-cell lanes across the WHOLE map (denser down the centre).
+  const coverPool: PropKind[] = ['barrier', 'sandbags', 'dragonteeth', 'rubble', 'container', 'wreck', 'crates', 'coverwall'];
+  for (let gx = -reach; gx <= reach; gx++) for (let gz = -reach; gz <= reach; gz++) {
+    if ((gx % 2 === 0 && gz % 2 === 0) || nearSpawn(gx, gz) || !free(gx, gz)) continue;
+    if (r() < (gx === 0 ? 0.5 : 0.3)) { placements.push({ module: pick(coverPool), gx, gz, rot: pick([0, 90]) as Rot }); claim(gx, gz); }
+  }
+
+  // Scatter a set of pieces at random free cells (best-effort count).
+  const scatter = (kind: PropKind, count: number) => {
+    let placed = 0;
+    let guard = 0;
+    while (placed < count && guard++ < count * 40) {
+      const gx = Math.round((r() * 2 - 1) * reach);
+      const gz = Math.round((r() * 2 - 1) * reach);
       if (nearSpawn(gx, gz) || !free(gx, gz)) continue;
       placements.push({ module: kind, gx, gz, rot: 0 });
       claim(gx, gz);
-      break;
+      placed++;
     }
-  }
+  };
+  scatter('fueltank', 2);
+  scatter('commtower', 2);
+  scatter('station', 2);
+  // At least 10 each of ammo / shield / health pickups (radar-visible, walk-over grab).
+  scatter('ammocrate', 10);
+  scatter('shieldcrate', 10);
+  scatter('healthcrate', 10);
 
   return { v: LAYOUT_VERSION, theme, size, seed, placements, bridges };
 }
