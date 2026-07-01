@@ -12,7 +12,7 @@ import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
-import { resolveLevel } from './fps/kit/levels';
+import { resolveLevel, campaignTotalLevels, isBossLevel, isGauntletLevel, bossKindFor } from './fps/kit/levels';
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
@@ -24,9 +24,8 @@ import { THEME_LIST } from './fps/kit/themes';
 type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
-const LEVELS = 20;
 const ARMOR_COST = 100;
-const GAUNTLET_BOSSES: BossKind[] = ['xeno', 'warrior', 'octopus']; // lvl-20 round order
+const GAUNTLET_BOSSES: BossKind[] = ['xeno', 'warrior', 'octopus']; // final gauntlet round order
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
 // Player picks a squad count at the menu; it holds for every non-boss level (the
 // map is huge). Each squad is a 5-man fireteam → soldiers = squads × SQUAD_SIZE.
@@ -231,7 +230,8 @@ export function FpsGame() {
     (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>, presetLevel?: Level3D) => {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
-      const isBoss = level % 5 === 0;
+      const total = campaignTotalLevels(); // flexible campaign length (follows authored levels)
+      const isBoss = isBossLevel(level, total);
       const mapCount = isBoss ? 5 : mapCountFor(squads);
       // Level source: an editor sandbox preset wins; then the dev toggles (rotation
       // sample / war-torn city); otherwise the campaign resolver (a baked authored
@@ -242,10 +242,11 @@ export function FpsGame() {
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
       player.health = maxHp;
-      // Level 20 = the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord → Kraken).
-      const gauntlet = level === 20;
+      // The FINAL level is the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord →
+      // Kraken). Regular boss levels (every 5th) cycle through the three boss kinds.
+      const gauntlet = isGauntletLevel(level, total);
       const round = gauntlet ? gauntletRef.current || 1 : 0;
-      const bossKinds: BossKind[] = gauntlet ? [GAUNTLET_BOSSES[round - 1]] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
+      const bossKinds: BossKind[] = gauntlet ? [GAUNTLET_BOSSES[round - 1]] : [bossKindFor(level)];
       const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, Math.random);
       // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
@@ -326,7 +327,7 @@ export function FpsGame() {
       const ups: Record<string, Upg> = {};
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory();
-      gauntletRef.current = level === 20 ? 1 : 0;
+      gauntletRef.current = isGauntletLevel(level) ? 1 : 0;
       sandboxRef.current = false;
       setRun({ level, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
@@ -364,15 +365,16 @@ export function FpsGame() {
       endedAt: Date.now(),
     }));
     if (snap.status === 'won') {
+      const total = campaignTotalLevels();
       setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills) }));
-      if (run.level >= LEVELS) {
+      if (run.level >= total) {
         // GAUNTLET: advance through the three enhanced bosses with a recovery window.
         if (gauntletRef.current > 0 && gauntletRef.current < 3) {
           gauntletRef.current += 1;
           setRecovery(gauntletRef.current); // overlay handles the heal + next-round start
         } else {
-          saveBest(LEVELS);
-          setBest((b) => Math.max(b, LEVELS));
+          saveBest(total);
+          setBest((b) => Math.max(b, total));
           setMode('complete');
         }
       } else {
@@ -493,7 +495,7 @@ export function FpsGame() {
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
-            <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · 20-LEVEL CAMPAIGN</p>
+            <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignTotalLevels()}-LEVEL CAMPAIGN</p>
             {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
 
             <p className="mt-5 font-pixel text-[7px] text-white/45 sm:text-[8px]">DIFFICULTY</p>
@@ -628,7 +630,7 @@ export function FpsGame() {
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
-            onNext={() => { const next = run.level + 1; if (next === 20) gauntletRef.current = 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
+            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
             onExit={() => setMode('menu')}
           />
         )}
@@ -649,7 +651,7 @@ export function FpsGame() {
           <RunStatsCard
             title="CAMPAIGN COMPLETE"
             titleColor="#aef5c8"
-            subtitle={`ALL ${LEVELS} LEVELS CLEARED`}
+            subtitle={`ALL ${run.level} LEVELS CLEARED`}
             level={run.level}
             gold={run.gold}
             stats={runStats}

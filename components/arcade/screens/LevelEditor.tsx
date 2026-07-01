@@ -19,22 +19,23 @@ import { loadCampaign, saveCampaign } from '../fps/kit/storage';
 
 const CANVAS = 440;
 const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate'];
-// Boss fights are fixed at every 5th campaign level (shown, not editable).
-const BOSS_AT: Record<number, string> = { 5: 'XENOMORPH', 10: 'WARLORD', 15: 'KRAKEN', 20: 'GAUNTLET' };
+// Regular bosses cycle at every 5th campaign level; the campaign ends on a GAUNTLET.
+const BOSS_CYCLE = ['XENOMORPH', 'WARLORD', 'KRAKEN'];
+const bossNameAt = (level: number) => BOSS_CYCLE[(((Math.floor(level / 5) - 1) % 3) + 3) % 3];
 
-/** The campaign as displayed: authored levels interleaved with the fixed boss slots
- *  (a boss at every 5th campaign level). Returns items in play order. */
+/** The campaign as displayed: authored levels interleaved with the boss slots (a boss
+ *  every 5th level) and a final GAUNTLET capstone. Returns items in play order. */
 type BeltItem = { type: 'level'; idx: number; level: number } | { type: 'boss'; name: string; level: number };
 function buildBelt(count: number): BeltItem[] {
   const belt: BeltItem[] = [];
   let ai = 0;
   let L = 1;
   while (ai < count) {
-    if (L % 5 === 0) belt.push({ type: 'boss', name: BOSS_AT[L] ?? 'BOSS', level: L });
+    if (L % 5 === 0) belt.push({ type: 'boss', name: bossNameAt(L), level: L });
     else belt.push({ type: 'level', idx: ai++, level: L });
     L++;
   }
-  if (count > 0 && L % 5 === 0) belt.push({ type: 'boss', name: BOSS_AT[L] ?? 'BOSS', level: L }); // trailing boss preview
+  if (count > 0) belt.push({ type: 'boss', name: 'GAUNTLET', level: L }); // final capstone
   return belt;
 }
 const MOD_COLOR: Record<ModuleKind, string> = {
