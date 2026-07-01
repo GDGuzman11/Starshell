@@ -125,17 +125,14 @@ export function rampHeightAt(rmp: Ramp, px: number, pz: number): number {
 type Rnd = () => number;
 const WALL_H = 4.5;
 
-/** Grapple landing spots on the FOUR ROOF EDGES (pulled `inset` onto the deck, so
- *  landing is inside the rail). Edge points are what's actually VISIBLE from the
- *  ground looking up at a building — a centre point is occluded by the roof. */
-export function roofGrapplePoints(cx: number, cz: number, half: number, y: number, inset = 1.3): { x: number; y: number; z: number }[] {
+/** ONE grapple landing spot per roof, on the EDGE FACING THE ARENA CENTRE (pulled
+ *  `inset` onto the deck so landing is inside the rail). An edge point is what's
+ *  actually VISIBLE from the ground looking up — a centre point is occluded by the
+ *  roof — and the centre-facing side is the most-approached / most-visible one. */
+export function roofGrapplePoint(cx: number, cz: number, half: number, y: number, inset = 1.3): { x: number; y: number; z: number } {
   const e = Math.max(0.6, half - inset);
-  return [
-    { x: cx, y, z: cz - e },
-    { x: cx, y, z: cz + e },
-    { x: cx - e, y, z: cz },
-    { x: cx + e, y, z: cz },
-  ];
+  if (Math.abs(cx) >= Math.abs(cz)) return { x: cx - Math.sign(cx || 1) * e, y, z: cz }; // ±x edge toward centre
+  return { x: cx, y, z: cz - Math.sign(cz || 1) * e }; // ±z edge toward centre
 }
 
 /** A deck corner of a 3-floor tower nearest the target (away from the front
@@ -393,7 +390,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
   const hillZ = -half * 0.55;
   hill(boxes, ladders, hillX, hillZ, hillW);
   placed.push({ x: hillX, z: hillZ, rad: hillW });
-  grapplePoints.push(...roofGrapplePoints(hillX, hillZ, hillW / 2, 3.05)); // hill top edges (H=3)
+  grapplePoints.push(roofGrapplePoint(hillX, hillZ, hillW / 2, 3.05)); // hill top edge (H=3)
 
   // Phase-3 demo terrain (placed before towers so they avoid it): a ramp up onto
   // a raised plateau, and one sunken "trench" (berm-ringed pit at y≥0 with entry
@@ -429,7 +426,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     if (isTall) towers3.push({ x: pos.x, z: pos.z, half: bw / 2 });
     // Rooftop grapple points on the edges (visible from the ground). Tall tower
     // roof = (floors-1)*FLOOR_H, 2-floor perch = 3.
-    grapplePoints.push(...roofGrapplePoints(pos.x, pos.z, bw / 2, (isTall ? (TOWER_FLOORS - 1) * FLOOR_H : 3) + 0.05));
+    grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, (isTall ? (TOWER_FLOORS - 1) * FLOOR_H : 3) + 0.05));
   }
   // Then smaller structures fill the gaps (platforms + bunkers).
   const fillers = Math.round(size / 6);
@@ -440,7 +437,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     placed.push({ x: pos.x, z: pos.z, rad: bw });
     if (r() < 0.5) {
       platform(boxes, ladders, pos.x, pos.z, bw);
-      grapplePoints.push(...roofGrapplePoints(pos.x, pos.z, bw / 2, 2.65)); // platform deck edges (H=2.6)
+      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, 2.65)); // platform deck edge (H=2.6)
     } else bunker(boxes, pos.x, pos.z, bw, r);
   }
 
