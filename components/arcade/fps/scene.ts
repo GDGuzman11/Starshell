@@ -6,7 +6,7 @@
  * low resolution (see useFpsLoop) and CSS-upscaled for the '93 pixel look.
  */
 import * as THREE from 'three';
-import type { Level3D } from './level3d';
+import type { Box, Level3D } from './level3d';
 import { getTextures, groundTex } from './textures';
 import { rng } from './rand';
 import { makeWallMaterial, makeGroundMaterial, type RenderTier } from './materials';
@@ -14,6 +14,7 @@ import { makeWallMaterial, makeGroundMaterial, type RenderTier } from './materia
 export interface World {
   scene: THREE.Scene;
   dispose: () => void;
+  boxMeshes: Map<Box, THREE.Mesh>; // for hiding destroyed structures
 }
 
 function tex(canvas: HTMLCanvasElement, repeat = 1): THREE.Texture {
@@ -92,12 +93,14 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
   const canvases = getTextures();
   const mats = canvases.map((c) => makeWallMaterial(tex(c), tier));
   disposables.push(...mats);
+  const boxMeshes = new Map<Box, THREE.Mesh>();
   for (const b of level.boxes) {
     const geo = new THREE.BoxGeometry(b.sx, b.sy, b.sz);
     const mesh = new THREE.Mesh(geo, mats[b.tex % mats.length]);
     mesh.position.set(b.x, b.y, b.z);
     scene.add(mesh);
     disposables.push(geo);
+    boxMeshes.set(b, mesh);
   }
 
   // Ramps — VISUAL sloped slabs. The collider is the height function in physics;
@@ -167,5 +170,5 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
     }
   }
 
-  return { scene, dispose: () => disposables.forEach((d) => d.dispose()) };
+  return { scene, dispose: () => disposables.forEach((d) => d.dispose()), boxMeshes };
 }

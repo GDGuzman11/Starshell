@@ -35,10 +35,27 @@ export function rayWallDist(o: Vec3, d: Vec3, lvl: Level3D, maxD: number, grid?:
   let best = maxD;
   const boxes = grid ? grid.queryRay(o[0], o[2], d[0], d[2], maxD) : lvl.boxes;
   for (let i = 0; i < boxes.length; i++) {
+    if (boxes[i].dead) continue;
     const t = rayBox(o, d, boxes[i]);
     if (t < best) best = t;
   }
   return best;
+}
+
+/** Like rayWallDist but also returns the nearest hit box (for destructible walls). */
+export function rayWallBox(o: Vec3, d: Vec3, lvl: Level3D, maxD: number): { t: number; box: Box | null } {
+  let best = maxD;
+  let hit: Box | null = null;
+  for (let i = 0; i < lvl.boxes.length; i++) {
+    const b = lvl.boxes[i];
+    if (b.dead) continue;
+    const t = rayBox(o, d, b);
+    if (t < best) {
+      best = t;
+      hit = b;
+    }
+  }
+  return { t: best, box: hit };
 }
 
 /** Is the straight segment a→b blocked by any wall? */

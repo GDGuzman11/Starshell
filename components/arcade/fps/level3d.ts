@@ -19,6 +19,9 @@ export interface Box {
   sy: number;
   sz: number;
   tex: number;
+  hp?: number; // structural HP (lazy-init on first hit); destructible by gunfire
+  maxHp?: number;
+  dead?: boolean; // destroyed: skipped by collision / LoS / shots, mesh hidden
 }
 
 export interface Ladder {

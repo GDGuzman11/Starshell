@@ -6,7 +6,8 @@ import { buildWorld, type World } from './fps/scene';
 import { EYE, MAX_PITCH, launchPlayer, pushPlayer, stepPlayer, type Player3 } from './fps/physics';
 import type { Level3D } from './fps/level3d';
 import { updateEnemies, hurtEnemy, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
-import { rayWallDist, raySphere, segBlocked, type Vec3 } from './fps/combat';
+import { rayWallBox, raySphere, segBlocked, type Vec3 } from './fps/combat';
+import type { Box } from './fps/level3d';
 import { bossTex } from './fps/textures';
 import { buildEnemyModel, disposeEnemyModel } from './fps/enemies/models';
 import { poseDeath, poseEnemy } from './fps/enemies/animator';
@@ -389,6 +390,34 @@ export function useFpsLoop(
       tracers.push({ line, geo, until: performance.now() + 90 });
     };
 
+    // Destructible structures: gunfire chips level boxes (HP scales with volume,
+    // lazy-init on first hit). Each hit sparks debris; when a box is destroyed it's
+    // hidden + flagged dead (collision / LoS / shots skip it) with a rubble burst.
+    const boxMaxHp = (b: Box) => Math.min(1600, 130 + b.sx * b.sy * b.sz * 22);
+    const damageBox = (b: Box, dmg: number, hx: number, hy: number, hz: number, tNow: number) => {
+      if (b.dead) return;
+      if (b.hp == null) b.hp = b.maxHp = boxMaxHp(b);
+      b.hp -= dmg;
+      if (world) {
+        const chip = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xd8c8a0, transparent: true }));
+        chip.position.set(hx, hy, hz);
+        world.scene.add(chip);
+        flashes.push({ mesh: chip, born: tNow, r: 0.5 });
+      }
+      if (b.hp <= 0) {
+        b.dead = true;
+        const mesh = world?.boxMeshes.get(b);
+        if (mesh) mesh.visible = false;
+        if (world) {
+          const boom = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xbfae8a, transparent: true }));
+          boom.position.set(b.x, b.y, b.z);
+          world.scene.add(boom);
+          flashes.push({ mesh: boom, born: tNow, r: Math.max(1.6, (b.sx + b.sz) * 0.5) });
+        }
+        sfx.explosion();
+      }
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === 'r') reloadReq.current = true;
@@ -668,7 +697,8 @@ export function useFpsLoop(
             const sfy2 = Math.sin(spitch);
             const sfz2 = -scp * Math.cos(syaw);
             const sdir: Vec3 = [sfx2, sfy2, sfz2];
-            const wallD = rayWallDist(eye, sdir, g.level, RANGE, grid ?? undefined);
+            const wb = rayWallBox(eye, sdir, g.level, RANGE);
+            const wallD = wb.t;
             let hitT = wallD;
             let hit: Enemy | null = null;
             for (const e of g.enemies) {
@@ -682,6 +712,10 @@ export function useFpsLoop(
               }
             }
             addTracer([eye[0] + sfx2 * 0.4, eye[1] - 0.12, eye[2] + sfz2 * 0.4], [eye[0] + sfx2 * hitT, eye[1] + sfy2 * hitT, eye[2] + sfz2 * hitT], gun.color);
+            // Chip the structure the shot hit (if the wall was the nearest thing).
+            if (!hit && wb.box && wallD < RANGE) {
+              damageBox(wb.box, gun.splash ? gun.dmg * 1.4 : gun.dmg, eye[0] + sfx2 * wallD, eye[1] + sfy2 * wallD, eye[2] + sfz2 * wallD, now);
+            }
             const zoomBoost = 1 + zoomLevel.current * 0.5; // impacts/explosions read bigger when scoped
             if (gun.splash) {
               // Explosive: detonate at the impact point and splash-damage everyone

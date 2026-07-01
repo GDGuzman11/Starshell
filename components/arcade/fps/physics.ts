@@ -64,6 +64,7 @@ export function groundHeightAt(
   const boxes: readonly Box[] = grid ? grid.queryAABB(x, z, x, z) : lvl.boxes;
   for (let i = 0; i < boxes.length; i++) {
     const b = boxes[i];
+    if (b.dead) continue; // destroyed structure — no collision
     if (
       x > b.x - b.sx / 2 &&
       x < b.x + b.sx / 2 &&
@@ -130,7 +131,7 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
   // Candidate boxes overlapping the player's XZ footprint at the current pos.
   // Returns the full box list when no grid is supplied (identical behavior).
   const near = (): readonly Box[] =>
-    grid ? grid.queryAABB(p.x - R, p.z - R, p.x + R, p.z + R) : lvl.boxes;
+    (grid ? grid.queryAABB(p.x - R, p.z - R, p.x + R, p.z + R) : lvl.boxes).filter((b) => !b.dead);
   // Zipline ride — slide along the line, look freely, drop off at the end.
   if (p.zip) {
     const zl = lvl.ziplines[p.zip.i];

@@ -232,6 +232,7 @@ function blocked(lvl: Level3D, x: number, z: number, r = R, grid?: SpatialGrid):
   const boxes = grid ? grid.queryAABB(x - r, z - r, x + r, z + r) : lvl.boxes;
   for (let i = 0; i < boxes.length; i++) {
     const b = boxes[i];
+    if (b.dead) continue; // destroyed structure
     if (
       x + r > b.x - b.sx / 2 &&
       x - r < b.x + b.sx / 2 &&
