@@ -5,11 +5,12 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import { LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type BridgeSpan, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
+import { LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type BridgeSpan, type CampaignSlot, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
 import { THEMES } from './themes';
 
 const INDEX_KEY = 'starshell.layouts'; // JSON array of SavedMeta
 const layoutKey = (id: string) => `starshell.layout.${id}`;
+const CAMPAIGN_KEY = 'starshell.campaign'; // the editor's ordered level timeline
 
 export interface SavedMeta {
   id: string;
@@ -95,5 +96,33 @@ export function deleteLayout(id: string): void {
     localStorage.setItem(INDEX_KEY, JSON.stringify(listLayouts().filter((m) => m.id !== id)));
   } catch {
     /* ignore */
+  }
+}
+
+// ── Campaign timeline (the ordered list of authored levels) ──────────────────
+
+/** Load the editor's campaign timeline (validated). Empty if none / unusable. */
+export function loadCampaign(): CampaignSlot[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CAMPAIGN_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((s): CampaignSlot | null => {
+        if (!s || typeof s !== 'object') return null;
+        const layout = validateLayout((s as Record<string, unknown>).layout);
+        if (!layout) return null;
+        return { authored: !!(s as Record<string, unknown>).authored, layout };
+      })
+      .filter((s): s is CampaignSlot => s !== null);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCampaign(slots: CampaignSlot[]): void {
+  try {
+    localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(slots));
+  } catch {
+    /* ignore (quota / private mode) */
   }
 }

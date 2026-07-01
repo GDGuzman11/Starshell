@@ -1,21 +1,23 @@
 'use client';
 
 /**
- * DEV-ONLY visual level editor (local dev builds only). A 2D top-down grid: pick a
- * module + rotation, click to drop it onto the grid, drag to move, rotate/delete,
- * choose a theme + arena size, then PLAY it (sandbox) or EXPORT the layout JSON to
- * bake into the campaign (levels.ts). Save/Load persists to localStorage.
+ * DEV-ONLY visual level editor (local dev builds only). Authors the campaign as a
+ * TIMELINE of levels: a row of numbered squares (insert / renumber / delete), each
+ * holding one layout. Click a square to load + edit it on the 2D grid; SAVE writes
+ * that level to the local timeline (localStorage) so your own campaign playthrough
+ * reflects it immediately. EXPORT CAMPAIGN dumps the authored levels as a code block
+ * to bake into levels.ts for real players. Un-saved / un-authored slots fall back to
+ * the procedural arena in-game.
  *
- * Rendering is a plain 2D canvas (redraw-on-change, no RAF) — cheap and precise;
- * the full 3D "preview" is the Play button. Mouse + touch via pointer events.
+ * Rendering is a plain 2D canvas (redraw-on-change). Mouse + touch via pointer events.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, cellToWorld, footprintOf, roofHeightOf, type BridgeSpan, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
+import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, blankLayout, cellToWorld, footprintOf, roofHeightOf, type BridgeSpan, type CampaignSlot, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
 import { THEME_LIST } from '../fps/kit/themes';
 import { makeBattlefieldLayout } from '../fps/kit/generate';
-import { deleteLayout, listLayouts, loadLayout, saveLayout, type SavedMeta } from '../fps/kit/storage';
+import { loadCampaign, saveCampaign } from '../fps/kit/storage';
 
-const CANVAS = 460;
+const CANVAS = 440;
 const MOD_COLOR: Record<ModuleKind, string> = {
   barracks: '#5aa06a',
   watchtower: '#7a7ad0',
@@ -39,9 +41,13 @@ const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR
 
 export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Campaign timeline + which slot is being edited.
+  const [campaign, setCampaign] = useState<CampaignSlot[]>([{ authored: false, layout: blankLayout() }]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  // Working copy of the active level (edited on the canvas; committed by SAVE).
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [bridges, setBridges] = useState<BridgeSpan[]>([]);
-  const [bridgeFrom, setBridgeFrom] = useState<number | null>(null); // first building of a pending bridge
   const [theme, setTheme] = useState('wartorn');
   const [size, setSize] = useState(200);
   const [tool, setTool] = useState<ModuleKind | 'bridge' | null>('command');
@@ -49,16 +55,47 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const [apt, setApt] = useState(3);
   const [selected, setSelected] = useState<number | null>(null);
   const [hover, setHover] = useState<{ gx: number; gz: number } | null>(null);
-  const [name, setName] = useState('');
-  const [saved, setSaved] = useState<SavedMeta[]>([]);
+  const [bridgeFrom, setBridgeFrom] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const dragRef = useRef(false);
+  const loadingRef = useRef(false); // suppress the dirty flag while loading a slot
 
-  useEffect(() => setSaved(listLayouts()), []);
   const flash = useCallback((m: string) => {
     setNote(m);
     window.setTimeout(() => setNote(''), 1600);
   }, []);
+
+  const loadInto = useCallback((layout: LevelLayout) => {
+    loadingRef.current = true;
+    setPlacements(layout.placements);
+    setBridges(layout.bridges ?? []);
+    setTheme(layout.theme);
+    setSize(layout.size);
+    setSelected(null);
+    setBridgeFrom(null);
+  }, []);
+
+  // On mount: restore the saved timeline (or start with one blank level).
+  useEffect(() => {
+    const c = loadCampaign();
+    if (c.length) {
+      setCampaign(c);
+      loadInto(c[0].layout);
+    } else {
+      loadInto(blankLayout());
+    }
+    setActiveIdx(0);
+    setDirty(false);
+  }, [loadInto]);
+
+  // Any edit to the working copy marks the active slot dirty (unless we just loaded).
+  useEffect(() => {
+    if (loadingRef.current) {
+      loadingRef.current = false;
+      return;
+    }
+    setDirty(true);
+  }, [placements, bridges, theme, size]);
 
   const half = size / 2;
   const scale = CANVAS / size;
@@ -66,12 +103,46 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const px2cell = useCallback((px: number) => Math.round((px / scale - half) / CELL), [scale, half]);
   const px2world = useCallback((px: number) => px / scale - half, [scale, half]);
 
-  const currentLayout = useCallback(
-    (): LevelLayout => ({ v: LAYOUT_VERSION, theme, size, seed: 12345, placements, bridges, name: name || undefined }),
-    [theme, size, placements, bridges, name],
-  );
+  const currentLayout = useCallback((): LevelLayout => ({ v: LAYOUT_VERSION, theme, size, seed: 12345, placements, bridges }), [theme, size, placements, bridges]);
 
-  // Redraw the board whenever anything visible changes.
+  // ── Timeline actions ───────────────────────────────────────────────────────
+  const commit = useCallback((next: CampaignSlot[]) => {
+    setCampaign(next);
+    saveCampaign(next);
+  }, []);
+
+  const selectSlot = (idx: number) => {
+    if (idx === activeIdx) return;
+    loadInto(campaign[idx].layout);
+    setActiveIdx(idx);
+    setDirty(false);
+  };
+  const saveActive = () => {
+    const next = campaign.map((s, i) => (i === activeIdx ? { authored: true, layout: currentLayout() } : s));
+    commit(next);
+    setDirty(false);
+    flash(`LEVEL ${activeIdx + 1} SAVED`);
+  };
+  const insertAt = (idx: number) => {
+    const fresh: CampaignSlot = { authored: false, layout: blankLayout(theme, size) };
+    const next = [...campaign.slice(0, idx), fresh, ...campaign.slice(idx)];
+    commit(next);
+    loadInto(fresh.layout);
+    setActiveIdx(idx);
+    setDirty(false);
+  };
+  const deleteSlot = (idx: number) => {
+    if (campaign.length <= 1) return;
+    const next = campaign.filter((_, i) => i !== idx);
+    commit(next);
+    const na = Math.max(0, idx > activeIdx ? activeIdx : activeIdx - (idx <= activeIdx ? 1 : 0));
+    const clamped = Math.min(na, next.length - 1);
+    loadInto(next[clamped].layout);
+    setActiveIdx(clamped);
+    setDirty(false);
+  };
+
+  // Redraw the board.
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -80,7 +151,6 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     x.clearRect(0, 0, CANVAS, CANVAS);
     x.fillStyle = '#0a0d14';
     x.fillRect(0, 0, CANVAS, CANVAS);
-    // grid
     x.strokeStyle = 'rgba(255,255,255,0.06)';
     x.lineWidth = 1;
     for (let g = -Math.ceil(half / CELL); g <= Math.ceil(half / CELL); g++) {
@@ -92,11 +162,9 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       x.lineTo(CANVAS, p);
       x.stroke();
     }
-    // boundary
     x.strokeStyle = 'rgba(255,255,255,0.25)';
     x.lineWidth = 2;
     x.strokeRect(w2p(-half), w2p(-half), size * scale, size * scale);
-    // spawns (player −z green, enemies +z red)
     const mark = (wz: number, col: string, label: string) => {
       x.fillStyle = col;
       x.beginPath();
@@ -108,15 +176,11 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     };
     mark(-half * 0.86, '#5ad06a', 'YOU');
     mark(half * 0.86, '#ff5d6e', 'ENEMY');
-    // hover ghost
     if (tool && tool !== 'bridge' && hover) {
       const fp = footprintOf({ module: tool, gx: hover.gx, gz: hover.gz, rot });
-      const cx = cellToWorld(hover.gx);
-      const cz = cellToWorld(hover.gz);
       x.fillStyle = 'rgba(255,255,255,0.12)';
-      x.fillRect(w2p(cx - fp.w / 2), w2p(cz - fp.d / 2), fp.w * scale, fp.d * scale);
+      x.fillRect(w2p(cellToWorld(hover.gx) - fp.w / 2), w2p(cellToWorld(hover.gz) - fp.d / 2), fp.w * scale, fp.d * scale);
     }
-    // placements
     placements.forEach((p, i) => {
       const fp = footprintOf(p);
       const cx = cellToWorld(p.gx);
@@ -128,21 +192,17 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       x.strokeStyle = i === selected ? '#ffffff' : 'rgba(0,0,0,0.5)';
       x.lineWidth = i === selected ? 2 : 1;
       x.strokeRect(rx, rz, fp.w * scale, fp.d * scale);
-      // rotation notch — a tick toward the module's local +x after rotation
       const ang = (p.rot * Math.PI) / 180;
-      const nx = Math.cos(-ang) * fp.w * 0.4;
-      const nz = Math.sin(-ang) * fp.d * 0.4;
       x.strokeStyle = 'rgba(255,255,255,0.8)';
       x.lineWidth = 1.5;
       x.beginPath();
       x.moveTo(w2p(cx), w2p(cz));
-      x.lineTo(w2p(cx + nx), w2p(cz + nz));
+      x.lineTo(w2p(cx + Math.cos(-ang) * fp.w * 0.4), w2p(cz + Math.sin(-ang) * fp.d * 0.4));
       x.stroke();
       x.fillStyle = '#0a0d14';
       x.font = '8px monospace';
       x.fillText(MOD_ABBR[p.module], w2p(cx) - 9, w2p(cz) + 3);
     });
-    // bridges (gold spans between roofs)
     x.strokeStyle = '#ffd27a';
     x.lineWidth = 4;
     bridges.forEach((b) => {
@@ -151,7 +211,6 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       x.lineTo(w2p(b.x1), w2p(b.z1));
       x.stroke();
     });
-    // pending bridge source highlight
     if (tool === 'bridge' && bridgeFrom != null && placements[bridgeFrom]) {
       const p = placements[bridgeFrom];
       const fp = footprintOf(p);
@@ -162,8 +221,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   }, [placements, bridges, bridgeFrom, size, selected, tool, rot, hover, half, scale, w2p]);
 
   const eventCell = (e: React.PointerEvent) => {
-    const cv = canvasRef.current!;
-    const r = cv.getBoundingClientRect();
+    const r = canvasRef.current!.getBoundingClientRect();
     const px = ((e.clientX - r.left) / r.width) * CANVAS;
     const pz = ((e.clientY - r.top) / r.height) * CANVAS;
     return { gx: px2cell(px), gz: px2cell(pz), wx: px2world(px), wz: px2world(pz) };
@@ -172,13 +230,10 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     for (let i = placements.length - 1; i >= 0; i--) {
       const p = placements[i];
       const fp = footprintOf(p);
-      const cx = cellToWorld(p.gx);
-      const cz = cellToWorld(p.gz);
-      if (Math.abs(wx - cx) <= fp.w / 2 && Math.abs(wz - cz) <= fp.d / 2) return i;
+      if (Math.abs(wx - cellToWorld(p.gx)) <= fp.w / 2 && Math.abs(wz - cellToWorld(p.gz)) <= fp.d / 2) return i;
     }
     return -1;
   };
-
   const bridgeHitTest = (wx: number, wz: number): number => {
     for (let i = bridges.length - 1; i >= 0; i--) {
       const b = bridges[i];
@@ -190,7 +245,6 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     }
     return -1;
   };
-  // Snap a flush bridge between two buildings' facing roof edges (same height + aligned).
   const tryBridge = (aIdx: number, bIdx: number) => {
     const A = placements[aIdx];
     const B = placements[bIdx];
@@ -213,8 +267,8 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       span = { x0: cxA + Math.sign(dx) * (fpA.w / 2), z0: z, x1: cxB - Math.sign(dx) * (fpB.w / 2), z1: z, y: rhA };
     } else {
       if (Math.abs(dx) > 8) return flash('align the two buildings on a column');
-      const x = (cxA + cxB) / 2;
-      span = { x0: x, z0: czA + Math.sign(dz) * (fpA.d / 2), x1: x, z1: czB - Math.sign(dz) * (fpB.d / 2), y: rhA };
+      const cxm = (cxA + cxB) / 2;
+      span = { x0: cxm, z0: czA + Math.sign(dz) * (fpA.d / 2), x1: cxm, z1: czB - Math.sign(dz) * (fpB.d / 2), y: rhA };
     }
     setBridges((bs) => [...bs, span]);
     flash('BRIDGE SNAPPED');
@@ -224,9 +278,9 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     const { gx, gz, wx, wz } = eventCell(e);
     const hit = hitTest(wx, wz);
     if (tool === 'bridge') {
-      if (hit < 0) return setBridgeFrom(null); // clicked empty → cancel
-      if (bridgeFrom == null) return setBridgeFrom(hit); // pick first building
-      if (hit !== bridgeFrom) tryBridge(bridgeFrom, hit); // second → snap
+      if (hit < 0) return setBridgeFrom(null);
+      if (bridgeFrom == null) return setBridgeFrom(hit);
+      if (hit !== bridgeFrom) tryBridge(bridgeFrom, hit);
       setBridgeFrom(null);
       return;
     }
@@ -235,15 +289,14 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
         setSelected(placements.findIndex((p) => p.gx === gx && p.gz === gz));
         return;
       }
-      const np: Placement = { module: tool, gx, gz, rot, params: tool === 'apartment' ? { levels: apt } : undefined };
-      setPlacements((ps) => [...ps, np]);
+      setPlacements((ps) => [...ps, { module: tool, gx, gz, rot, params: tool === 'apartment' ? { levels: apt } : undefined }]);
       setSelected(placements.length);
     } else if (hit >= 0) {
       setSelected(hit);
       dragRef.current = true;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } else {
-      const bi = bridgeHitTest(wx, wz); // SELECT on empty near a bridge → delete it
+      const bi = bridgeHitTest(wx, wz);
       if (bi >= 0) setBridges((bs) => bs.filter((_, i) => i !== bi));
       else setSelected(null);
     }
@@ -251,9 +304,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const onMove = (e: React.PointerEvent) => {
     const { gx, gz } = eventCell(e);
     setHover({ gx, gz });
-    if (dragRef.current && selected != null) {
-      setPlacements((ps) => ps.map((p, i) => (i === selected ? { ...p, gx, gz } : p)));
-    }
+    if (dragRef.current && selected != null) setPlacements((ps) => ps.map((p, i) => (i === selected ? { ...p, gx, gz } : p)));
   };
   const onUp = () => {
     dragRef.current = false;
@@ -268,158 +319,136 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     setPlacements((ps) => ps.filter((_, i) => i !== selected));
     setSelected(null);
   };
-  const doSave = () => {
-    const nm = name.trim() || `level-${Date.now().toString(36)}`;
-    setName(nm);
-    if (saveLayout(nm, currentLayout())) {
-      setSaved(listLayouts());
-      flash('SAVED');
-    } else flash('SAVE FAILED');
-  };
-  const doLoad = (id: string) => {
-    const l = loadLayout(id);
-    if (!l) return flash('LOAD FAILED');
-    setPlacements(l.placements);
-    setBridges(l.bridges ?? []);
-    setTheme(l.theme);
-    setSize(l.size);
-    setName(l.name ?? '');
-    setSelected(null);
-    setBridgeFrom(null);
-    flash('LOADED');
-  };
-  const doDelete = (id: string) => {
-    deleteLayout(id);
-    setSaved(listLayouts());
-  };
   const doRandomize = () => {
     const l = makeBattlefieldLayout(theme, size, (Math.random() * 1e9) | 0);
+    loadingRef.current = true;
     setPlacements(l.placements);
     setBridges(l.bridges ?? []);
     setSelected(null);
     setBridgeFrom(null);
+    setDirty(true); // a fresh battlefield is a change to be saved
     flash('BATTLEFIELD GENERATED');
   };
-  const doExport = () => {
-    const json = JSON.stringify(currentLayout());
+  const doExportCampaign = () => {
+    const lines = campaign.map((s, i) => (s.authored ? `  ${i + 1}: ${JSON.stringify(s.layout)},` : null)).filter((l): l is string => l !== null);
+    const block = `// Paste into CAMPAIGN in components/arcade/fps/kit/levels.ts (keyed by authored level #):\n${lines.join('\n')}`;
     try {
-      navigator.clipboard?.writeText(json);
+      navigator.clipboard?.writeText(block);
     } catch {
       /* ignore */
     }
     // eslint-disable-next-line no-console
-    console.log('[LevelEditor] layout JSON:\n' + json);
-    flash('EXPORTED → clipboard + console');
+    console.log(block);
+    flash(`EXPORTED ${lines.length} LEVEL(S) → clipboard + console`);
   };
 
   const themeName = useMemo(() => THEME_LIST.find((t) => t.id === theme)?.name ?? theme, [theme]);
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col items-center gap-3 overflow-auto bg-[#05070c] p-4 text-white/80 sm:flex-row sm:items-start sm:justify-center">
-      <div className="flex flex-col items-center gap-2">
-        <canvas
-          ref={canvasRef}
-          width={CANVAS}
-          height={CANVAS}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerLeave={() => setHover(null)}
-          className="max-w-full touch-none rounded border border-white/15 bg-black"
-          style={{ width: CANVAS, height: CANVAS, imageRendering: 'pixelated' }}
-        />
-        <p className="font-pixel text-[7px] text-white/40">{placements.length} PIECES · {themeName} · {size} m</p>
+    <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-[#05070c] p-3 text-white/80">
+      {/* Timeline of levels */}
+      <div className="flex w-full items-center gap-1 overflow-x-auto pb-1 font-pixel text-[8px]">
+        <span className="mr-1 shrink-0 text-[7px] tracking-[0.2em] text-[#aef5c8]">CAMPAIGN</span>
+        {campaign.map((s, i) => (
+          <span key={i} className="flex shrink-0 items-center">
+            <button type="button" onClick={() => insertAt(i)} title="insert before" className="px-0.5 text-white/25 hover:text-[#aef5c8]">＋</button>
+            <button type="button" onClick={() => selectSlot(i)} className={`h-9 w-9 rounded border transition-colors ${i === activeIdx ? 'border-[#aef5c8] ring-1 ring-[#aef5c8]' : 'border-white/20'} ${s.authored ? 'bg-[#aef5c8]/15 text-[#aef5c8]' : 'bg-white/[0.03] text-white/40'}`} title={s.authored ? 'authored' : 'empty → procedural'}>
+              {i + 1}
+              {i === activeIdx && dirty ? '•' : ''}
+            </button>
+          </span>
+        ))}
+        <button type="button" onClick={() => insertAt(campaign.length)} className="ml-1 h-9 shrink-0 rounded border border-[#aef5c8]/40 px-2 text-[#aef5c8] hover:bg-[#aef5c8]/10">＋ ADD</button>
+        {campaign.length > 1 && (
+          <button type="button" onClick={() => deleteSlot(activeIdx)} className="ml-1 h-9 shrink-0 rounded border border-[#ff5d6e]/40 px-2 text-[#ff9aa6] hover:bg-[#ff5d6e]/10">✕ DEL {activeIdx + 1}</button>
+        )}
       </div>
 
-      <div className="flex w-full max-w-xs flex-col gap-2 font-pixel text-[8px]">
-        <p className="text-[9px] tracking-[0.2em] text-[#aef5c8]">LEVEL EDITOR</p>
-
-        <p className="text-white/45">BUILDINGS</p>
-        <div className="flex flex-wrap gap-1">
-          {BUILDING_KINDS.map((k) => (
-            <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[26px] rounded border px-2 uppercase transition-colors ${tool === k ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-              {MOD_ABBR[k]}
-            </button>
-          ))}
-        </div>
-        <p className="text-white/45">COVER &amp; PROPS</p>
-        <div className="flex flex-wrap gap-1">
-          {PROP_KINDS.map((k) => (
-            <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors ${tool === k ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`} style={{ borderLeftColor: MOD_COLOR[k], borderLeftWidth: 3 }}>
-              {MOD_ABBR[k]}
-            </button>
-          ))}
-          <button type="button" onClick={() => { setTool('bridge'); setSelected(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === 'bridge' ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-            BRIDGE
-          </button>
-          <button type="button" onClick={() => { setTool(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-            SELECT
-          </button>
-        </div>
-        {tool === 'bridge' && <p className="text-[7px] text-[#ffd27a]/80">Click two aligned, same-height buildings to span a bridge. In SELECT, click a bridge to delete.</p>}
-
-        <div className="flex flex-wrap items-center gap-1">
-          <button type="button" onClick={rotateSel} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">
-            ROTATE {selected == null ? `↻${rot}°` : ''}
-          </button>
-          <button type="button" onClick={deleteSel} disabled={selected == null} className="min-h-[26px] rounded border border-[#ff5d6e]/40 px-2 uppercase text-[#ff9aa6] disabled:opacity-30 hover:bg-[#ff5d6e]/10">
-            DELETE
-          </button>
-          <button type="button" onClick={() => { setPlacements([]); setBridges([]); setSelected(null); setBridgeFrom(null); }} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">
-            CLEAR
-          </button>
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-center">
+        <div className="flex flex-col items-center gap-1">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS}
+            height={CANVAS}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerLeave={() => setHover(null)}
+            className="max-w-full touch-none rounded border border-white/15 bg-black"
+            style={{ width: CANVAS, height: CANVAS, imageRendering: 'pixelated' }}
+          />
+          <p className="font-pixel text-[7px] text-white/40">
+            EDITING LEVEL {activeIdx + 1}{dirty ? ' • UNSAVED' : ''} · {placements.length} PIECES · {themeName} · {size} m
+          </p>
         </div>
 
-        {tool === 'apartment' && (
-          <div className="flex items-center gap-1">
-            <span className="text-white/45">APT FLOORS</span>
-            {[2, 3, 4].map((n) => (
-              <button key={n} type="button" onClick={() => setApt(n)} className={`h-6 w-6 rounded border transition-colors ${apt === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 text-white/55 hover:bg-white/10'}`}>
-                {n}
+        <div className="flex w-full max-w-xs flex-col gap-2 font-pixel text-[8px]">
+          <p className="text-white/45">BUILDINGS</p>
+          <div className="flex flex-wrap gap-1">
+            {BUILDING_KINDS.map((k) => (
+              <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[26px] rounded border px-2 uppercase transition-colors ${tool === k ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                {MOD_ABBR[k]}
               </button>
             ))}
           </div>
-        )}
-
-        <p className="mt-1 text-white/45">THEME</p>
-        <div className="flex flex-wrap gap-1">
-          {THEME_LIST.map((t) => (
-            <button key={t.id} type="button" onClick={() => setTheme(t.id)} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${theme === t.id ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-              {t.id}
+          <p className="text-white/45">COVER &amp; PROPS</p>
+          <div className="flex flex-wrap gap-1">
+            {PROP_KINDS.map((k) => (
+              <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors ${tool === k ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`} style={{ borderLeftColor: MOD_COLOR[k], borderLeftWidth: 3 }}>
+                {MOD_ABBR[k]}
+              </button>
+            ))}
+            <button type="button" onClick={() => { setTool('bridge'); setSelected(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === 'bridge' ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+              BRIDGE
             </button>
-          ))}
-        </div>
+            <button type="button" onClick={() => { setTool(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+              SELECT
+            </button>
+          </div>
+          {tool === 'bridge' && <p className="text-[7px] text-[#ffd27a]/80">Click two aligned, same-height buildings to span a bridge. SELECT + click a bridge to delete.</p>}
 
-        <div className="flex items-center gap-2">
-          <span className="text-white/45">SIZE</span>
-          <button type="button" onClick={() => setSize((s) => Math.max(120, s - 16))} className="h-6 w-6 rounded border border-white/20 text-white/70 hover:bg-white/10">-</button>
-          <span className="w-10 text-center text-white/80">{size}</span>
-          <button type="button" onClick={() => setSize((s) => Math.min(320, s + 16))} className="h-6 w-6 rounded border border-white/20 text-white/70 hover:bg-white/10">+</button>
-        </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <button type="button" onClick={rotateSel} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">ROTATE {selected == null ? `↻${rot}°` : ''}</button>
+            <button type="button" onClick={deleteSel} disabled={selected == null} className="min-h-[26px] rounded border border-[#ff5d6e]/40 px-2 uppercase text-[#ff9aa6] disabled:opacity-30 hover:bg-[#ff5d6e]/10">DELETE</button>
+            <button type="button" onClick={() => { setPlacements([]); setBridges([]); setSelected(null); setBridgeFrom(null); }} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">CLEAR</button>
+          </div>
 
-        <div className="mt-1 flex items-center gap-1">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="min-w-0 flex-1 rounded border border-white/15 bg-black/40 px-2 py-1 text-white/80 outline-none placeholder:text-white/30" />
-          <button type="button" onClick={doSave} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">SAVE</button>
-        </div>
-        {saved.length > 0 && (
-          <div className="flex max-h-20 flex-col gap-1 overflow-auto">
-            {saved.map((m) => (
-              <div key={m.id} className="flex items-center gap-1">
-                <button type="button" onClick={() => doLoad(m.id)} className="min-h-[22px] flex-1 truncate rounded border border-white/15 px-2 text-left text-white/70 hover:bg-white/10">{m.name}</button>
-                <button type="button" onClick={() => doDelete(m.id)} className="min-h-[22px] rounded border border-[#ff5d6e]/30 px-1.5 text-[#ff9aa6] hover:bg-[#ff5d6e]/10">✕</button>
-              </div>
+          {tool === 'apartment' && (
+            <div className="flex items-center gap-1">
+              <span className="text-white/45">APT FLOORS</span>
+              {[2, 3, 4].map((n) => (
+                <button key={n} type="button" onClick={() => setApt(n)} className={`h-6 w-6 rounded border transition-colors ${apt === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 text-white/55 hover:bg-white/10'}`}>{n}</button>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-1 text-white/45">THEME</p>
+          <div className="flex flex-wrap gap-1">
+            {THEME_LIST.map((t) => (
+              <button key={t.id} type="button" onClick={() => setTheme(t.id)} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${theme === t.id ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>{t.id}</button>
             ))}
           </div>
-        )}
 
-        <button type="button" onClick={doRandomize} className="mt-1 min-h-[28px] rounded border border-[#ffd27a]/50 bg-[#ffd27a]/10 px-2 font-pixel text-[8px] uppercase text-[#ffd27a] hover:bg-[#ffd27a]/20">⚄ RANDOMIZE BATTLEFIELD</button>
-        <div className="mt-1 flex gap-1">
-          <button type="button" onClick={() => onPlay(currentLayout())} className="min-h-[30px] flex-1 rounded border border-[#aef5c8]/50 bg-[#aef5c8]/15 px-2 uppercase text-[#aef5c8] hover:bg-[#aef5c8]/25">PLAY ▸</button>
-          <button type="button" onClick={doExport} className="min-h-[30px] rounded border border-[#7fdfff]/40 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">EXPORT</button>
-          <button type="button" onClick={onBack} className="min-h-[30px] rounded border border-white/20 px-2 uppercase text-white/60 hover:bg-white/10">◂ BACK</button>
+          <div className="flex items-center gap-2">
+            <span className="text-white/45">SIZE</span>
+            <button type="button" onClick={() => setSize((s) => Math.max(120, s - 16))} className="h-6 w-6 rounded border border-white/20 text-white/70 hover:bg-white/10">-</button>
+            <span className="w-10 text-center text-white/80">{size}</span>
+            <button type="button" onClick={() => setSize((s) => Math.min(320, s + 16))} className="h-6 w-6 rounded border border-white/20 text-white/70 hover:bg-white/10">+</button>
+          </div>
+
+          <button type="button" onClick={doRandomize} className="mt-1 min-h-[28px] rounded border border-[#ffd27a]/50 bg-[#ffd27a]/10 px-2 uppercase text-[#ffd27a] hover:bg-[#ffd27a]/20">⚄ RANDOMIZE BATTLEFIELD</button>
+
+          <div className="mt-1 flex gap-1">
+            <button type="button" onClick={saveActive} className={`min-h-[30px] flex-1 rounded border px-2 uppercase ${dirty ? 'border-[#aef5c8]/60 bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/20 text-white/50'} hover:bg-[#aef5c8]/25`}>SAVE LVL {activeIdx + 1}</button>
+            <button type="button" onClick={() => onPlay(currentLayout())} className="min-h-[30px] rounded border border-[#7fdfff]/50 bg-[#7fdfff]/10 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20">PLAY ▸</button>
+          </div>
+          <div className="flex gap-1">
+            <button type="button" onClick={doExportCampaign} className="min-h-[28px] flex-1 rounded border border-[#7fdfff]/40 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">EXPORT CAMPAIGN</button>
+            <button type="button" onClick={onBack} className="min-h-[28px] rounded border border-white/20 px-2 uppercase text-white/60 hover:bg-white/10">◂ BACK</button>
+          </div>
+
+          <p className="text-[7px] leading-relaxed text-white/35">Timeline squares = campaign levels (bosses auto-insert every 5th in-game). Click a square to edit it; SAVE writes it to your local campaign so your own playthrough uses it. Empty squares fall back to a procedural arena. EXPORT to ship to real players.{note && <span className="text-[#aef5c8]"> · {note}</span>}</p>
         </div>
-
-        <p className="text-[7px] leading-relaxed text-white/35">Pick a piece → click the grid to place. SELECT to move (drag) / rotate / delete. YOU spawn south, ENEMY north.{note && <span className="text-[#aef5c8]"> · {note}</span>}</p>
       </div>
     </div>
   );

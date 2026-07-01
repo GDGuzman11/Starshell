@@ -47,6 +47,18 @@ export interface LevelLayout {
   name?: string; // user label (saved layouts)
 }
 
+/** One slot in the editor's campaign timeline. `authored` = the user saved a real
+ *  layout here; an un-authored slot falls back to the procedural arena in-game. */
+export interface CampaignSlot {
+  authored: boolean;
+  layout: LevelLayout;
+}
+
+/** A fresh empty layout (blank canvas for a new timeline slot). */
+export function blankLayout(theme = 'wartorn', size = 200): LevelLayout {
+  return { v: LAYOUT_VERSION, theme, size, seed: 12345, placements: [], bridges: [] };
+}
+
 export const BUILDING_KINDS: BuildingKind[] = ['barracks', 'watchtower', 'command', 'apartment', 'ruin', 'bunker'];
 export const PROP_KINDS: PropKind[] = ['coverwall', 'sandbags', 'container', 'barrier', 'dragonteeth', 'fueltank', 'commtower', 'guardpost', 'crates', 'rubble', 'wreck'];
 export const MODULE_KINDS: ModuleKind[] = [...BUILDING_KINDS, ...PROP_KINDS];
