@@ -10,8 +10,9 @@ import { OrientationGate } from './mobile/OrientationGate';
 import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
-import { makeArena3D, type Level3D } from './fps/level3d';
+import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
+import { resolveLevel } from './fps/kit/levels';
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
@@ -232,7 +233,10 @@ export function FpsGame() {
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
       const mapCount = isBoss ? 5 : mapCountFor(squads);
-      const lvl = presetLevel ?? (layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed));
+      // Level source: an editor sandbox preset wins; then the dev toggles (rotation
+      // sample / war-torn city); otherwise the campaign resolver (a baked authored
+      // layout for this level, or the procedural arena fallback).
+      const lvl = presetLevel ?? (layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : resolveLevel(level, mapCount, seed));
       if (!presetLevel && devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override (preset carries its own)
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
