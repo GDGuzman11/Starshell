@@ -22,7 +22,7 @@ const WALL_H = 4.5;
  *  each module's nav/AI hints via `modules`. */
 export function makeKitTestArena(seed: number): Level3D {
   const r = rng(seed);
-  const size = 160;
+  const size = 132;
   const half = size / 2;
   const boxes: Box[] = [];
   const ladders: Ladder[] = [];
@@ -41,12 +41,12 @@ export function makeKitTestArena(seed: number): Level3D {
 
   // One of each (bigger) core module, well spaced around the centre.
   modules.push(commandCenterModule(boxes, ladders, ramps, grapplePoints, 0, 0));
-  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, -42, -14));
-  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, 42, 14));
-  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, -44, 34));
-  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, 44, -34));
-  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, 50));
-  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, -50));
+  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, -33, -12));
+  modules.push(barracksModule(boxes, ladders, ramps, grapplePoints, 33, 12));
+  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, -34, 28));
+  modules.push(watchTowerModule(boxes, ladders, ramps, grapplePoints, 34, -28));
+  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, 40));
+  modules.push(bunkerModule(boxes, ladders, ramps, grapplePoints, 0, -40));
 
   // Scattered cover crates (clear of spawns + structures).
   for (let i = 0; i < 12; i++) {

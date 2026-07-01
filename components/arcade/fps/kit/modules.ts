@@ -54,8 +54,8 @@ function edgeRails(boxes: Box[], cx: number, cz: number, W: number, D: number, y
 /** BARRACKS — a big 2-storey building: enclosed ground room (doorways front+back,
  *  windowed sides) with a central interior ramp up to an open railed firing deck. */
 export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 22;
-  const D = 18;
+  const W = 18;
+  const D = 16;
   const hw = W / 2;
   const hd = D / 2;
   doorwayWall(boxes, cx, cz - hd, W, 'x', DIM.wallH, 0); // front −z
@@ -94,7 +94,7 @@ export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], 
  *  two central interior ramps switchbacking (front half then back half) up to an
  *  open railed sniper deck on top + a grapple point. */
 export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 24;
+  const W = 18;
   const hw = W / 2;
   const top = 2 * F; // sniper deck at 8 m
   // Corner columns full height.
@@ -113,8 +113,8 @@ export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[]
   ] as [number, number, number, 'x' | 'z'][])
     windowBand(boxes, x, z, len, ax, F);
   // Two switchback ramps: ground→mid (front half), mid→top (back half).
-  const s1 = rampFloor(boxes, ramps, cx, cz, W, W, 0, F, cz - 6);
-  const s2 = rampFloor(boxes, ramps, cx, cz, W, W, F, top, cz + 6);
+  const s1 = rampFloor(boxes, ramps, cx, cz, W, W, 0, F, cz - 5);
+  const s2 = rampFloor(boxes, ramps, cx, cz, W, W, F, top, cz + 5);
   edgeRails(boxes, cx, cz, W, W, top); // open sniper deck
   gps.push(roofGrapplePoint(cx, cz, hw, top + 0.05));
   const rect: Rect = [cx - hw, cz - hw, cx + hw, cz + hw];
@@ -141,7 +141,7 @@ export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[]
  *  four sides (flankable), a central interior ramp up to an open 2nd-floor gallery
  *  deck (railed), a rooftop grapple point, and ground cover. The map's anchor. */
 export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 30;
+  const W = 24;
   const hw = W / 2;
   doorwayWall(boxes, cx, cz - hw, W, 'x', DIM.wallH, 0);
   doorwayWall(boxes, cx, cz + hw, W, 'x', DIM.wallH, 0);
