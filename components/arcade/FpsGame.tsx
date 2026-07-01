@@ -93,7 +93,7 @@ export function FpsGame() {
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -405,20 +405,23 @@ export function FpsGame() {
                     <TouchBtn onTap={() => cycleZoom()} label="ZOOM" color="#7fdfff" scale={cfg.btnScale} />
                     <TouchBtn onTap={() => throwGrenade()} label="NADE" color="#ffae3a" scale={cfg.btnScale} />
                   </div>
-                  <button
-                    type="button"
-                    onPointerDown={jump}
-                    className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[9px] text-[#aef5c8] backdrop-blur-sm active:bg-[#aef5c8]/25"
-                    style={{ width: 148 * cfg.btnScale, height: 48 * cfg.btnScale }}
-                  >
-                    JUMP
-                  </button>
+                  <div className="flex gap-2">
+                    <TouchBtn onTap={() => grapple()} label={snap.grappleReady ? '⟰ GO!' : 'GRAPPLE'} color={snap.grappleReady ? '#ffd27a' : '#7fdfff'} scale={cfg.btnScale} />
+                    <button
+                      type="button"
+                      onPointerDown={jump}
+                      className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[9px] text-[#aef5c8] backdrop-blur-sm active:bg-[#aef5c8]/25"
+                      style={{ width: 80 * cfg.btnScale, height: 64 * cfg.btnScale }}
+                    >
+                      JUMP
+                    </button>
+                  </div>
                 </div>
               </>
             )}
             {!isTouch && (
               <p className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 font-pixel text-[6px] text-white/35">
-                CLICK=FIRE · RMB ZOOM (TAP TO CYCLE) · WASD · SPACE JUMP · 1-3/SCROLL SWAP · R RELOAD · G THROW · LADDERS/ZIPS WALK IN
+                CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE (AIM A ROOFTOP RING) · LADDERS/ZIPS WALK IN
               </p>
             )}
           </>

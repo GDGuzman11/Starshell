@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { buildWorld, type World } from './fps/scene';
-import { EYE, MAX_PITCH, launchPlayer, pushPlayer, stepPlayer, type Player3 } from './fps/physics';
+import { EYE, MAX_PITCH, launchPlayer, pushPlayer, startGrapple, stepPlayer, type Player3 } from './fps/physics';
 import type { Level3D } from './fps/level3d';
 import { updateEnemies, hurtEnemy, BOSSES, type Difficulty, type Enemy, type Squad, type Smoke } from './fps/enemy';
 import { rayWallBox, raySphere, segBlocked, type Vec3 } from './fps/combat';
@@ -98,6 +98,7 @@ export interface FpsSnapshot {
   flashAt: number; // player flashbanged
   stunAt: number; // player caught in a stun/concussion blast (screen distortion)
   fogAt: number; // Kraken void fog cast (vision-obscuring overlay)
+  grappleReady: boolean; // a rooftop grapple point is aimable right now
   radar: { x: number; z: number; boss: boolean }[]; // enemy positions, player-relative
 }
 
@@ -124,6 +125,7 @@ export function useFpsLoop(
   const reloadReq = useRef(false);
   const throwReq = useRef(false);
   const jumpReq = useRef(false);
+  const grappleReq = useRef(false);
   const prevFire = useRef(false);
   const switchReq = useRef<number | 'next' | 'prev' | null>(null);
 
@@ -157,6 +159,9 @@ export function useFpsLoop(
   }, []);
   const jump = useCallback(() => {
     jumpReq.current = true;
+  }, []);
+  const grapple = useCallback(() => {
+    grappleReq.current = true;
   }, []);
   const reload = useCallback(() => {
     reloadReq.current = true;
@@ -244,7 +249,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -421,6 +426,7 @@ export function useFpsLoop(
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       if (k === 'r') reloadReq.current = true;
+      if (k === 'f') grappleReq.current = true;
       if (k === 'g') throwReq.current = true;
       if (k === '1' || k === '2' || k === '3') switchReq.current = Number(k) - 1;
       if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' || k.startsWith('arrow')) {
@@ -592,6 +598,35 @@ export function useFpsLoop(
           const fz = -cp * Math.cos(p.yaw);
           const eye: Vec3 = [p.x, p.y + EYE, p.z];
           const dir: Vec3 = [fx, fy, fz];
+
+          // GRAPPLE: aim at a rooftop grapple point that's NEAR (≤ range) and
+          // VISIBLE → propel the player up onto it. Fair — no cross-arena swings.
+          {
+            let ready = false;
+            const pts = g.level.grapplePoints;
+            if (pts && pts.length && !p.grapple) {
+              let best: { x: number; y: number; z: number } | null = null;
+              let bestDot = 0.955; // ~17° aim cone
+              for (const gp of pts) {
+                const dx = gp.x - p.x;
+                const dy = gp.y + 1.0 - (p.y + EYE);
+                const dz = gp.z - p.z;
+                const d = Math.hypot(dx, dy, dz);
+                if (d > 24 || d < 3) continue; // near the building only
+                const dot = (dx * fx + dy * fy + dz * fz) / d;
+                if (dot < bestDot) continue;
+                if (segBlocked(eye, [gp.x, gp.y + 0.6, gp.z], g.level, grid ?? undefined)) continue;
+                bestDot = dot;
+                best = gp;
+              }
+              if (best) {
+                ready = true;
+                if (grappleReq.current) startGrapple(p, best.x, best.y, best.z);
+              }
+            }
+            snap.grappleReady = ready;
+          }
+          grappleReq.current = false;
 
           // Throw a grenade/smoke
           if (throwReq.current) {
@@ -1418,5 +1453,5 @@ export function useFpsLoop(
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload, grapple };
 }

@@ -81,6 +81,9 @@ export interface Level3D {
   spawn: { x: number; z: number; yaw: number };
   /** Far end of the arena where enemies start (opposite the player spawn). */
   enemySpawn: { x: number; z: number };
+  /** Rooftop/perch points the player can GRAPPLE to (aim near one + press grapple).
+   *  Each is a safe standing spot on top of a building (feet height). */
+  grapplePoints?: { x: number; y: number; z: number }[];
   size: number;
   seed: number;
 }
@@ -360,6 +363,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
 
   const placed: { x: number; z: number; rad: number }[] = [];
   const towers3: { x: number; z: number; half: number }[] = [];
+  const grapplePoints: { x: number; y: number; z: number }[] = [];
   const tryPlace = (rad: number, minGap: number): { x: number; z: number } | null => {
     for (let t = 0; t < 24; t++) {
       const x = (r() * 2 - 1) * (half - rad - 2);
@@ -376,6 +380,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
   const hillZ = -half * 0.55;
   hill(boxes, ladders, hillX, hillZ, hillW);
   placed.push({ x: hillX, z: hillZ, rad: hillW });
+  grapplePoints.push({ x: hillX, y: 3.05, z: hillZ }); // hill top (H=3)
 
   // Phase-3 demo terrain (placed before towers so they avoid it): a ramp up onto
   // a raised plateau, and one sunken "trench" (berm-ringed pit at y≥0 with entry
@@ -409,6 +414,8 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     if (isTall) towerN(boxes, ladders, pos.x, pos.z, bw, TOWER_FLOORS);
     else tower2(boxes, ladders, pos.x, pos.z, bw);
     if (isTall) towers3.push({ x: pos.x, z: pos.z, half: bw / 2 });
+    // Rooftop grapple point: tall tower roof = (floors-1)*FLOOR_H, 2-floor = 3.
+    grapplePoints.push({ x: pos.x, y: (isTall ? (TOWER_FLOORS - 1) * FLOOR_H : 3) + 0.05, z: pos.z });
   }
   // Then smaller structures fill the gaps (platforms + bunkers).
   const fillers = Math.round(size / 6);
@@ -417,8 +424,10 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     const pos = tryPlace(bw, 5);
     if (!pos) continue;
     placed.push({ x: pos.x, z: pos.z, rad: bw });
-    if (r() < 0.5) platform(boxes, ladders, pos.x, pos.z, bw);
-    else bunker(boxes, pos.x, pos.z, bw, r);
+    if (r() < 0.5) {
+      platform(boxes, ladders, pos.x, pos.z, bw);
+      grapplePoints.push({ x: pos.x, y: 2.65, z: pos.z }); // platform deck (H=2.6)
+    } else bunker(boxes, pos.x, pos.z, bw, r);
   }
 
   // Cover pillars (avoid spawn + structures).
@@ -459,5 +468,5 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     pads.push({ x, z, r: 1.1, power: 13 });
   }
 
-  return { boxes, ladders, ramps, pads, ziplines, spawn: playerSpawn, enemySpawn, size, seed };
+  return { boxes, ladders, ramps, pads, ziplines, spawn: playerSpawn, enemySpawn, grapplePoints, size, seed };
 }

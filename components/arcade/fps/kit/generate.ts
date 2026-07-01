@@ -79,5 +79,12 @@ export function makeKitTestArena(seed: number): Level3D {
     crate(boxes, x, z, 1.2 + r() * 0.6);
   }
 
-  return { boxes, ladders, ramps, pads: [], ziplines: [], spawn, enemySpawn, size, seed };
+  // Rooftop grapple points (both barracks roofs at 2×floorStep) + the platform.
+  const grapplePoints = [
+    { x: -6, y: 2 * DIM.floorStep + 0.05, z: 0 },
+    { x: 16, y: 2 * DIM.floorStep + 0.05, z: 0 },
+    { x: plX, y: plH + 0.05, z: plZ },
+  ];
+
+  return { boxes, ladders, ramps, pads: [], ziplines: [], spawn, enemySpawn, grapplePoints, size, seed };
 }

@@ -97,10 +97,14 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
       {/* crosshair / hitmarker (hidden while scoped) */}
       {!scoped && (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <span className={hit ? 'text-[#ff5d6e]' : 'text-[#aef5c8]/80'} style={{ fontSize: 13 }}>
-            {hit ? '✕' : '+'}
+          <span className={hit ? 'text-[#ff5d6e]' : snap.grappleReady ? 'text-[#ffd27a]' : 'text-[#aef5c8]/80'} style={{ fontSize: 13 }}>
+            {hit ? '✕' : snap.grappleReady ? '⟰' : '+'}
           </span>
         </div>
+      )}
+      {/* grapple-ready prompt */}
+      {snap.grappleReady && !scoped && (
+        <div className="absolute left-1/2 top-[54%] -translate-x-1/2 whitespace-nowrap font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a] sm:text-[9px]">{isTouch ? 'TAP GRAPPLE' : 'F · GRAPPLE'}</div>
       )}
 
       {/* muzzle flash + gun view-model (hidden while scoped) — superseded by the 3D viewmodel */}

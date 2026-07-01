@@ -137,6 +137,20 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
     disposables.push(geo);
   }
 
+  // Grapple points — a floating glowing ring marker above each rooftop target.
+  if (level.grapplePoints && level.grapplePoints.length) {
+    const grMat = new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+    disposables.push(grMat);
+    for (const gp of level.grapplePoints) {
+      const gGeo = new THREE.TorusGeometry(0.7, 0.12, 8, 20);
+      const m = new THREE.Mesh(gGeo, grMat);
+      m.position.set(gp.x, gp.y + 1.7, gp.z);
+      m.rotation.x = Math.PI / 2; // lie flat (ring you drop into)
+      scene.add(m);
+      disposables.push(gGeo);
+    }
+  }
+
   // Ziplines — glowing cyan cables + a marker at the grab end.
   const zipMat = new THREE.LineBasicMaterial({ color: '#7fdfff' });
   const nodeMat = new THREE.MeshBasicMaterial({ color: '#7fdfff' });

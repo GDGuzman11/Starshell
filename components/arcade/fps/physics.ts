@@ -20,6 +20,8 @@ export interface Player3 {
   health: number;
   /** Active zipline ride (index into level.ziplines + progress 0..1). */
   zip: { i: number; t: number } | null;
+  /** Active grapple flight — arcs the player from (x0,y0,z0) to (tx,ty,tz). */
+  grapple?: { x0: number; y0: number; z0: number; tx: number; ty: number; tz: number; t: number; dur: number } | null;
 }
 
 const ZIP_SPEED = 16; // units/sec along a zipline
@@ -85,7 +87,7 @@ export interface MoveInput {
 }
 
 export function makePlayer3(spawn: { x: number; z: number; yaw: number }): Player3 {
-  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, px: 0, pz: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, zip: null };
+  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, px: 0, pz: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, zip: null, grapple: null };
 }
 
 /** Add a horizontal impulse to the player (boss knockback / pull). `(dx,dz)` is
@@ -102,6 +104,16 @@ export function pushPlayer(p: Player3, dx: number, dz: number, strength: number)
 export function launchPlayer(p: Player3, vy: number): void {
   if (vy > p.vy) p.vy = vy;
   p.onGround = false;
+}
+
+/** Begin a grapple flight to (tx,ty,tz) — a fixed-duration arc up onto a rooftop
+ *  (collision is ignored during the flight; you land at the safe target). */
+export function startGrapple(p: Player3, tx: number, ty: number, tz: number): void {
+  const dist = Math.hypot(tx - p.x, ty - p.y, tz - p.z);
+  const dur = Math.min(0.8, Math.max(0.32, dist / 32));
+  p.grapple = { x0: p.x, y0: p.y, z0: p.z, tx, ty, tz, t: dur, dur };
+  p.zip = null;
+  p.vy = 0;
 }
 
 function overlapXZ(p: Player3, b: Box): boolean {
@@ -132,6 +144,26 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
   // Returns the full box list when no grid is supplied (identical behavior).
   const near = (): readonly Box[] =>
     (grid ? grid.queryAABB(p.x - R, p.z - R, p.x + R, p.z + R) : lvl.boxes).filter((b) => !b.dead);
+  // Grapple flight — a fixed-duration arc up onto a rooftop (ignores collision,
+  // lands at the safe target). Overrides all other movement while active.
+  if (p.grapple) {
+    const gr = p.grapple;
+    gr.t -= dt;
+    const k = Math.min(1, 1 - Math.max(0, gr.t) / gr.dur); // 0 → 1
+    p.x = gr.x0 + (gr.tx - gr.x0) * k;
+    p.z = gr.z0 + (gr.tz - gr.z0) * k;
+    const lift = Math.max(2.5, (gr.ty - gr.y0) * 0.45);
+    p.y = gr.y0 + (gr.ty - gr.y0) * k + Math.sin(k * Math.PI) * lift; // parabolic arc up
+    p.vy = 0;
+    p.onGround = false;
+    if (gr.t <= 0) {
+      p.x = gr.tx;
+      p.y = gr.ty;
+      p.z = gr.tz;
+      p.grapple = null;
+    }
+    return;
+  }
   // Zipline ride — slide along the line, look freely, drop off at the end.
   if (p.zip) {
     const zl = lvl.ziplines[p.zip.i];

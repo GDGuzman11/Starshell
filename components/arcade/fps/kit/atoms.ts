@@ -36,6 +36,38 @@ export function floorSlab(boxes: Box[], x: number, z: number, sx: number, sz: nu
   boxes.push({ x, y: topY - DIM.floorT / 2, z, sx, sy: DIM.floorT, sz, tex });
 }
 
+/**
+ * A floor slab with a rectangular OPENING (built as 4 slab strips around the hole)
+ * so an interior ladder/ramp can pass through and you walk onto the floor above.
+ * RULE: openings are sized ≥ 3× the player's width (≥ ~3 m) so movement is clean.
+ */
+export function floorWithHole(
+  boxes: Box[],
+  cx: number,
+  cz: number,
+  sx: number,
+  sz: number,
+  topY: number,
+  holeCx: number,
+  holeCz: number,
+  holeW: number,
+  holeD: number,
+  tex: number = TEX.floor,
+): void {
+  const x0 = cx - sx / 2;
+  const x1 = cx + sx / 2;
+  const z0 = cz - sz / 2;
+  const z1 = cz + sz / 2;
+  const hx0 = holeCx - holeW / 2;
+  const hx1 = holeCx + holeW / 2;
+  const hz0 = holeCz - holeD / 2;
+  const hz1 = holeCz + holeD / 2;
+  if (hz0 > z0 + 0.05) floorSlab(boxes, cx, (z0 + hz0) / 2, sx, hz0 - z0, topY, tex); // −z strip
+  if (z1 > hz1 + 0.05) floorSlab(boxes, cx, (hz1 + z1) / 2, sx, z1 - hz1, topY, tex); // +z strip
+  if (hx0 > x0 + 0.05) floorSlab(boxes, (x0 + hx0) / 2, holeCz, hx0 - x0, holeD, topY, tex); // −x strip
+  if (x1 > hx1 + 0.05) floorSlab(boxes, (hx1 + x1) / 2, holeCz, x1 - hx1, holeD, topY, tex); // +x strip
+}
+
 /** A vertical column (DIM.colT square) from `yBase` up `h`. */
 export function column(boxes: Box[], x: number, z: number, h: number, yBase = 0, tex: number = TEX.wall): void {
   boxes.push({ x, y: yBase + h / 2, z, sx: DIM.colT, sy: h, sz: DIM.colT, tex });
