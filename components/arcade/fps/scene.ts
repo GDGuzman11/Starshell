@@ -14,7 +14,7 @@ import { makeWallMaterial, makeGroundMaterial, type RenderTier } from './materia
 export interface World {
   scene: THREE.Scene;
   dispose: () => void;
-  boxMeshes: Map<Box, THREE.Mesh>; // for hiding destroyed structures
+  hideBox: (b: Box) => void; // collapse a destroyed structure's instance
 }
 
 function tex(canvas: HTMLCanvasElement, repeat = 1): THREE.Texture {
@@ -89,19 +89,51 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
   scene.add(ground);
   disposables.push(ground.geometry, ground.material as THREE.Material, gtex);
 
-  // Walls / boxes
+  // Walls / boxes — rendered as ONE InstancedMesh per material (a war-torn city
+  // is hundreds of boxes; per-box meshes would be hundreds of draw calls). Boxes
+  // are AABBs, so a shared unit cube scaled/translated per instance is exact.
+  // Each box records its (instancedMesh, index) so `hideBox` can collapse a
+  // destroyed structure by zeroing its instance matrix.
   const canvases = getTextures();
   const mats = canvases.map((c) => makeWallMaterial(tex(c), tier));
   disposables.push(...mats);
-  const boxMeshes = new Map<Box, THREE.Mesh>();
-  for (const b of level.boxes) {
-    const geo = new THREE.BoxGeometry(b.sx, b.sy, b.sz);
-    const mesh = new THREE.Mesh(geo, mats[b.tex % mats.length]);
-    mesh.position.set(b.x, b.y, b.z);
-    scene.add(mesh);
-    disposables.push(geo);
-    boxMeshes.set(b, mesh);
-  }
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  disposables.push(unitBox);
+
+  // Bucket boxes by material index.
+  const buckets: Box[][] = mats.map(() => []);
+  for (const b of level.boxes) buckets[b.tex % mats.length].push(b);
+
+  const boxSlot = new Map<Box, { im: THREE.InstancedMesh; idx: number }>();
+  const m4 = new THREE.Matrix4();
+  const q0 = new THREE.Quaternion();
+  const vPos = new THREE.Vector3();
+  const vScale = new THREE.Vector3();
+  buckets.forEach((bucket, mi) => {
+    if (bucket.length === 0) return;
+    const im = new THREE.InstancedMesh(unitBox, mats[mi], bucket.length);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // The geometry is a unit cube at the origin; its bounds don't reflect the
+    // spread-out instances, so per-object frustum culling would wrongly drop the
+    // whole mesh. It's one draw call covering the arena — just always render it.
+    im.frustumCulled = false;
+    for (let i = 0; i < bucket.length; i++) {
+      const b = bucket[i];
+      m4.compose(vPos.set(b.x, b.y, b.z), q0, vScale.set(b.sx, b.sy, b.sz));
+      im.setMatrixAt(i, m4);
+      boxSlot.set(b, { im, idx: i });
+    }
+    im.instanceMatrix.needsUpdate = true;
+    scene.add(im);
+  });
+
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  const hideBox = (b: Box) => {
+    const slot = boxSlot.get(b);
+    if (!slot) return;
+    slot.im.setMatrixAt(slot.idx, zero);
+    slot.im.instanceMatrix.needsUpdate = true;
+  };
 
   // Ramps — VISUAL sloped slabs. The collider is the height function in physics;
   // this mesh is only what you see. A thin box tilted to the incline, sized to
@@ -184,5 +216,5 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
     }
   }
 
-  return { scene, dispose: () => disposables.forEach((d) => d.dispose()), boxMeshes };
+  return { scene, dispose: () => disposables.forEach((d) => d.dispose()), hideBox };
 }

@@ -411,8 +411,7 @@ export function useFpsLoop(
       }
       if (b.hp <= 0) {
         b.dead = true;
-        const mesh = world?.boxMeshes.get(b);
-        if (mesh) mesh.visible = false;
+        world?.hideBox(b);
         if (world) {
           const boom = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: 0xbfae8a, transparent: true }));
           boom.position.set(b.x, b.y, b.z);
