@@ -830,18 +830,45 @@ export function useFpsLoop(
             sfx.playReload(gun.id);
           }
 
-          // Grenade sim + detonation
+          // Grenade sim + detonation. Grenades BOUNCE off intact walls (per-axis
+          // reflect) and the ground; they pass through destroyed boxes.
+          const GR_R = 0.22;
+          const grHitsBox = (hx: number, hy: number, hz: number): boolean => {
+            const bxs = grid ? grid.queryAABB(hx - GR_R, hz - GR_R, hx + GR_R, hz + GR_R) : g.level.boxes;
+            for (let b = 0; b < bxs.length; b++) {
+              const bb = bxs[b];
+              if (bb.dead) continue;
+              if (
+                hx + GR_R > bb.x - bb.sx / 2 &&
+                hx - GR_R < bb.x + bb.sx / 2 &&
+                hz + GR_R > bb.z - bb.sz / 2 &&
+                hz - GR_R < bb.z + bb.sz / 2 &&
+                hy + GR_R > bb.y - bb.sy / 2 &&
+                hy - GR_R < bb.y + bb.sy / 2
+              )
+                return true;
+            }
+            return false;
+          };
           for (let i = grenades.length - 1; i >= 0; i--) {
             const gr = grenades[i];
             gr.vy -= 22 * dt;
-            gr.x += gr.vx * dt;
-            gr.y += gr.vy * dt;
-            gr.z += gr.vz * dt;
-            if (gr.y < 0.2) {
+            const nx = gr.x + gr.vx * dt;
+            if (grHitsBox(nx, gr.y, gr.z)) gr.vx *= -0.5;
+            else gr.x = nx;
+            const nz = gr.z + gr.vz * dt;
+            if (grHitsBox(gr.x, gr.y, nz)) gr.vz *= -0.5;
+            else gr.z = nz;
+            const ny = gr.y + gr.vy * dt;
+            if (ny < 0.2) {
               gr.y = 0.2;
               gr.vy *= -0.4;
-              gr.vx *= 0.6;
-              gr.vz *= 0.6;
+              gr.vx *= 0.7;
+              gr.vz *= 0.7;
+            } else if (grHitsBox(gr.x, ny, gr.z)) {
+              gr.vy *= -0.5;
+            } else {
+              gr.y = ny;
             }
             gr.fuse -= dt;
             gr.mesh.position.set(gr.x, gr.y, gr.z);
