@@ -19,6 +19,24 @@ import { loadCampaign, saveCampaign } from '../fps/kit/storage';
 
 const CANVAS = 440;
 const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate'];
+// Boss fights are fixed at every 5th campaign level (shown, not editable).
+const BOSS_AT: Record<number, string> = { 5: 'XENOMORPH', 10: 'WARLORD', 15: 'KRAKEN', 20: 'GAUNTLET' };
+
+/** The campaign as displayed: authored levels interleaved with the fixed boss slots
+ *  (a boss at every 5th campaign level). Returns items in play order. */
+type BeltItem = { type: 'level'; idx: number; level: number } | { type: 'boss'; name: string; level: number };
+function buildBelt(count: number): BeltItem[] {
+  const belt: BeltItem[] = [];
+  let ai = 0;
+  let L = 1;
+  while (ai < count) {
+    if (L % 5 === 0) belt.push({ type: 'boss', name: BOSS_AT[L] ?? 'BOSS', level: L });
+    else belt.push({ type: 'level', idx: ai++, level: L });
+    L++;
+  }
+  if (count > 0 && L % 5 === 0) belt.push({ type: 'boss', name: BOSS_AT[L] ?? 'BOSS', level: L }); // trailing boss preview
+  return belt;
+}
 const MOD_COLOR: Record<ModuleKind, string> = {
   barracks: '#5aa06a',
   watchtower: '#7a7ad0',
@@ -61,7 +79,9 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const [hover, setHover] = useState<{ gx: number; gz: number } | null>(null);
   const [bridgeFrom, setBridgeFrom] = useState<number | null>(null);
   const [note, setNote] = useState('');
+  const [showCampaign, setShowCampaign] = useState(false); // the roomy campaign window
   const dragRef = useRef(false);
+  const cardDragRef = useRef<number | null>(null); // campaign card being dragged
   const loadingRef = useRef(false); // suppress the dirty flag while loading a slot
 
   const flash = useCallback((m: string) => {
@@ -144,6 +164,30 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     loadInto(next[clamped].layout);
     setActiveIdx(clamped);
     setDirty(false);
+  };
+  const duplicateSlot = (idx: number) => {
+    const src = campaign[idx];
+    const copy: CampaignSlot = { authored: src.authored, layout: JSON.parse(JSON.stringify(src.layout)) as LevelLayout };
+    const next = [...campaign.slice(0, idx + 1), copy, ...campaign.slice(idx + 1)];
+    commit(next);
+    loadInto(copy.layout);
+    setActiveIdx(idx + 1);
+    setDirty(false);
+    flash('DUPLICATED');
+  };
+  const moveSlot = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...campaign];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    commit(next);
+    // keep the active level selected after the reorder
+    const activeItem = campaign[activeIdx];
+    setActiveIdx(next.indexOf(activeItem));
+  };
+  const editSlot = (idx: number) => {
+    if (idx !== activeIdx) selectSlot(idx);
+    setShowCampaign(false);
   };
 
   // Redraw the board.
@@ -363,23 +407,74 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-[#05070c] p-3 text-white/80">
-      {/* Timeline of levels */}
-      <div className="flex w-full items-center gap-1 overflow-x-auto pb-1 font-pixel text-[8px]">
-        <span className="mr-1 shrink-0 text-[7px] tracking-[0.2em] text-[#aef5c8]">CAMPAIGN</span>
-        {campaign.map((s, i) => (
-          <span key={i} className="flex shrink-0 items-center">
-            <button type="button" onClick={() => insertAt(i)} title="insert before" className="px-0.5 text-white/25 hover:text-[#aef5c8]">＋</button>
-            <button type="button" onClick={() => selectSlot(i)} className={`h-9 w-9 rounded border transition-colors ${i === activeIdx ? 'border-[#aef5c8] ring-1 ring-[#aef5c8]' : 'border-white/20'} ${s.authored ? 'bg-[#aef5c8]/15 text-[#aef5c8]' : 'bg-white/[0.03] text-white/40'}`} title={s.authored ? 'authored' : 'empty → procedural'}>
-              {i + 1}
-              {i === activeIdx && dirty ? '•' : ''}
-            </button>
-          </span>
-        ))}
-        <button type="button" onClick={() => insertAt(campaign.length)} className="ml-1 h-9 shrink-0 rounded border border-[#aef5c8]/40 px-2 text-[#aef5c8] hover:bg-[#aef5c8]/10">＋ ADD</button>
-        {campaign.length > 1 && (
-          <button type="button" onClick={() => deleteSlot(activeIdx)} className="ml-1 h-9 shrink-0 rounded border border-[#ff5d6e]/40 px-2 text-[#ff9aa6] hover:bg-[#ff5d6e]/10">✕ DEL {activeIdx + 1}</button>
-        )}
+      {/* Slim header — the full campaign lives in its own window (▤ CAMPAIGN). */}
+      <div className="flex w-full items-center gap-2 font-pixel text-[8px]">
+        <button type="button" onClick={() => setShowCampaign(true)} className="rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-3 py-1.5 uppercase text-[#aef5c8] hover:bg-[#aef5c8]/20">▤ CAMPAIGN ({campaign.length})</button>
+        <button type="button" onClick={() => activeIdx > 0 && selectSlot(activeIdx - 1)} disabled={activeIdx === 0} className="rounded border border-white/20 px-2 py-1.5 text-white/60 disabled:opacity-30 hover:bg-white/10">◂</button>
+        <span className="text-[#aef5c8]">EDITING LEVEL {activeIdx + 1}{dirty ? ' •' : ''}</span>
+        <button type="button" onClick={() => activeIdx < campaign.length - 1 && selectSlot(activeIdx + 1)} disabled={activeIdx >= campaign.length - 1} className="rounded border border-white/20 px-2 py-1.5 text-white/60 disabled:opacity-30 hover:bg-white/10">▸</button>
       </div>
+
+      {/* CAMPAIGN WINDOW — a roomy panel: level cards (with boss slots), drag to
+          reorder, duplicate / edit / delete, add. */}
+      {showCampaign && (
+        <div className="absolute inset-0 z-50 flex flex-col gap-3 overflow-auto bg-[#05070c]/98 p-4 font-pixel backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] tracking-[0.2em] text-[#aef5c8]">CAMPAIGN · {campaign.length} LEVELS</p>
+            <button type="button" onClick={() => setShowCampaign(false)} className="rounded border border-white/20 px-3 py-1.5 text-[9px] uppercase text-white/70 hover:bg-white/10">✕ CLOSE</button>
+          </div>
+          <p className="text-[7px] leading-relaxed text-white/40">Drag level cards to reorder. Bosses are fixed at every 5th slot (not editable). EDIT opens a level on the grid; DUP clones it; empty cards fall back to a procedural arena in-game.</p>
+          <div className="flex flex-wrap gap-3">
+            {buildBelt(campaign.length).map((item) =>
+              item.type === 'boss' ? (
+                <div key={`b${item.level}`} className="flex h-28 w-32 flex-col items-center justify-center rounded-lg border border-[#ff9a3a]/40 bg-[#ff9a3a]/[0.06] text-center">
+                  <span className="text-[16px] text-[#ff9a3a]">★</span>
+                  <span className="mt-1 text-[9px] text-[#ff9a3a]">{item.name}</span>
+                  <span className="mt-1 text-[7px] text-white/40">BOSS · LVL {item.level}</span>
+                </div>
+              ) : (
+                <div
+                  key={`l${item.idx}`}
+                  draggable
+                  onDragStart={() => (cardDragRef.current = item.idx)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (cardDragRef.current != null) moveSlot(cardDragRef.current, item.idx);
+                    cardDragRef.current = null;
+                  }}
+                  className={`flex h-28 w-32 cursor-grab flex-col rounded-lg border p-2 active:cursor-grabbing ${item.idx === activeIdx ? 'border-[#aef5c8] ring-1 ring-[#aef5c8]' : 'border-white/20'} ${campaign[item.idx].authored ? 'bg-[#aef5c8]/10' : 'bg-white/[0.03]'}`}
+                >
+                  <div className="flex items-center justify-between text-[9px]">
+                    <span className={campaign[item.idx].authored ? 'text-[#aef5c8]' : 'text-white/50'}>LVL {item.level}</span>
+                    <span className="text-white/30">⠿</span>
+                  </div>
+                  <div className="mt-1 flex-1 text-[7px] leading-relaxed text-white/45">
+                    {campaign[item.idx].authored ? (
+                      <>
+                        {campaign[item.idx].layout.theme}
+                        <br />
+                        {campaign[item.idx].layout.placements.length} pieces
+                        <br />
+                        {campaign[item.idx].layout.size} m
+                      </>
+                    ) : (
+                      <span className="text-white/30">empty → procedural</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1 text-[7px]">
+                    <button type="button" onClick={() => editSlot(item.idx)} className="flex-1 rounded border border-[#7fdfff]/40 py-0.5 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">EDIT</button>
+                    <button type="button" onClick={() => duplicateSlot(item.idx)} className="rounded border border-white/20 px-1.5 py-0.5 uppercase text-white/60 hover:bg-white/10">DUP</button>
+                    {campaign.length > 1 && (
+                      <button type="button" onClick={() => deleteSlot(item.idx)} className="rounded border border-[#ff5d6e]/40 px-1.5 py-0.5 uppercase text-[#ff9aa6] hover:bg-[#ff5d6e]/10">✕</button>
+                    )}
+                  </div>
+                </div>
+              ),
+            )}
+            <button type="button" onClick={() => { insertAt(campaign.length); setShowCampaign(false); }} className="flex h-28 w-32 flex-col items-center justify-center rounded-lg border border-dashed border-[#aef5c8]/40 text-[10px] text-[#aef5c8] hover:bg-[#aef5c8]/10">＋ ADD LEVEL</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-center">
         <div className="flex flex-col items-center gap-1">
