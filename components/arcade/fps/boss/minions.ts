@@ -26,7 +26,16 @@ export type MinionKind =
   | 'sporeback'
   | 'phantom'
   | 'mirror'
-  | 'wisp';
+  | 'wisp'
+  | 'broodworm'
+  | 'mawturret'
+  | 'leech'
+  | 'shard'
+  | 'resonator'
+  | 'grower'
+  | 'rift'
+  | 'shade'
+  | 'devourer';
 
 export interface MinionDef {
   hp: number;
@@ -58,6 +67,18 @@ export const MINIONS: Record<MinionKind, MinionDef> = {
   phantom: { hp: 80, speedMul: 1.8, scale: 1.35, melee: 15, ranged: 0, color: 0x2a1a44 }, // cloaked ambusher
   mirror: { hp: 1, speedMul: 1.5, scale: 1.35, melee: 0, ranged: 0, color: 0x3a2a5a }, // illusory decoy (pops in 1 hit)
   wisp: { hp: 60, speedMul: 1.3, scale: 0.9, melee: 0, ranged: 10, color: 0x4a2a6a }, // fear/blur floater
+  // Leviathan brood (venom green) — burrowers
+  broodworm: { hp: 90, speedMul: 1.7, scale: 1.1, melee: 13, ranged: 0, color: 0x4a5a1a }, // burrow rusher
+  mawturret: { hp: 200, speedMul: 0.25, scale: 1.3, melee: 0, ranged: 15, color: 0x3a4a18 }, // anchored biter
+  leech: { hp: 70, speedMul: 1.9, scale: 0.9, melee: 12, ranged: 0, color: 0x6a8a2a }, // drains → heals boss
+  // Monolith lattice (crystal cyan) — crystalline
+  shard: { hp: 55, speedMul: 2.1, scale: 0.9, melee: 10, ranged: 0, color: 0x2a4a5a }, // fast crystal dart
+  resonator: { hp: 170, speedMul: 0.3, scale: 1.2, melee: 0, ranged: 14, color: 0x1e3a48 }, // beam node
+  grower: { hp: 150, speedMul: 0.7, scale: 1.25, melee: 0, ranged: 11, color: 0x24414f }, // grows cover + repairs allies
+  // Oblivion void (void violet) — shadows
+  rift: { hp: 120, speedMul: 0.4, scale: 1.1, melee: 0, ranged: 13, color: 0x180e26 }, // gravity-well node + pull
+  shade: { hp: 75, speedMul: 1.7, scale: 1.3, melee: 14, ranged: 0, color: 0x120a1e }, // shadow melee
+  devourer: { hp: 110, speedMul: 1.5, scale: 1.15, melee: 16, ranged: 0, color: 0x0e0818 }, // void crawler
 };
 
 const GREEN = 0x6aff7a;
@@ -65,6 +86,9 @@ const VIOLET = 0xc08bff;
 const AZURE = 0x49a6ff;
 const AMBER = 0xffb14a;
 const SPECTRAL = 0xd7a6ff;
+const VENOM = 0x9adb3a;
+const CRYSTAL = 0x7fe8ff;
+const VOIDV = 0xc98bff;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -388,6 +412,196 @@ function buildWisp(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Leviathan Broodworm: a low segmented worm with a glowing maw (burrow rusher). */
+function buildBroodworm(tier: RenderTier): THREE.Group {
+  const body = metal(0x4a5a1a, tier, 0.5, 0.45);
+  const dark = metal(0x28320e, tier, 0.55, 0.4);
+  const glow = accent(VENOM, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.35;
+  for (let i = 0; i < 4; i++) core.add(capsuleZ(0.2 - i * 0.02, 0.24, i % 2 ? dark : body, 0, 0, 0.3 - i * 0.26)); // body segments
+  core.add(coneZ(0.16, 0, 0.28, dark, 0, 0, 0.52)); // maw ring
+  core.add(box(0.14, 0.14, 0.08, glow, 0, 0, 0.5)); // glowing maw
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Leviathan Maw-turret: an anchored fanged maw on a stubby stalk (stationary biter). */
+function buildMawturret(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a4a18, tier, 0.5, 0.45);
+  const dark = metal(0x212a0e, tier, 0.55, 0.4);
+  const glow = accent(VENOM, tier, 1.8);
+  const root = new THREE.Group();
+  root.add(box(0.5, 0.4, 0.5, dark, 0, 0.2, 0)); // rooted base
+  const core = new THREE.Group();
+  core.position.y = 0.7;
+  core.add(capsuleZ(0.28, 0.2, body, 0, 0, 0)); // head
+  core.add(coneZ(0.24, 0, 0.34, dark, 0, 0.05, 0.3)); // gaping maw
+  core.add(box(0.16, 0.16, 0.08, glow, 0, 0.02, 0.34)); // throat glow
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    core.add(coneZ(0, 0.03, 0.16, body, Math.cos(a) * 0.18, 0.02 + Math.sin(a) * 0.14, 0.32)); // fang ring
+  }
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Leviathan Leech: a small flattened tick with a sucker mouth (drains to heal boss). */
+function buildLeech(tier: RenderTier): THREE.Group {
+  const body = metal(0x6a8a2a, tier, 0.45, 0.4);
+  const glow = accent(VENOM, tier, 1.6);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.32;
+  core.add(capsuleZ(0.18, 0.34, body, 0, 0, 0)); // flat body
+  core.add(coneZ(0.13, 0, 0.2, glow, 0, 0, 0.3)); // sucker mouth
+  for (const sx of [-1, 1])
+    for (const sz of [-0.12, 0.12]) {
+      const leg = box(0.03, 0.24, 0.03, body, sx * 0.16, -0.1, sz);
+      leg.rotation.z = sx * 0.6;
+      core.add(leg);
+    }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Monolith Shard: a floating crystal dart (fast). */
+function buildShard(tier: RenderTier): THREE.Group {
+  const body = metal(0x2a4a5a, tier, 0.2, 0.35);
+  const glow = accent(CRYSTAL, tier, 2.0);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.0; // floats
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), body));
+  core.add(coneZ(0, 0.14, 0.5, glow, 0, 0, 0.24)); // dart point
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Monolith Resonator: a crystal node on a base with a bright beam core (turret). */
+function buildResonator(tier: RenderTier): THREE.Group {
+  const body = metal(0x1e3a48, tier, 0.2, 0.35);
+  const dark = metal(0x142832, tier, 0.25, 0.3);
+  const glow = accent(CRYSTAL, tier, 2.0);
+  const root = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.1, 0.7, 4), dark);
+    leg.position.set(Math.cos(a) * 0.22, 0.35, Math.sin(a) * 0.22);
+    leg.rotation.z = Math.cos(a) * 0.3;
+    leg.rotation.x = -Math.sin(a) * 0.3;
+    root.add(leg);
+  }
+  const core = new THREE.Group();
+  core.position.y = 0.9;
+  core.add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.34, 0.8, 5), body)); // crystal head
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), glow)); // beam core
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Monolith Grower: a crystal-backed support with a bright grow-pod (repairs allies). */
+function buildGrower(tier: RenderTier): THREE.Group {
+  const body = metal(0x24414f, tier, 0.2, 0.35);
+  const dark = metal(0x162a34, tier, 0.25, 0.3);
+  const glow = accent(CRYSTAL, tier, 2.0);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.7;
+  core.add(box(0.44, 0.5, 0.44, body, 0, 0, 0)); // body
+  for (let i = 0; i < 3; i++) core.add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.12, 0.6 + i * 0.15, 5), dark)); // back crystals
+  (core.children[1] as THREE.Mesh).position.set(-0.2, 0.4, -0.15);
+  (core.children[2] as THREE.Mesh).position.set(0.1, 0.5, -0.15);
+  (core.children[3] as THREE.Mesh).position.set(0.24, 0.42, -0.1);
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow)); // grow-pod
+  (core.children[4] as THREE.Mesh).position.set(0, 0.1, 0.28);
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.1, 0.5, 0.1, dark, sx * 0.16, 0.25, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Oblivion Rift: a dark floating gravity-well ring with a bright singular core. */
+function buildRift(tier: RenderTier): THREE.Group {
+  const body = metal(0x180e26, tier, 0.3, 0.25);
+  const glow = accent(VOIDV, tier, 2.0);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.1; // floats
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.07, 8, 24), body);
+  ring.rotation.x = Math.PI * 0.4;
+  core.add(ring);
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 6, 18), glow);
+  ring2.rotation.x = Math.PI * 0.4;
+  core.add(ring2);
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), glow)); // singularity
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Oblivion Shade: a wispy dark humanoid shadow (translucent, glowing void eyes). */
+function buildShade(tier: RenderTier): THREE.Group {
+  const body = wraith(0x120a1e, 0.4, 0xc98bff);
+  const glow = accent(VOIDV, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.0;
+  core.add(capsuleY(0.2, 0.5, body, 0, 0.1, 0)); // torso
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), body)); // head
+  (core.children[1] as THREE.Mesh).position.set(0, 0.5, 0);
+  core.add(box(0.04, 0.03, 0.06, glow, -0.06, 0.5, 0.14)); // eyes
+  core.add(box(0.04, 0.03, 0.06, glow, 0.06, 0.5, 0.14));
+  for (const sx of [-1, 1]) {
+    const arm = box(0.06, 0.55, 0.06, body, sx * 0.24, 0.02, 0);
+    arm.rotation.z = sx * 0.32;
+    core.add(arm);
+  }
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.07, 0.7, 0.09, body, sx * 0.12, 0.4, 0)); // wispy legs
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Oblivion Devourer: a low void crawler with a wide fanged maw. */
+function buildDevourer(tier: RenderTier): THREE.Group {
+  const body = metal(0x0e0818, tier, 0.3, 0.3);
+  const dark = metal(0x060310, tier, 0.35, 0.25);
+  const glow = accent(VOIDV, tier, 1.8);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.4;
+  core.add(box(0.5, 0.34, 0.5, body, 0, 0, 0)); // bulk
+  core.add(box(0.56, 0.24, 0.2, dark, 0, -0.02, 0.32)); // wide maw
+  for (let i = 0; i < 5; i++) core.add(coneZ(0, 0.035, 0.14, glow, -0.2 + i * 0.1, 0.02, 0.42)); // teeth
+  core.add(box(0.06, 0.05, 0.05, glow, -0.14, 0.14, 0.26)); // eyes
+  core.add(box(0.06, 0.05, 0.05, glow, 0.14, 0.14, 0.26));
+  for (const sx of [-1, 1])
+    for (const sz of [-0.16, 0.16]) {
+      const leg = box(0.05, 0.34, 0.05, dark, sx * 0.28, -0.16, sz);
+      leg.rotation.z = sx * 0.6;
+      core.add(leg);
+    }
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
@@ -403,6 +617,15 @@ export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Grou
   if (kind === 'phantom') return buildPhantom(tier);
   if (kind === 'mirror') return buildMirror(tier);
   if (kind === 'wisp') return buildWisp(tier);
+  if (kind === 'broodworm') return buildBroodworm(tier);
+  if (kind === 'mawturret') return buildMawturret(tier);
+  if (kind === 'leech') return buildLeech(tier);
+  if (kind === 'shard') return buildShard(tier);
+  if (kind === 'resonator') return buildResonator(tier);
+  if (kind === 'grower') return buildGrower(tier);
+  if (kind === 'rift') return buildRift(tier);
+  if (kind === 'shade') return buildShade(tier);
+  if (kind === 'devourer') return buildDevourer(tier);
   return buildSentinel(tier);
 }
 

@@ -360,6 +360,133 @@ function buildSpecter(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** LEVIATHAN — Living Planet Predator. A massive segmented SERPENT surfacing in an
+ *  arc: fanged head raised at the front, a chain of scaled body segments (undulated in
+ *  the animator) curving back down into the ground, glowing dorsal spine (weak after an
+ *  eruption). Venom-scale green. */
+function buildLeviathan(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a4a1a, tier, 0.5, 0.5); // dark venom scale
+  const dark = metal(0x1e2810, tier, 0.55, 0.45);
+  const glow = accent(0x9adb3a, tier, 1.8); // venom green
+  const root = new THREE.Group();
+
+  // Raised fanged head.
+  const head = new THREE.Group();
+  head.position.set(0, 2.1, 1.5);
+  head.add(capsuleZ(0.42, 0.5, body, 0, 0, 0));
+  head.add(box(0.5, 0.4, 0.75, dark, 0, -0.12, 0.42)); // jaw
+  head.add(box(0.1, 0.13, 0.1, glow, -0.22, 0.16, 0.5)); // eyes
+  head.add(box(0.1, 0.13, 0.1, glow, 0.22, 0.16, 0.5));
+  for (const sx of [-1, 1]) head.add(coneZ(0, 0.06, 0.4, dark, sx * 0.18, -0.3, 0.62)); // fangs
+  root.add(head);
+
+  // Body segments arcing back + down into the earth.
+  const segments: THREE.Group[] = [];
+  let r = 0.46;
+  for (let i = 0; i < 7; i++) {
+    const s = new THREE.Group();
+    const t = i / 6;
+    const py = Math.max(0.35, 2.1 - t * t * 2.1); // arc down to ground
+    const pz = 1.5 - (i + 1) * 0.72;
+    s.position.set(0, py, pz);
+    const seg = capsuleZ(r, 0.5, i % 2 ? dark : body, 0, 0, 0);
+    s.add(seg);
+    if (i < 5) {
+      const spine = box(0.1, 0.28, 0.12, glow, 0, r * 0.7, 0); // dorsal spine (weak segments)
+      if (i === 2) spine.name = 'core';
+      s.add(spine);
+    }
+    segments.push(s);
+    root.add(s);
+    r *= 0.9;
+  }
+
+  root.userData.parts = { head } satisfies BossParts;
+  root.userData.segments = segments;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** MONOLITH — Living Crystal. A tall faceted CRYSTAL SPIRE (5-sided prisms) with
+ *  smaller crystals fanning from the base and a bright resonance core (the weak point
+ *  between beam charges). Near-stationary. Cyan resonance glow. */
+function buildMonolith(tier: RenderTier): THREE.Group {
+  const body = metal(0x24414f, tier, 0.2, 0.35); // dark crystal
+  const dark = metal(0x162a34, tier, 0.25, 0.3);
+  const glow = accent(0x7fe8ff, tier, 1.9); // resonance cyan
+  const root = new THREE.Group();
+  const torso = new THREE.Group();
+
+  // Main spire.
+  const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.9, 3.6, 5), body);
+  spire.position.y = 1.8;
+  torso.add(spire);
+  // Fanned base crystals.
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const cg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.3, 1.4 + (i % 2) * 0.7, 5), i % 2 ? dark : body);
+    cg.position.set(Math.cos(a) * 0.72, 0.75, Math.sin(a) * 0.72);
+    cg.rotation.z = -Math.cos(a) * 0.35;
+    cg.rotation.x = Math.sin(a) * 0.35;
+    torso.add(cg);
+  }
+  // Resonance core.
+  const core = new THREE.Group();
+  core.position.y = 1.5;
+  const coreMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), glow);
+  coreMesh.name = 'core';
+  core.add(coreMesh);
+  torso.add(core);
+  root.add(torso);
+
+  root.userData.parts = { torso, core } satisfies BossParts;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** OBLIVION — Void Entity. An AMORPHOUS black sphere ringed by a blazing tilted
+ *  accretion disk (spun via the ARCHON ring/orbit path) + orbiting motes. The core
+ *  dims-exposed after a void nova. Blazing amber ring over void black. */
+function buildOblivion(tier: RenderTier): THREE.Group {
+  const body = metal(0x08060e, tier, 0.25, 0.2); // void black
+  const glow = accent(0xffa64a, tier, 2.3); // blazing accretion
+  const glow2 = accent(0xc98bff, tier, 1.6); // void violet
+  const root = new THREE.Group();
+  const cy = 1.9;
+
+  const core = new THREE.Group();
+  core.position.y = cy;
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.72, 16, 12), body);
+  sphere.name = 'core';
+  core.add(sphere);
+  root.add(core);
+
+  const ring = new THREE.Group();
+  ring.position.y = cy;
+  const tilt = Math.PI * 0.5 - 0.35;
+  const disk = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.09, 10, 36), glow);
+  disk.rotation.x = tilt;
+  ring.add(disk);
+  const disk2 = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.045, 8, 30), glow2);
+  disk2.rotation.x = tilt;
+  ring.add(disk2);
+  root.add(ring);
+
+  const orbit = new THREE.Group();
+  orbit.position.y = cy;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), glow);
+    m.position.set(Math.cos(a) * 1.45, 0, Math.sin(a) * 1.45);
+    orbit.add(m);
+  }
+  root.add(orbit);
+
+  root.userData.parts = { core, ring, orbit } satisfies BossParts;
+  root.userData.bodyMats = [body];
+  return root;
+}
+
 /** Build the 3D model for a boss. */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
@@ -368,5 +495,8 @@ export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | 
   if (kind === 'archon') return buildArchon(tier);
   if (kind === 'behemoth') return buildBehemoth(tier);
   if (kind === 'specter') return buildSpecter(tier);
+  if (kind === 'leviathan') return buildLeviathan(tier);
+  if (kind === 'monolith') return buildMonolith(tier);
+  if (kind === 'oblivion') return buildOblivion(tier);
   return null;
 }

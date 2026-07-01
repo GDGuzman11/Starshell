@@ -90,7 +90,7 @@ export function hurtEnemy(e: Enemy, amount: number): void {
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
-export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter';
+export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion';
 export interface BossDef {
   name: string;
   health: number;
@@ -119,6 +119,15 @@ export const BOSSES: Record<BossKind, BossDef> = {
   // SPECTER — Stealth Wraith: thin, fast, fragile. Teleport phase-strikes + fear
   // pulses; goes solid only briefly after a strike. Low HP (a glass ambusher).
   specter: { name: 'SPECTER', health: 3400, scale: 3.3, radius: 1.3, meleeRange: 4, meleeDmg: 24, meleeRate: 0.8, rangeDmg: 12, rangeRate: 0.5, acc: 0.8, color: 0xb877ff },
+  // LEVIATHAN — Serpent Burrower: dives + erupts under you (exposing its spine), tail
+  // sweeps, venom spits. Big + fast apex hunter.
+  leviathan: { name: 'LEVIATHAN', health: 4800, scale: 3.2, radius: 2.0, meleeRange: 5, meleeDmg: 24, meleeRate: 0.7, rangeDmg: 16, rangeRate: 0.7, acc: 0.8, color: 0x9adb3a },
+  // MONOLITH — Living Crystal: near-stationary artillery. Charges a heavy refracting
+  // resonance beam (vulnerable while charging) + shard novas. High-accuracy ranged.
+  monolith: { name: 'MONOLITH', health: 5000, scale: 3.4, radius: 1.8, meleeRange: 4, meleeDmg: 18, meleeRate: 0.9, rangeDmg: 20, rangeRate: 0.9, acc: 0.92, color: 0x7fe8ff },
+  // OBLIVION — Void Entity: floats; gravity-pulls you into range, void novas (dimming
+  // its core = weak), darkens vision. Rifts spawn void crawlers.
+  oblivion: { name: 'OBLIVION', health: 4600, scale: 3.0, radius: 1.7, meleeRange: 4, meleeDmg: 20, meleeRate: 0.8, rangeDmg: 15, rangeRate: 0.5, acc: 0.85, color: 0xc98bff },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -590,6 +599,21 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['phantom', 'phantom', 'phantom', 'mirror', 'mirror', 'wisp', 'wisp'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
     (['phantom', 'mirror', 'wisp'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
     (['phantom', 'phantom', 'mirror'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'leviathan') {
+    // LEVIATHAN BROOD — Broodworms burrow-rush, Maw-turrets anchor + bite, Leeches drain to heal it.
+    (['broodworm', 'broodworm', 'broodworm', 'mawturret', 'mawturret', 'leech', 'leech'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['broodworm', 'leech', 'mawturret'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['broodworm', 'broodworm', 'leech'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'monolith') {
+    // MONOLITH LATTICE — Shards dart in, Resonators beam, Growers grow cover + repair allies.
+    (['shard', 'shard', 'shard', 'resonator', 'resonator', 'grower', 'grower'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['shard', 'shard', 'resonator'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['shard', 'grower', 'resonator'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'oblivion') {
+    // OBLIVION VOID — Shades + Devourers melee-swarm, Rifts open gravity wells that pull.
+    (['shade', 'shade', 'devourer', 'devourer', 'rift', 'rift', 'shade'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['devourer', 'shade', 'rift'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['shade', 'devourer', 'rift'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
   }
   return out;
 }
@@ -887,44 +911,78 @@ export function updateEnemies(
         tz /= tl;
         const perpX = -tz;
         const perpZ = tx;
-        const mc = e.minion === 'crawler' || e.minion === 'spore' || e.minion === 'sentinel' ? 0xc08bff : e.minion === 'phantom' || e.minion === 'mirror' || e.minion === 'wisp' ? 0xb877ff : e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'sporeback' ? 0xffb14a : 0x6aff7a;
-        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer') {
+        const mc =
+          e.minion === 'crawler' || e.minion === 'spore' || e.minion === 'sentinel'
+            ? 0xc08bff
+            : e.minion === 'phantom' || e.minion === 'mirror' || e.minion === 'wisp'
+              ? 0xb877ff
+              : e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'sporeback'
+                ? 0xffb14a
+                : e.minion === 'broodworm' || e.minion === 'mawturret' || e.minion === 'leech'
+                  ? 0x9adb3a
+                  : e.minion === 'shard' || e.minion === 'resonator' || e.minion === 'grower'
+                    ? 0x7fe8ff
+                    : e.minion === 'shade' || e.minion === 'devourer' || e.minion === 'rift'
+                      ? 0xc98bff
+                      : 0x6aff7a;
+        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'broodworm' || e.minion === 'leech' || e.minion === 'shard' || e.minion === 'shade' || e.minion === 'devourer') {
           // Rush + erratic weave; bite/ram on contact. (Ramparts advance as mobile cover;
-          // Grazers are fast chargers — both close and strike.)
+          // Grazers/Shards/Shades/Devourers are fast chargers; Leeches drain to heal the boss.)
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
           moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul * aggro, dt, R, grid);
           const reach = e.minion === 'rampart' ? 3.0 : 2.4;
           if (dist < reach && e.fireCd <= 0) {
-            e.fireCd = e.minion === 'grazer' ? 0.6 : 0.8;
+            e.fireCd = e.minion === 'grazer' || e.minion === 'shard' ? 0.6 : 0.8;
             damage += md.melee;
             tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: mc });
+            if (e.minion === 'leech') {
+              const bossE = enemies.find((b) => b.boss && b.health > 0 && !b.dormant);
+              if (bossE) bossE.health = Math.min(bossE.maxHealth, bossE.health + 30); // drain → heal the boss
+            }
           }
         } else if (e.minion === 'mirror') {
           // SPECTER MIRROR: an illusory decoy — drifts at you to draw fire, no attack;
           // pops in one hit (hp 1).
           moveEnemy(e, lvl, tx + perpX * Math.sin(now * 0.004 + e.wander) * 0.4, tz, P.speed * md.speedMul * aggro, dt, R, grid);
-        } else if (e.minion === 'sporeback' || e.minion === 'wisp') {
-          // Behemoth Sporeback / Specter Wisp: standoff ranged support. The Sporeback's
-          // pod HEALS the boss when it's near it (regrows plates); the Wisp periodically
-          // clouds your vision (fear pulse).
+        } else if (e.minion === 'sporeback' || e.minion === 'wisp' || e.minion === 'grower' || e.minion === 'mawturret' || e.minion === 'resonator' || e.minion === 'rift') {
+          // STANDOFF RANGED SUPPORT (multi-faction). Sporeback heals the boss; Grower
+          // repairs the most-wounded ally; Wisp clouds your vision (fear); Rift pulls you
+          // toward it (gravity well); Maw-turret / Resonator are near-stationary gunners.
           if (dist < 12) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
           else if (dist > 22) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
           else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
           if (e.minion === 'sporeback') {
             const bossE = enemies.find((b) => b.boss && b.health > 0 && !b.dormant);
             if (bossE && Math.hypot(bossE.x - e.x, bossE.z - e.z) < 14) bossE.health = Math.min(bossE.maxHealth, bossE.health + 18 * dt);
-          } else {
+          } else if (e.minion === 'grower') {
+            let best: Enemy | null = null;
+            let bd2 = 400;
+            for (const a of enemies) {
+              if (a === e || !a.minion || a.health <= 0 || a.dormant || a.health >= a.maxHealth) continue;
+              const d2 = (a.x - e.x) * (a.x - e.x) + (a.z - e.z) * (a.z - e.z);
+              if (d2 < bd2) {
+                bd2 = d2;
+                best = a;
+              }
+            }
+            if (best) best.health = Math.min(best.maxHealth, best.health + 22 * dt);
+          } else if (e.minion === 'wisp') {
             e.track += dt;
             if (e.track > 5) {
               e.track = 0;
               bossFog = true;
             }
+          } else if (e.minion === 'rift') {
+            e.track += dt;
+            if (e.track > 2.5 && dist < 26) {
+              e.track = 0;
+              pushPlayer(player, e.x - player.x, e.z - player.z, 5); // gravity well: drag inward
+            }
           }
           if (sees[i] && e.fireCd <= 0 && dist < 28) {
-            e.fireCd = e.minion === 'wisp' ? 1.4 : 1.6;
+            e.fireCd = e.minion === 'wisp' ? 1.4 : e.minion === 'resonator' ? 1.2 : 1.6;
             const my = e.y + 0.9;
-            const col = e.minion === 'wisp' ? 0xb877ff : 0xaef54a;
-            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: col, splash: 0 });
+            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: mc, splash: 0 });
           }
         } else if (e.minion === 'spore') {
           // VOID SPORE bomber: drift in slowly, then self-destruct in a burst.
@@ -1055,6 +1113,7 @@ export function updateEnemies(
             wz = dbz / dbl + (dbx / dbl) * brain.strafeSign * 0.2;
             speedMul = 0.75;
           }
+          if (e.boss === 'monolith') speedMul = 0.12; // LIVING CRYSTAL: near-stationary artillery
           for (let j = 0; j < enemies.length; j++) {
             if (j === i || enemies[j].health <= 0) continue;
             const dx = e.x - enemies[j].x;
@@ -1172,6 +1231,73 @@ export function updateEnemies(
               bossFog = true;
             }
           }
+          // LEVIATHAN: BURROW → ERUPT at the player's predicted spot (bursting up +
+          // exposing its spine = weak window), plus a radial TAIL-SWEEP when close.
+          if (e.boss === 'leviathan' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist > 10) {
+              brain.abilityCd = ((desp ? 3 : 5) + Math.random() * 2) * eAgg;
+              const lim = lvl.size / 2 - 4;
+              const nx = Math.max(-lim, Math.min(lim, player.x + pvx * 0.6));
+              const nz = Math.max(-lim, Math.min(lim, player.z + pvz * 0.6));
+              if (!blocked(lvl, nx, nz, bd.radius, grid)) {
+                e.x = nx;
+                e.z = nz;
+                bossTelegraphs.push({ kind: 'eruption', x: nx, z: nz, radius: 4.5, delay: 0.6 });
+                e.weakUntil = now + 2000;
+              }
+            }
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist < 12) {
+              brain.volleyCd = ((desp ? 4 : 6) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 9, delay: 0.7 });
+            }
+          }
+          // MONOLITH: RESONANCE CHARGE (core exposed = weak) → a fast refracting BEAM,
+          // plus a radial SHARD NOVA when you get close.
+          if (e.boss === 'monolith' && sees[i]) {
+            if (brain.mode === 1) {
+              brain.abilityT -= dt;
+              if (brain.abilityT <= 0) {
+                brain.mode = 0;
+                brain.abilityCd = ((desp ? 2.5 : 4) + Math.random() * 1.5) * eAgg;
+                const my = e.y + bd.scale * 0.6;
+                bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x - e.x, player.y + 1 - my, player.z - e.z], speed: 62, dmg: Math.round(bd.rangeDmg * 1.5), color: 0x7fe8ff, splash: 0 });
+              }
+            } else {
+              brain.abilityCd -= dt;
+              if (brain.abilityCd <= 0 && dist < 55) {
+                brain.mode = 1;
+                brain.abilityT = 0.9;
+                e.weakUntil = now + 900; // charging = exposed core
+              }
+            }
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist < 16) {
+              brain.volleyCd = ((desp ? 4 : 6.5) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 10, delay: 0.7 });
+            }
+          }
+          // OBLIVION: GRAVITY PULL (drag you into range), VOID NOVA (dims the core =
+          // weak), and periodic DARKEN (clouds vision).
+          if (e.boss === 'oblivion' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist > 8 && dist < 40) {
+              brain.abilityCd = ((desp ? 3 : 5) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'pull', x: player.x, z: player.z, radius: 5, delay: 0.8 });
+            }
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist < 18) {
+              brain.volleyCd = ((desp ? 4 : 6.5) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 11, delay: 0.8 });
+              e.weakUntil = now + 1600;
+            }
+            brain.fogCd -= dt;
+            if (brain.fogCd <= 0) {
+              brain.fogCd = (desp ? 5 : 8) + Math.random() * 3;
+              bossFog = true;
+            }
+          }
           if (dist < bd.meleeRange) {
             if (e.fireCd <= 0) {
               e.fireCd = bd.meleeRate;
@@ -1196,6 +1322,14 @@ export function updateEnemies(
               const lx = player.x + pvx * tt;
               const lz = player.z + pvz * tt;
               bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [lx - e.x, player.y + 1 - my, lz - e.z], speed: 40, dmg: bd.rangeDmg, color: 0x49a6ff, splash: 0 });
+            } else if (e.boss === 'leviathan') {
+              // VENOM SPRAY: a lobbed acid gob that leads + leaves a puddle on impact.
+              e.fireCd = Math.max(bd.rangeRate, 0.9);
+              const muzzleY = e.y + bd.scale * 0.7;
+              const tt = dist / 24;
+              const lx = player.x + pvx * tt * 0.7;
+              const lz = player.z + pvz * tt * 0.7;
+              bossShots.push({ kind: 'acid', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, player.y + 1.0 - muzzleY, lz - e.z], speed: 24, dmg: Math.round(bd.rangeDmg * 1.2), color: 0x9adb3a, splash: 2.4 });
             } else {
               e.fireCd = bd.rangeRate;
               tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });

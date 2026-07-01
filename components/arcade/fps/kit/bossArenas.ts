@@ -90,6 +90,37 @@ export function bossArenaSpecter(seed: number): LevelLayout {
   return bossArena({ theme: 'neon', size: 168, placements: p, drops: 16, stations: 3 }, seed);
 }
 
+/** LEVIATHAN arena — an open DESERT digging-ground the serpent burrows through, dotted
+ *  with a few RAISED towers (the "safe" tiles you climb onto) + loose walls, drops
+ *  clustered on/near the platforms so you fight to stay up. */
+export function bossArenaLeviathan(seed: number): LevelLayout {
+  const p: Placement[] = [];
+  for (const [gx, gz] of [[-3, -3], [3, -3], [-3, 3], [3, 3], [0, 0]]) p.push({ module: 'watchtower', gx, gz, rot: 0 }); // raised platforms
+  for (const [gx, gz, rot] of [[-5, 0, 90], [5, 0, 90], [0, -5, 0], [0, 5, 0]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  for (const [gx, gz] of [[-4, 4], [4, -4], [-4, -4], [4, 4]]) p.push({ module: 'rubble', gx, gz, rot: 0 });
+  return bossArena({ theme: 'desert', size: 190, placements: p, drops: 14 }, seed);
+}
+
+/** MONOLITH arena — a reflective FROZEN open field the crystal reshapes: a ring of
+ *  crystalline cover (containers/walls) it refracts around, starter walls, and drops
+ *  scattered between them. */
+export function bossArenaMonolith(seed: number): LevelLayout {
+  const p: Placement[] = [{ module: 'command', gx: 0, gz: 0, rot: 0 }];
+  for (const [gx, gz] of [[-3, -3], [3, -3], [-3, 3], [3, 3], [-4, 0], [4, 0], [0, -4], [0, 4]]) p.push({ module: 'container', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-2, -2, 0], [2, 2, 0], [2, -2, 90], [-2, 2, 90]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  return bossArena({ theme: 'frozen', size: 180, placements: p, drops: 14 }, seed);
+}
+
+/** OBLIVION arena — a dark MOON void with scattered cover ISLANDS (bunkers/ruins) amid
+ *  open ground the entity warps; drops sit on the islands you fight the pull to reach. */
+export function bossArenaOblivion(seed: number): LevelLayout {
+  const p: Placement[] = [];
+  for (const [gx, gz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) p.push({ module: 'bunker', gx, gz, rot: 0 });
+  for (const [gx, gz] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) p.push({ module: 'ruin', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-3, 3, 90], [3, -3, 90], [-3, -3, 0], [3, 3, 0]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  return bossArena({ theme: 'moon', size: 184, placements: p, drops: 14 }, seed);
+}
+
 /** Functional buildings + loose cover walls scattered across a boss arena, leaving the
  *  centre + spawns open for the fight. A default terrain until a boss gets bespoke one. */
 export function scatterBuildingsAndWalls(size: number, seed: number): Placement[] {

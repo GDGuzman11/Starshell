@@ -40,6 +40,15 @@ export function poseBossModel(
   const wisps = model.userData.wisps as THREE.Group[] | undefined;
   if (wisps) for (let i = 0; i < wisps.length; i++) wisps[i].rotation.x = Math.sin(t * 1.7 + i * 1.3) * 0.28;
 
+  // LEVIATHAN serpent: a travelling side-to-side undulation down the segments.
+  const segments = model.userData.segments as THREE.Group[] | undefined;
+  if (segments)
+    for (let i = 0; i < segments.length; i++) {
+      const s = segments[i];
+      s.position.x = ((s.userData.baseX ??= s.position.x) as number) + Math.sin(t * 1.6 + i * 0.6) * 0.25 * (1 - i / (segments.length + 1));
+      s.rotation.y = Math.sin(t * 1.6 + i * 0.6) * 0.2;
+    }
+
   // Restless tail (Xenomorph) + head sway.
   if (parts.tail) {
     parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;
