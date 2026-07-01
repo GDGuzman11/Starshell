@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
-import { accent, box, capsuleY, capsuleZ, coneZ, metal, wraith } from '../models/parts';
+import { accent, box, capsuleY, capsuleZ, coneZ, cylY, metal, wraith } from '../models/parts';
 
 export type MinionKind =
   | 'broodling'
@@ -35,7 +35,13 @@ export type MinionKind =
   | 'grower'
   | 'rift'
   | 'shade'
-  | 'devourer';
+  | 'devourer'
+  | 'warframe'
+  | 'artillery'
+  | 'fabricator'
+  | 'splice'
+  | 'genepod'
+  | 'regenerator';
 
 export interface MinionDef {
   hp: number;
@@ -79,6 +85,14 @@ export const MINIONS: Record<MinionKind, MinionDef> = {
   rift: { hp: 120, speedMul: 0.4, scale: 1.1, melee: 0, ranged: 13, color: 0x180e26 }, // gravity-well node + pull
   shade: { hp: 75, speedMul: 1.7, scale: 1.3, melee: 14, ranged: 0, color: 0x120a1e }, // shadow melee
   devourer: { hp: 110, speedMul: 1.5, scale: 1.15, melee: 16, ranged: 0, color: 0x0e0818 }, // void crawler
+  // Colossus foundry (industrial orange) — war machines
+  warframe: { hp: 240, speedMul: 0.7, scale: 1.5, melee: 0, ranged: 15, color: 0x5a5a64 }, // heavy mech
+  artillery: { hp: 110, speedMul: 0.5, scale: 1.15, melee: 0, ranged: 14, color: 0x4a4a52 }, // arc shells
+  fabricator: { hp: 160, speedMul: 0.8, scale: 1.25, melee: 0, ranged: 11, color: 0x6a5a3a }, // repairs mechs
+  // Chimera strain (bio magenta) — mutants
+  splice: { hp: 70, speedMul: 2.0, scale: 1.0, melee: 12, ranged: 0, color: 0x7a2a5a }, // fast mutant melee
+  genepod: { hp: 180, speedMul: 0.3, scale: 1.2, melee: 0, ranged: 13, color: 0x5a2a4a }, // adaptive spitter/turret
+  regenerator: { hp: 150, speedMul: 0.8, scale: 1.2, melee: 0, ranged: 10, color: 0x6a3a5a }, // grafts flesh (heals allies)
 };
 
 const GREEN = 0x6aff7a;
@@ -89,6 +103,8 @@ const SPECTRAL = 0xd7a6ff;
 const VENOM = 0x9adb3a;
 const CRYSTAL = 0x7fe8ff;
 const VOIDV = 0xc98bff;
+const HAZARD = 0xff8a3a;
+const FLESH = 0xff5ac8;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -602,6 +618,133 @@ function buildDevourer(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Colossus Warframe: a boxy heavy mech with an arm-cannon + visor (ranged tank). */
+function buildWarframe(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a5a64, tier, 0.5, 0.7);
+  const dark = metal(0x2e2e34, tier, 0.55, 0.65);
+  const glow = accent(HAZARD, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.95;
+  core.add(box(0.6, 0.7, 0.5, body, 0, 0, 0)); // chest
+  core.add(box(0.4, 0.3, 0.4, dark, 0, 0.5, 0.02)); // head block
+  core.add(box(0.28, 0.1, 0.08, glow, 0, 0.52, 0.22)); // visor
+  core.add(box(0.16, 0.16, 0.6, dark, 0.4, 0.05, 0.15)); // arm cannon
+  core.add(box(0.14, 0.14, 0.1, glow, 0.4, 0.05, 0.47)); // muzzle
+  core.add(box(0.2, 0.5, 0.2, body, -0.42, -0.05, 0)); // other arm
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.22, 0.7, 0.24, dark, sx * 0.2, 0.35, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Colossus Artillery drone: a hovering shell-lobber with an upward mortar tube. */
+function buildArtillery(tier: RenderTier): THREE.Group {
+  const body = metal(0x4a4a52, tier, 0.5, 0.65);
+  const dark = metal(0x26262c, tier, 0.55, 0.6);
+  const glow = accent(HAZARD, tier, 1.8);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.0; // hovers
+  core.add(box(0.5, 0.4, 0.5, body, 0, 0, 0)); // body
+  core.add(cylY(0.13, 0.5, dark, 0, 0.4, 0)); // mortar tube (points up)
+  core.add(box(0.16, 0.08, 0.16, glow, 0, 0.66, 0)); // muzzle glow
+  for (const a of [0, 1, 2, 3]) {
+    const ang = (a / 4) * Math.PI * 2;
+    core.add(box(0.05, 0.2, 0.05, dark, Math.cos(ang) * 0.22, -0.24, Math.sin(ang) * 0.22)); // thruster legs
+  }
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Colossus Fabricator: a squat welder-drone with a bright repair torch (heals mechs). */
+function buildFabricator(tier: RenderTier): THREE.Group {
+  const body = metal(0x6a5a3a, tier, 0.5, 0.6);
+  const dark = metal(0x342c1c, tier, 0.55, 0.55);
+  const glow = accent(0xffd24a, tier, 2.0); // welding torch
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.7;
+  core.add(box(0.5, 0.44, 0.5, body, 0, 0, 0)); // body
+  core.add(box(0.16, 0.16, 0.14, glow, 0, 0.1, 0.28)); // sensor eye
+  for (const sx of [-1, 1]) {
+    core.add(box(0.1, 0.1, 0.4, dark, sx * 0.3, 0.05, 0.16)); // welder arms
+    core.add(box(0.08, 0.08, 0.1, glow, sx * 0.3, 0.05, 0.4)); // torch tips
+  }
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.1, 0.5, 0.1, dark, sx * 0.18, 0.25, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Chimera Splice: a small asymmetric mutant with mismatched claws (fast melee). */
+function buildSplice(tier: RenderTier): THREE.Group {
+  const body = metal(0x7a2a5a, tier, 0.5, 0.35);
+  const dark = metal(0x3a1430, tier, 0.55, 0.35);
+  const glow = accent(FLESH, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.5;
+  core.add(capsuleZ(0.24, 0.3, body, 0, 0, 0)); // lumpy body
+  core.add(box(0.2, 0.18, 0.16, dark, 0.14, 0.14, 0.1)); // asymmetric growth
+  core.add(box(0.05, 0.04, 0.05, glow, -0.08, 0.1, 0.24)); // eyes
+  core.add(box(0.05, 0.04, 0.05, glow, 0.08, 0.1, 0.24));
+  core.add(box(0.06, 0.4, 0.06, dark, -0.26, 0, 0.05)); // long claw arm
+  core.add(box(0.08, 0.24, 0.08, body, 0.24, 0.02, 0.05)); // short claw arm
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.07, 0.42, 0.08, body, sx * 0.14, 0.21, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Chimera Gene-pod: a rooted fleshy pod that spits adaptive bolts (turret). */
+function buildGenepod(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a2a4a, tier, 0.5, 0.3);
+  const dark = metal(0x2e1428, tier, 0.55, 0.3);
+  const glow = accent(FLESH, tier, 2.0);
+  const root = new THREE.Group();
+  root.add(box(0.5, 0.3, 0.5, dark, 0, 0.15, 0)); // rooted base
+  const core = new THREE.Group();
+  core.position.y = 0.65;
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), body)); // pod
+  core.add(box(0.2, 0.24, 0.12, glow, 0, 0.02, 0.3)); // glowing orifice
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    core.add(box(0.05, 0.3, 0.05, dark, Math.cos(a) * 0.2, 0.28, Math.sin(a) * 0.2)); // sinew struts
+  }
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Chimera Regenerator: a bio-support with a pulsing graft-sac (heals allies). */
+function buildRegenerator(tier: RenderTier): THREE.Group {
+  const body = metal(0x6a3a5a, tier, 0.5, 0.3);
+  const dark = metal(0x341c2c, tier, 0.55, 0.3);
+  const glow = accent(0xff8adf, tier, 2.0); // graft-glow
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.72;
+  core.rotation.x = 0.2;
+  core.add(capsuleZ(0.3, 0.4, body, 0, 0, 0)); // body
+  core.add(coneZ(0, 0.12, 0.3, dark, 0, 0.06, 0.34)); // head
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), glow)); // graft-sac
+  (core.children[2] as THREE.Mesh).position.set(0, 0.28, -0.18);
+  core.add(box(0.05, 0.04, 0.05, glow, -0.1, 0.1, 0.42)); // eyes
+  core.add(box(0.05, 0.04, 0.05, glow, 0.1, 0.1, 0.42));
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.1, 0.55, 0.12, dark, sx * 0.2, 0.28, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
@@ -626,6 +769,12 @@ export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Grou
   if (kind === 'rift') return buildRift(tier);
   if (kind === 'shade') return buildShade(tier);
   if (kind === 'devourer') return buildDevourer(tier);
+  if (kind === 'warframe') return buildWarframe(tier);
+  if (kind === 'artillery') return buildArtillery(tier);
+  if (kind === 'fabricator') return buildFabricator(tier);
+  if (kind === 'splice') return buildSplice(tier);
+  if (kind === 'genepod') return buildGenepod(tier);
+  if (kind === 'regenerator') return buildRegenerator(tier);
   return buildSentinel(tier);
 }
 

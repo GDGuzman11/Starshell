@@ -49,6 +49,14 @@ export function poseBossModel(
       s.rotation.y = Math.sin(t * 1.6 + i * 0.6) * 0.2;
     }
 
+  // CHIMERA: six mismatched arms writhe out of phase (restless when moving).
+  const arms = model.userData.arms as THREE.Group[] | undefined;
+  if (arms)
+    for (let i = 0; i < arms.length; i++) {
+      const a = arms[i];
+      a.rotation.z = ((a.userData.baseZ ??= a.rotation.z) as number) + Math.sin(t * (1.5 + i * 0.2) + i) * (moving ? 0.3 : 0.18);
+    }
+
   // Restless tail (Xenomorph) + head sway.
   if (parts.tail) {
     parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;

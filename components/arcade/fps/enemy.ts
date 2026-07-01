@@ -90,7 +90,7 @@ export function hurtEnemy(e: Enemy, amount: number): void {
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
-export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion';
+export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion' | 'colossus' | 'chimera';
 export interface BossDef {
   name: string;
   health: number;
@@ -128,6 +128,13 @@ export const BOSSES: Record<BossKind, BossDef> = {
   // OBLIVION — Void Entity: floats; gravity-pulls you into range, void novas (dimming
   // its core = weak), darkens vision. Rifts spawn void crawlers.
   oblivion: { name: 'OBLIVION', health: 4600, scale: 3.0, radius: 1.7, meleeRange: 4, meleeDmg: 20, meleeRate: 0.8, rangeDmg: 15, rangeRate: 0.5, acc: 0.85, color: 0xc98bff },
+  // COLOSSUS — Titan War Machine: the biggest, tankiest. Advances in mobile mode; locks
+  // into SIEGE mode (stationary, cooling core exposed = weak) for a heavy cannon + rocket
+  // barrage. Overwhelming firepower.
+  colossus: { name: 'COLOSSUS', health: 6000, scale: 3.6, radius: 2.4, meleeRange: 6, meleeDmg: 28, meleeRate: 1.0, rangeDmg: 18, rangeRate: 0.8, acc: 0.82, color: 0xff8a3a },
+  // CHIMERA — Adaptive Bio-Weapon: fast, aggressive. Dash-slashes in, spine-volleys, and
+  // periodically MUTATES (genome sac exposed = weak). Reconfigures relentlessly.
+  chimera: { name: 'CHIMERA', health: 4600, scale: 3.0, radius: 1.7, meleeRange: 5, meleeDmg: 22, meleeRate: 0.6, rangeDmg: 14, rangeRate: 0.45, acc: 0.84, color: 0xff5ac8 },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -614,6 +621,16 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['shade', 'shade', 'devourer', 'devourer', 'rift', 'rift', 'shade'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
     (['devourer', 'shade', 'rift'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
     (['shade', 'devourer', 'rift'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'colossus') {
+    // COLOSSUS FOUNDRY — Warframes hold the line, Artillery drones shell you, Fabricators repair the mechs.
+    (['warframe', 'warframe', 'artillery', 'artillery', 'fabricator', 'warframe', 'artillery'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['warframe', 'artillery', 'fabricator'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['warframe', 'warframe', 'fabricator'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'chimera') {
+    // CHIMERA STRAIN — Splices swarm-melee, Gene-pods spit adaptive bolts, Regenerators graft allies whole.
+    (['splice', 'splice', 'splice', 'genepod', 'genepod', 'regenerator', 'splice'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['splice', 'splice', 'genepod'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['splice', 'regenerator', 'genepod'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
   }
   return out;
 }
@@ -924,15 +941,19 @@ export function updateEnemies(
                     ? 0x7fe8ff
                     : e.minion === 'shade' || e.minion === 'devourer' || e.minion === 'rift'
                       ? 0xc98bff
-                      : 0x6aff7a;
-        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'broodworm' || e.minion === 'leech' || e.minion === 'shard' || e.minion === 'shade' || e.minion === 'devourer') {
+                      : e.minion === 'warframe' || e.minion === 'artillery' || e.minion === 'fabricator'
+                        ? 0xff8a3a
+                        : e.minion === 'splice' || e.minion === 'genepod' || e.minion === 'regenerator'
+                          ? 0xff5ac8
+                          : 0x6aff7a;
+        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'broodworm' || e.minion === 'leech' || e.minion === 'shard' || e.minion === 'shade' || e.minion === 'devourer' || e.minion === 'splice') {
           // Rush + erratic weave; bite/ram on contact. (Ramparts advance as mobile cover;
           // Grazers/Shards/Shades/Devourers are fast chargers; Leeches drain to heal the boss.)
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
           moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul * aggro, dt, R, grid);
           const reach = e.minion === 'rampart' ? 3.0 : 2.4;
           if (dist < reach && e.fireCd <= 0) {
-            e.fireCd = e.minion === 'grazer' || e.minion === 'shard' ? 0.6 : 0.8;
+            e.fireCd = e.minion === 'grazer' || e.minion === 'shard' || e.minion === 'splice' ? 0.6 : 0.8;
             damage += md.melee;
             tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: mc });
             if (e.minion === 'leech') {
@@ -944,17 +965,30 @@ export function updateEnemies(
           // SPECTER MIRROR: an illusory decoy — drifts at you to draw fire, no attack;
           // pops in one hit (hp 1).
           moveEnemy(e, lvl, tx + perpX * Math.sin(now * 0.004 + e.wander) * 0.4, tz, P.speed * md.speedMul * aggro, dt, R, grid);
-        } else if (e.minion === 'sporeback' || e.minion === 'wisp' || e.minion === 'grower' || e.minion === 'mawturret' || e.minion === 'resonator' || e.minion === 'rift') {
-          // STANDOFF RANGED SUPPORT (multi-faction). Sporeback heals the boss; Grower
-          // repairs the most-wounded ally; Wisp clouds your vision (fear); Rift pulls you
-          // toward it (gravity well); Maw-turret / Resonator are near-stationary gunners.
+        } else if (
+          e.minion === 'sporeback' ||
+          e.minion === 'wisp' ||
+          e.minion === 'grower' ||
+          e.minion === 'mawturret' ||
+          e.minion === 'resonator' ||
+          e.minion === 'rift' ||
+          e.minion === 'warframe' ||
+          e.minion === 'artillery' ||
+          e.minion === 'fabricator' ||
+          e.minion === 'genepod' ||
+          e.minion === 'regenerator'
+        ) {
+          // STANDOFF RANGED SUPPORT (multi-faction). Sporeback heals the boss; Grower/
+          // Fabricator/Regenerator repair the most-wounded ally; Wisp clouds your vision;
+          // Rift pulls you in (gravity well); Artillery lobs arc shells; the rest are
+          // near-stationary gunners (Maw-turret / Resonator / Warframe / Gene-pod).
           if (dist < 12) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
           else if (dist > 22) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
           else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
           if (e.minion === 'sporeback') {
             const bossE = enemies.find((b) => b.boss && b.health > 0 && !b.dormant);
             if (bossE && Math.hypot(bossE.x - e.x, bossE.z - e.z) < 14) bossE.health = Math.min(bossE.maxHealth, bossE.health + 18 * dt);
-          } else if (e.minion === 'grower') {
+          } else if (e.minion === 'grower' || e.minion === 'fabricator' || e.minion === 'regenerator') {
             let best: Enemy | null = null;
             let bd2 = 400;
             for (const a of enemies) {
@@ -980,9 +1014,15 @@ export function updateEnemies(
             }
           }
           if (sees[i] && e.fireCd <= 0 && dist < 28) {
-            e.fireCd = e.minion === 'wisp' ? 1.4 : e.minion === 'resonator' ? 1.2 : 1.6;
+            e.fireCd = e.minion === 'wisp' ? 1.4 : e.minion === 'resonator' ? 1.2 : e.minion === 'artillery' ? 2.2 : 1.6;
             const my = e.y + 0.9;
-            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: mc, splash: 0 });
+            if (e.minion === 'artillery') {
+              // ARC SHELL: a lobbed grenade with splash (denies your ground).
+              const hd = Math.hypot(tgt.x - e.x, tgt.z - e.z);
+              bossShots.push({ kind: 'grenade', x: e.x, y: my + 0.4, z: e.z, dir: [tgt.x - e.x, hd * 0.5, tgt.z - e.z], speed: 18, dmg: md.ranged, color: 0xff8a3a, splash: 2.8, gravity: 22 });
+            } else {
+              bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: mc, splash: 0 });
+            }
           }
         } else if (e.minion === 'spore') {
           // VOID SPORE bomber: drift in slowly, then self-destruct in a burst.
@@ -1114,6 +1154,18 @@ export function updateEnemies(
             speedMul = 0.75;
           }
           if (e.boss === 'monolith') speedMul = 0.12; // LIVING CRYSTAL: near-stationary artillery
+          if (e.boss === 'colossus') {
+            // TITAN: relentless advance in mobile mode; locks stationary in siege mode.
+            if (brain.mode === 1) speedMul = 0.05;
+            else {
+              const dbx = tgtB.x - e.x;
+              const dbz = tgtB.z - e.z;
+              const dbl = Math.hypot(dbx, dbz) || 1;
+              wx = dbx / dbl;
+              wz = dbz / dbl;
+              speedMul = 0.7;
+            }
+          }
           for (let j = 0; j < enemies.length; j++) {
             if (j === i || enemies[j].health <= 0) continue;
             const dx = e.x - enemies[j].x;
@@ -1296,6 +1348,62 @@ export function updateEnemies(
             if (brain.fogCd <= 0) {
               brain.fogCd = (desp ? 5 : 8) + Math.random() * 3;
               bossFog = true;
+            }
+          }
+          // COLOSSUS: toggle SIEGE MODE (stationary, cooling core exposed = weak) with a
+          // heavy lockdown cannon; a ROCKET BARRAGE arcs in regardless of mode.
+          if (e.boss === 'colossus' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0) {
+              brain.mode = brain.mode === 1 ? 0 : 1;
+              brain.abilityCd = (brain.mode === 1 ? 3.5 : desp ? 4 : 6) * eAgg;
+              if (brain.mode === 1) e.weakUntil = now + 3500;
+            }
+            if (brain.mode === 1) {
+              brain.volleyCd -= dt;
+              if (brain.volleyCd <= 0 && dist < 60) {
+                brain.volleyCd = 0.8 * eAgg;
+                const my = e.y + bd.scale * 0.6;
+                bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x - e.x, player.y + 1 - my, player.z - e.z], speed: 56, dmg: Math.round(bd.rangeDmg * 1.4), color: 0xff8a3a, splash: 0 });
+              }
+            }
+            brain.fogCd -= dt; // reused as the barrage timer
+            if (brain.fogCd <= 0 && dist > 8 && dist < 50) {
+              brain.fogCd = ((desp ? 3 : 5) + Math.random() * 2) * eAgg;
+              const muzzleY = e.y + bd.scale * 0.75;
+              for (let g = -1; g <= 1; g++) {
+                const lx = player.x + pvx * 0.4 + g * 2.6;
+                const lz = player.z + pvz * 0.4;
+                const hd = Math.hypot(lx - e.x, lz - e.z);
+                bossShots.push({ kind: 'grenade', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, hd * 0.5, lz - e.z], speed: 18, dmg: Math.round(bd.rangeDmg * 1.2), color: 0xff8a3a, splash: 3.0, gravity: 22 });
+              }
+            }
+          }
+          // CHIMERA: periodically MUTATE (genome sac exposed = weak), DASH-SLASH in at
+          // mid-range, and fire a SPINE VOLLEY spread. (pounceCd already ticked above.)
+          if (e.boss === 'chimera' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0) {
+              brain.abilityCd = ((desp ? 4 : 6) + Math.random() * 2) * eAgg;
+              e.weakUntil = now + 1500;
+            }
+            if (brain.pounceCd <= 0 && dist > 6 && dist < 20) {
+              brain.pounceCd = ((desp ? 2.5 : 4) + Math.random() * 1.5) * eAgg;
+              const lim = lvl.size / 2 - 4;
+              const nx = Math.max(-lim, Math.min(lim, player.x + ((e.x - player.x) / (dist || 1)) * 4));
+              const nz = Math.max(-lim, Math.min(lim, player.z + ((e.z - player.z) / (dist || 1)) * 4));
+              if (!blocked(lvl, nx, nz, bd.radius, grid)) {
+                e.x = nx;
+                e.z = nz;
+                damage += Math.round(bd.meleeDmg * 0.8);
+                tracers.push({ from: [e.x, e.y + bd.scale * 0.5, e.z], to: peye, color: 0xff5ac8 });
+              }
+            }
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist > 8 && dist < 40) {
+              brain.volleyCd = ((desp ? 2.5 : 4) + Math.random() * 1.5) * eAgg;
+              const my = e.y + bd.scale * 0.6;
+              for (let g = -1; g <= 1; g++) bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x - e.x + g * 3, player.y + 1 - my, player.z - e.z + g * 3], speed: 34, dmg: bd.rangeDmg, color: 0xff5ac8, splash: 0 });
             }
           }
           if (dist < bd.meleeRange) {

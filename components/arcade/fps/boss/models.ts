@@ -487,6 +487,105 @@ function buildOblivion(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** COLOSSUS — Titan War Machine. A giant industrial mech on twin treads: boxy chest
+ *  with a glowing cooling core (weak in siege mode), shoulder rocket pods, a visor head,
+ *  piston arms. Steel + hazard orange. */
+function buildColossus(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a5a64, tier, 0.5, 0.7); // industrial steel
+  const dark = metal(0x2e2e34, tier, 0.55, 0.65);
+  const glow = accent(0xff8a3a, tier, 1.9); // hazard orange
+  const root = new THREE.Group();
+
+  // Twin-tread base.
+  const base = new THREE.Group();
+  base.position.y = 0.6;
+  for (const sx of [-1, 1]) base.add(cylZ(0.55, 1.7, dark, sx * 0.9, 0, 0)); // treads (run front-back)
+  base.add(box(1.8, 0.5, 1.4, body, 0, 0.2, 0)); // hull between treads
+  root.add(base);
+
+  // Chest + cooling core.
+  const torso = new THREE.Group();
+  torso.position.y = 1.7;
+  torso.add(box(1.5, 1.4, 1.0, body, 0, 0, 0));
+  const core = new THREE.Group();
+  core.position.set(0, 0.1, 0.52);
+  const coreMesh = box(0.5, 0.5, 0.2, glow, 0, 0, 0);
+  coreMesh.name = 'core';
+  core.add(coreMesh);
+  torso.add(core);
+  // Shoulder rocket pods.
+  for (const sx of [-1, 1]) {
+    torso.add(box(0.5, 0.5, 0.7, dark, sx * 1.0, 0.5, 0));
+    for (let r = 0; r < 4; r++) torso.add(box(0.1, 0.1, 0.1, glow, sx * 1.0 - 0.13 + (r % 2) * 0.26, 0.62 - Math.floor(r / 2) * 0.26, 0.36));
+  }
+  // Piston arms.
+  for (const sx of [-1, 1]) torso.add(box(0.3, 1.0, 0.3, body, sx * 0.95, -0.35, 0.1));
+
+  // Visor head.
+  const head = new THREE.Group();
+  head.position.set(0, 0.9, 0.2);
+  head.add(box(0.6, 0.42, 0.5, dark, 0, 0, 0));
+  head.add(box(0.42, 0.12, 0.08, glow, 0, 0.05, 0.26)); // visor
+  torso.add(head);
+  root.add(torso);
+
+  root.userData.parts = { torso, head } satisfies BossParts;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** CHIMERA — Adaptive Bio-Weapon. An asymmetrical fleshy mass with SIX mismatched
+ *  arms (writhed in the animator), a cluster of glowing eyes, and an exposed genome sac
+ *  (weak while mutating). Raw magenta flesh. */
+function buildChimera(tier: RenderTier): THREE.Group {
+  const body = metal(0x7a2a5a, tier, 0.5, 0.35); // raw flesh
+  const dark = metal(0x3a1430, tier, 0.55, 0.35);
+  const glow = accent(0xff5ac8, tier, 1.8); // bio-glow
+  const root = new THREE.Group();
+
+  const torso = new THREE.Group();
+  torso.position.y = 1.5;
+  torso.add(capsuleZ(0.5, 0.5, body, 0, 0, 0)); // asymmetric mass
+  torso.add(box(0.34, 0.34, 0.34, dark, 0.3, 0.32, 0.1)); // lumpy growth
+  torso.add(box(0.1, 0.08, 0.08, glow, 0.12, 0.42, 0.4)); // eye cluster
+  torso.add(box(0.08, 0.06, 0.06, glow, -0.16, 0.36, 0.38));
+  torso.add(box(0.07, 0.05, 0.05, glow, 0.02, 0.5, 0.34));
+
+  // Exposed genome sac (weak point).
+  const core = new THREE.Group();
+  core.position.set(-0.2, -0.1, 0.36);
+  const sac = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), glow);
+  sac.name = 'core';
+  core.add(sac);
+  torso.add(core);
+
+  // Six mismatched arms.
+  const arms: THREE.Group[] = [];
+  const spec: [number, number, number, number][] = [
+    [-0.5, 0.3, 0.9, 0.4],
+    [0.5, 0.4, 0.7, -0.5],
+    [-0.55, -0.1, 1.0, 0.2],
+    [0.55, 0.0, 0.6, -0.3],
+    [-0.3, 0.5, 0.5, 0.6],
+    [0.35, -0.3, 0.85, -0.4],
+  ];
+  spec.forEach(([ax, ay, len, rot], i) => {
+    const a = new THREE.Group();
+    a.position.set(ax, ay, 0.05);
+    a.rotation.z = rot;
+    a.add(box(0.12, len, 0.12, i % 2 ? dark : body, 0, -len / 2, 0));
+    a.add(box(0.06, 0.2, 0.06, glow, 0, -len, 0)); // spine/claw tip
+    arms.push(a);
+    torso.add(a);
+  });
+  root.add(torso);
+
+  root.userData.parts = { torso, core } satisfies BossParts;
+  root.userData.arms = arms;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
 /** Build the 3D model for a boss. */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
@@ -498,5 +597,7 @@ export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | 
   if (kind === 'leviathan') return buildLeviathan(tier);
   if (kind === 'monolith') return buildMonolith(tier);
   if (kind === 'oblivion') return buildOblivion(tier);
+  if (kind === 'colossus') return buildColossus(tier);
+  if (kind === 'chimera') return buildChimera(tier);
   return null;
 }

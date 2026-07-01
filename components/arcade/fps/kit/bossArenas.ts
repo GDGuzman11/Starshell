@@ -121,6 +121,28 @@ export function bossArenaOblivion(seed: number): LevelLayout {
   return bossArena({ theme: 'moon', size: 184, placements: p, drops: 14 }, seed);
 }
 
+/** COLOSSUS arena — a fortified INDUSTRIAL yard: hard container cover + bunkers + walls
+ *  to weather its barrage from, plenty of drops so you can keep re-arming under fire. */
+export function bossArenaColossus(seed: number): LevelLayout {
+  const p: Placement[] = [];
+  for (const [gx, gz] of [[-4, -4], [4, -4], [-4, 4], [4, 4], [-2, -4], [2, 4]]) p.push({ module: 'container', gx, gz, rot: 0 });
+  for (const [gx, gz] of [[-5, 0], [5, 0]]) p.push({ module: 'bunker', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-2, 0, 90], [2, 0, 90], [0, -3, 0], [0, 3, 0], [-3, 2, 90], [3, -2, 90]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  return bossArena({ theme: 'industrial', size: 190, placements: p, drops: 15 }, seed);
+}
+
+/** CHIMERA arena — a mixed JUNGLE of both close cover (ruins/rubble) and open lanes so
+ *  both its melee + ranged limb-sets matter; strong drops so you can swap weapons to
+ *  break its adaptation. */
+export function bossArenaChimera(seed: number): LevelLayout {
+  const p = scatterBuildingsAndWalls(172, seed);
+  const occ = new Set(p.map((q) => key(q.gx, q.gz)));
+  for (const [gx, gz] of [[-2, -2], [2, 2], [-2, 2], [2, -2]] as [number, number][]) {
+    if (!occ.has(key(gx, gz))) p.push({ module: 'ruin', gx, gz, rot: 0 });
+  }
+  return bossArena({ theme: 'jungle', size: 172, placements: p, drops: 16 }, seed);
+}
+
 /** Functional buildings + loose cover walls scattered across a boss arena, leaving the
  *  centre + spawns open for the fight. A default terrain until a boss gets bespoke one. */
 export function scatterBuildingsAndWalls(size: number, seed: number): Placement[] {
