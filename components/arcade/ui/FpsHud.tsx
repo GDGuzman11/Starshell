@@ -13,6 +13,7 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
   const flash = now - snap.fireAt < 70;
   const hit = now - snap.hitAt < 180;
   const hurt = now - snap.hurtAt < 320;
+  const pickup = now - snap.pickupAt < 400; // ammo/shield pickup flash
   const scoped = snap.ads; // any zoom level shows the scope view (snipers go deeper)
   const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
   const stun = Math.max(0, 1 - (now - snap.stunAt) / 1300); // stun/concussion distortion
@@ -156,10 +157,11 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         </div>
       )}
 
-      {/* health (glass) */}
-      <div className="absolute bottom-4 left-4 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 backdrop-blur-sm">
-        <div className="mb-1 text-[7px] text-white/55 sm:text-[8px]">
-          HP {Math.round(snap.health)}/{snap.maxHp}
+      {/* health + overshield (glass) */}
+      <div className={`absolute bottom-4 left-4 rounded-lg border px-2.5 py-1.5 backdrop-blur-sm transition-colors duration-200 ${pickup ? 'border-[#aef5c8]/70 bg-[#aef5c8]/10' : 'border-white/10 bg-black/40'}`}>
+        <div className="mb-1 flex items-center gap-1.5 text-[7px] text-white/55 sm:text-[8px]">
+          <span>HP {Math.round(snap.health)}/{snap.maxHp}</span>
+          {snap.armor > 0 && <span className="text-[#5ad0ff]">◆ {Math.round(snap.armor)}</span>}
         </div>
         <div className="h-2 w-28 overflow-hidden rounded-full bg-white/15 sm:w-36">
           <div
@@ -167,6 +169,12 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
             style={{ width: `${(snap.health / snap.maxHp) * 100}%`, backgroundColor: snap.health / snap.maxHp > 0.35 ? '#aef5c8' : '#ff5d6e' }}
           />
         </div>
+        {/* overshield bar (cyan), shown only while armor > 0 */}
+        {snap.armor > 0 && (
+          <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-white/10 sm:w-36">
+            <div className="h-full bg-[#5ad0ff] transition-[width] duration-150" style={{ width: `${(snap.armor / snap.maxArmor) * 100}%` }} />
+          </div>
+        )}
       </div>
 
       {/* weapon + ammo + slots (glass). On touch it sits bottom-centre, clear of

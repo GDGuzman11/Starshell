@@ -18,6 +18,10 @@ export interface Player3 {
   pitch: number;
   onGround: boolean;
   health: number;
+  /** Overshield/armor: soaks damage BEFORE health, does NOT regenerate. Refilled
+   *  only by shield drops. Capped at `maxArmor`. */
+  armor: number;
+  maxArmor: number;
   /** Active zipline ride (index into level.ziplines + progress 0..1). */
   zip: { i: number; t: number } | null;
   /** Active grapple flight — arcs the player from (x0,y0,z0) to (tx,ty,tz). */
@@ -87,7 +91,7 @@ export interface MoveInput {
 }
 
 export function makePlayer3(spawn: { x: number; z: number; yaw: number }): Player3 {
-  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, px: 0, pz: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, zip: null, grapple: null };
+  return { x: spawn.x, y: 0, z: spawn.z, vy: 0, px: 0, pz: 0, yaw: spawn.yaw, pitch: 0, onGround: true, health: 100, armor: 0, maxArmor: 100, zip: null, grapple: null };
 }
 
 /** Add a horizontal impulse to the player (boss knockback / pull). `(dx,dz)` is

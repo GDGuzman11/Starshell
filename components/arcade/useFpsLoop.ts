@@ -75,6 +75,9 @@ export interface FpsGameState {
 export interface FpsSnapshot {
   health: number;
   maxHp: number;
+  armor: number; // overshield (soaks damage before health)
+  maxArmor: number;
+  pickupAt: number; // timestamp of the last ammo/shield pickup (HUD flash)
   weapon: string;
   family: string;
   mag: number;
@@ -177,6 +180,10 @@ export function useFpsLoop(
     camera.rotation.order = 'YXZ';
     const isTouch = 'ontouchstart' in window;
     const ballGeo = new THREE.SphereGeometry(1, 10, 8);
+    // Shared drop visuals (a small glowing cube — amber = ammo, cyan = shield).
+    const dropGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+    const dropAmmoMat = new THREE.MeshBasicMaterial({ color: 0xffcf5a });
+    const dropShieldMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff });
 
     // Render tier — drives material cost (emissive walls) + post-FX weight.
     // Phones / low-memory devices get the cheaper Lambert walls + bloom-only.
@@ -246,9 +253,11 @@ export function useFpsLoop(
     const smokes: SmokeFx[] = [];
     const flashes: Flash[] = [];
     const zones: Zone[] = [];
+    // Player pickups: enemies drop these; auto-collected on proximity.
+    const drops: { x: number; y: number; z: number; kind: 'ammo' | 'shield'; mesh: THREE.Mesh; born: number }[] = [];
     let lastSnap = 0;
     const snap: FpsSnapshot = {
-      health: 100, maxHp: 100, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
+      health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
       slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
@@ -283,10 +292,12 @@ export function useFpsLoop(
       for (const s of smokes) clearMesh(s.mesh);
       for (const f of flashes) clearMesh(f.mesh);
       for (const z of zones) clearMesh(z.mesh);
+      for (const d of drops) clearMesh(d.mesh);
       grenades.length = 0;
       smokes.length = 0;
       flashes.length = 0;
       zones.length = 0;
+      drops.length = 0;
       projectiles.clear();
       telegraphs.clear();
       for (const hz of bossHazards) clearMesh(hz.mesh);
@@ -519,6 +530,30 @@ export function useFpsLoop(
               }
             }
           }
+        };
+        // Player damage → soak the overshield first, then health. God-mode ignores it.
+        const hurtPlayer = (amount: number) => {
+          if (amount <= 0 || g.god) return;
+          if (p.armor > 0) {
+            const soak = Math.min(p.armor, amount);
+            p.armor -= soak;
+            amount -= soak;
+          }
+          if (amount > 0) p.health = Math.max(0, p.health - amount);
+          snap.hurtAt = now;
+          if (p.health <= 0) g.status = 'lost';
+        };
+        // An enemy died → tally the kill and, ~1 in 3 kills, drop ammo or overshield
+        // for the player (bosses / deployables never drop). Big fights stay supplied.
+        const onEnemyKilled = (e: Enemy) => {
+          g.kills++;
+          if (e.boss || e.destructible) return;
+          if (Math.random() > 0.34) return;
+          const kind: 'ammo' | 'shield' = Math.random() < 0.55 ? 'ammo' : 'shield';
+          const mesh = new THREE.Mesh(dropGeo, kind === 'ammo' ? dropAmmoMat : dropShieldMat);
+          mesh.position.set(e.x, e.y + 0.6, e.z);
+          world?.scene.add(mesh);
+          drops.push({ x: e.x, y: e.y, z: e.z, kind, mesh, born: now });
         };
         const ls = LOOK_SENS * sens.current;
         // Touch AIM ASSIST — a subtle slowdown + magnetism when a target is near the
@@ -790,7 +825,7 @@ export function useFpsLoop(
                   e.lastSeen = { x: p.x, z: p.z };
                   e.barUntil = now + 2500;
                   anyHit = true;
-                  if (e.health <= 0) g.kills++;
+                  if (e.health <= 0) onEnemyKilled(e);
                 }
               }
               if (world) {
@@ -828,7 +863,7 @@ export function useFpsLoop(
                 cueSquads(p.x, p.z); // and any other squad within earshot of the shot
                 snap.hitAt = now;
                 sfx.playImpact(gun.id, 'enemy');
-                if (hit.health <= 0) g.kills++;
+                if (hit.health <= 0) onEnemyKilled(hit);
               }
               // Always leave a visible impact at the point of contact (enemy OR
               // wall) so you can see where the round landed — bigger for snipers
@@ -911,7 +946,7 @@ export function useFpsLoop(
                     e.lastSeen = { x: p.x, z: p.z };
                     e.barUntil = now + 2500;
                     any = true;
-                    if (e.health <= 0) g.kills++;
+                    if (e.health <= 0) onEnemyKilled(e);
                   }
                 }
                 return any;
@@ -1033,7 +1068,7 @@ export function useFpsLoop(
                 if (Math.hypot(e.x - s.x, e.z - s.z) < s.r) {
                   hurtEnemy(e, s.dps * dt);
                   e.hitFlash = Math.max(e.hitFlash, 0.05);
-                  if (e.health <= 0) g.kills++;
+                  if (e.health <= 0) onEnemyKilled(e);
                 }
               }
             }
@@ -1079,15 +1114,14 @@ export function useFpsLoop(
               e.burnT -= dt;
               hurtEnemy(e, e.burnDps * dt);
               e.hitFlash = Math.max(e.hitFlash, 0.05);
-              if (e.health <= 0) g.kills++;
+              if (e.health <= 0) onEnemyKilled(e);
             }
           }
           // Boss/minion projectiles: advance + resolve impacts (P0 system, fired in P1).
           if (projectiles.count > 0) {
             for (const im of projectiles.update(dt, p, g.level, grid ?? undefined)) {
               if (im.dmg > 0) {
-                p.health = Math.max(0, p.health - im.dmg);
-                snap.hurtAt = now;
+                hurtPlayer(im.dmg);
                 recoilKick = Math.min(0.16, recoilKick + 0.03); // impact shake
                 sfx.hurt();
               }
@@ -1116,11 +1150,7 @@ export function useFpsLoop(
               continue;
             }
             const hzd = Math.hypot(p.x - hz.x, p.z - hz.z);
-            if (p.y < 1.2 && hzd < hz.r) {
-              p.health = Math.max(0, p.health - hz.dps * dt);
-              snap.hurtAt = now;
-              if (p.health <= 0 && !g.god) g.status = 'lost';
-            }
+            if (p.y < 1.2 && hzd < hz.r) hurtPlayer(hz.dps * dt);
             // Pull vortex: drag the player toward the centre while they're in range.
             if (hz.pull && p.y < 2.5 && hzd < hz.r * 2 && hzd > 0.5) pushPlayer(p, hz.x - p.x, hz.z - p.z, hz.pull);
             (hz.mesh.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.14 * Math.sin(now * 0.006);
@@ -1131,12 +1161,10 @@ export function useFpsLoop(
             for (const tf of telegraphs.update(now, p)) {
               // Tentacle Eruption: damage + launch/knock the player if caught.
               if (tf.kind === 'eruption' && tf.hitPlayer && p.y < 1.6) {
-                p.health = Math.max(0, p.health - 26);
-                snap.hurtAt = now;
+                hurtPlayer(26);
                 recoilKick = Math.min(0.22, recoilKick + 0.12);
                 launchPlayer(p, 7.5);
                 pushPlayer(p, p.x - tf.x, p.z - tf.z, 7);
-                if (p.health <= 0 && !g.god) g.status = 'lost';
               }
               // Pull Zone: drop a lingering vortex that drags the player to its centre.
               if (tf.kind === 'pull' && world) {
@@ -1148,11 +1176,9 @@ export function useFpsLoop(
               }
               // Slam Wave: a strong knockback (no launch) if caught in the ring.
               if (tf.kind === 'slam' && tf.hitPlayer && p.y < 2.5) {
-                p.health = Math.max(0, p.health - 18);
-                snap.hurtAt = now;
+                hurtPlayer(18);
                 recoilKick = Math.min(0.22, recoilKick + 0.1);
                 pushPlayer(p, p.x - tf.x, p.z - tf.z, 12);
-                if (p.health <= 0 && !g.god) g.status = 'lost';
               }
               if (world) {
                 const erupt = tf.kind === 'eruption';
@@ -1175,6 +1201,29 @@ export function useFpsLoop(
             }
             f.mesh.scale.setScalar(f.r * (0.3 + age * 0.9));
             (f.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - age;
+          }
+
+          // Drops: spin + bob, and AUTO-COLLECT on proximity. Ammo tops up every gun's
+          // reserve; shield refills the overshield. (Must be near the drop's height so
+          // rooftop drops aren't grabbed from the ground below.)
+          for (let i = drops.length - 1; i >= 0; i--) {
+            const d = drops[i];
+            d.mesh.rotation.y += dt * 2.4;
+            d.mesh.position.y = d.y + 0.6 + Math.sin((now - d.born) / 300) * 0.12;
+            if (Math.hypot(d.x - p.x, d.z - p.z) < 1.7 && Math.abs(p.y - d.y) < 2.2) {
+              if (d.kind === 'ammo') {
+                for (let gi = 0; gi < g.guns.length; gi++) {
+                  const base = g.guns[gi].reserve;
+                  g.reserves[gi] = Math.min(Math.ceil(base * 1.5), g.reserves[gi] + Math.ceil(base * 0.25));
+                }
+              } else {
+                p.armor = Math.min(p.maxArmor, p.armor + 35);
+              }
+              snap.pickupAt = now;
+              sfx.swap();
+              clearMesh(d.mesh);
+              drops.splice(i, 1);
+            }
           }
 
           // Enemies — each squad runs its OWN independent brain (its own intel,
@@ -1202,10 +1251,8 @@ export function useFpsLoop(
             if (res.seen) anySeen = true;
           }
           if (totalDamage > 0) {
-            p.health = Math.max(0, p.health - totalDamage);
-            snap.hurtAt = now;
+            hurtPlayer(totalDamage);
             sfx.hurt();
-            if (p.health <= 0 && !g.god) g.status = 'lost';
           }
           if (anySeen || totalDamage > 0) g.regenT = 0;
           else {
@@ -1428,6 +1475,8 @@ export function useFpsLoop(
           const gun = g.guns[g.active];
           snap.health = p.health;
           snap.maxHp = g.maxHp;
+          snap.armor = p.armor;
+          snap.maxArmor = p.maxArmor;
           snap.weapon = gun.name;
           snap.family = gun.family;
           snap.mag = g.mags[g.active];
