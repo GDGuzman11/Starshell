@@ -23,6 +23,9 @@ export interface BossParts {
   legL?: THREE.Group; // humanoid / xeno
   legR?: THREE.Group;
   tail?: THREE.Group; // Xenomorph
+  ring?: THREE.Group; // ARCHON light-ring (spun)
+  orbit?: THREE.Group; // ARCHON orbiting facets (counter-spun)
+  core?: THREE.Group; // exposed core group (weak point)
 }
 
 /** XENOMORPH — the Hive Hunter. Black glossy biomechanical predator: elongated
@@ -198,10 +201,56 @@ function buildKraken(tier: RenderTier): THREE.Group {
   return root;
 }
 
-/** Build the 3D model for a boss (all three are 3D now). */
+/** ARCHON — Ancient AI. A hovering black octahedral core inside a slow rotating
+ *  light-ring, with a counter-spun cluster of orbiting facets. No legs — it floats.
+ *  Machine-blue glow; the inner core is the exposed weak point after a blink. */
+function buildArchon(tier: RenderTier): THREE.Group {
+  const body = metal(0x0a0c14, tier, 0.3, 0.9); // obsidian machine shell
+  const dark = metal(0x141824, tier, 0.42, 0.8);
+  const glow = accent(0x49a6ff, tier, 2.0); // machine blue
+  const root = new THREE.Group();
+  const cy = 1.7; // hover height
+
+  const core = new THREE.Group();
+  core.position.y = cy;
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), body)); // faceted shell
+  const inner = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), glow);
+  inner.name = 'core';
+  core.add(inner);
+  root.add(core);
+
+  const ring = new THREE.Group();
+  ring.position.y = cy;
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.06, 8, 32), glow);
+  torus.rotation.x = Math.PI * 0.42;
+  ring.add(torus);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ring.add(box(0.14, 0.14, 0.14, dark, Math.cos(a) * 0.95, 0, Math.sin(a) * 0.95));
+  }
+  root.add(ring);
+
+  const orbit = new THREE.Group();
+  orbit.position.y = cy;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), dark);
+    m.position.set(Math.cos(a) * 1.35, 0, Math.sin(a) * 1.35);
+    orbit.add(m);
+  }
+  root.add(orbit);
+  root.add(box(0.5, 0.06, 0.5, glow, 0, 0.05, 0)); // faint hover disc (no legs)
+
+  root.userData.parts = { ring, orbit, core } satisfies BossParts;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** Build the 3D model for a boss. */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
   if (kind === 'warrior') return buildWarlord(tier);
   if (kind === 'octopus') return buildKraken(tier);
+  if (kind === 'archon') return buildArchon(tier);
   return null;
 }

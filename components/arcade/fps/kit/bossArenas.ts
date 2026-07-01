@@ -56,6 +56,17 @@ export function bossArena(spec: BossArenaSpec, seed: number): LevelLayout {
   return { v: LAYOUT_VERSION, theme: spec.theme, size: spec.size, seed, placements, bridges: spec.bridges };
 }
 
+/** ARCHON arena — a symmetric NEON geometry: four watchtowers (the vantage points it
+ *  blinks between) around a central command hub, with mid-lane cover to break its long
+ *  precise sightlines, plus plentiful drops. */
+export function bossArenaArchon(seed: number): LevelLayout {
+  const p: Placement[] = [{ module: 'command', gx: 0, gz: 0, rot: 0 }];
+  for (const [gx, gz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) p.push({ module: 'watchtower', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-2, 0, 90], [2, 0, 90], [0, -2, 0], [0, 2, 0]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  for (const [gx, gz] of [[-2, -2], [2, 2], [2, -2], [-2, 2]]) p.push({ module: 'container', gx, gz, rot: 0 });
+  return bossArena({ theme: 'neon', size: 176, placements: p, drops: 14 }, seed);
+}
+
 /** Functional buildings + loose cover walls scattered across a boss arena, leaving the
  *  centre + spawns open for the fight. A default terrain until a boss gets bespoke one. */
 export function scatterBuildingsAndWalls(size: number, seed: number): Placement[] {

@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { accent, box, capsuleZ, coneZ, metal } from '../models/parts';
 
-export type MinionKind = 'broodling' | 'spitter' | 'stalker' | 'crawler' | 'spore' | 'sentinel';
+export type MinionKind = 'broodling' | 'spitter' | 'stalker' | 'crawler' | 'spore' | 'sentinel' | 'facet' | 'constructor' | 'sentry';
 
 export interface MinionDef {
   hp: number;
@@ -31,10 +31,15 @@ export const MINIONS: Record<MinionKind, MinionDef> = {
   crawler: { hp: 70, speedMul: 1.7, scale: 1.0, melee: 11, ranged: 0, color: 0x4a2a6a },
   spore: { hp: 40, speedMul: 0.75, scale: 0.95, melee: 22, ranged: 0, color: 0x7a4ac0 }, // bomber (explodes)
   sentinel: { hp: 135, speedMul: 0.95, scale: 1.3, melee: 0, ranged: 14, color: 0x3a2060 },
+  // Archon retinue (machine blue) — geometric ranged drones
+  facet: { hp: 60, speedMul: 1.6, scale: 1.0, melee: 0, ranged: 11, color: 0x141824 },
+  constructor: { hp: 165, speedMul: 0.85, scale: 1.35, melee: 0, ranged: 13, color: 0x1a2130 },
+  sentry: { hp: 185, speedMul: 0.3, scale: 1.3, melee: 0, ranged: 14, color: 0x12161f },
 };
 
 const GREEN = 0x6aff7a;
 const VIOLET = 0xc08bff;
+const AZURE = 0x49a6ff;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -170,12 +175,74 @@ function buildSentinel(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Archon Facet: a small hovering octahedron drone inside a blue micro-ring. */
+function buildFacet(tier: RenderTier): THREE.Group {
+  const body = metal(0x141824, tier, 0.4, 0.85);
+  const glow = accent(AZURE, tier, 1.8);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.1; // floats
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), body));
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), glow));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.03, 6, 20), glow);
+  ring.rotation.x = Math.PI * 0.42;
+  core.add(ring);
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Archon Constructor: a blocky fabricator drone with side arms + a blue eye. */
+function buildConstructor(tier: RenderTier): THREE.Group {
+  const body = metal(0x1a2130, tier, 0.45, 0.8);
+  const glow = accent(AZURE, tier, 1.6);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.75;
+  core.add(box(0.5, 0.5, 0.5, body, 0, 0, 0)); // body
+  core.add(box(0.18, 0.18, 0.16, glow, 0, 0, 0.28)); // eye
+  for (const sx of [-1, 1]) core.add(box(0.12, 0.12, 0.42, body, sx * 0.34, 0, 0.1)); // fabricator arms
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.1, 0.55, 0.1, body, sx * 0.18, 0.28, 0)); // legs
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Archon Sentry: a tripod turret with a barrel + top light — a stationary gun. */
+function buildSentry(tier: RenderTier): THREE.Group {
+  const body = metal(0x12161f, tier, 0.4, 0.85);
+  const glow = accent(AZURE, tier, 1.7);
+  const root = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = box(0.08, 0.7, 0.08, body, Math.cos(a) * 0.24, 0.35, Math.sin(a) * 0.24);
+    leg.rotation.z = Math.cos(a) * 0.3;
+    leg.rotation.x = -Math.sin(a) * 0.3;
+    root.add(leg);
+  }
+  const core = new THREE.Group();
+  core.position.y = 0.82;
+  core.add(box(0.34, 0.28, 0.34, body, 0, 0, 0)); // turret head
+  core.add(box(0.1, 0.1, 0.5, body, 0, 0.02, 0.3)); // barrel
+  core.add(box(0.12, 0.12, 0.08, glow, 0, 0.02, 0.52)); // muzzle glow
+  core.add(box(0.34, 0.06, 0.34, glow, 0, 0.17, 0)); // top light
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
   if (kind === 'stalker') return buildStalker(tier);
   if (kind === 'crawler') return buildCrawler(tier);
   if (kind === 'spore') return buildSpore(tier);
+  if (kind === 'facet') return buildFacet(tier);
+  if (kind === 'constructor') return buildConstructor(tier);
+  if (kind === 'sentry') return buildSentry(tier);
   return buildSentinel(tier);
 }
 

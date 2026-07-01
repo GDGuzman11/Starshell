@@ -352,7 +352,9 @@ export function useFpsLoop(
             return m3d;
           }
           if (!bossCache[e.boss]) {
-            const t = mk(bossTex(e.boss));
+            // Sprite fallback is only reached for bosses WITHOUT a 3D model; all current
+            // bosses have models, so this never runs for the newer civilizations.
+            const t = mk(bossTex(e.boss as 'xeno' | 'warrior' | 'octopus'));
             bossCache[e.boss] = t;
             bossTexes.push(t);
           }

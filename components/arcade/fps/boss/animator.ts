@@ -40,6 +40,16 @@ export function poseBossModel(
   const tentacles = model.userData.tentacles as THREE.Group[] | undefined;
   if (tentacles) for (let i = 0; i < tentacles.length; i++) tentacles[i].rotation.z = Math.sin(t * 1.3 + i * 1.1) * 0.18;
 
+  // ARCHON: the light-ring rotates, the orbiting facets counter-spin + bob.
+  if (parts.ring) {
+    parts.ring.rotation.y = t * 1.1;
+    parts.ring.rotation.z = Math.sin(t * 0.6) * 0.12;
+  }
+  if (parts.orbit) {
+    parts.orbit.rotation.y = -t * 1.6;
+    parts.orbit.position.y = ((parts.orbit.userData.baseY ??= parts.orbit.position.y) as number) + Math.sin(t * 2) * 0.1;
+  }
+
   // Emissive: a green VULNERABLE pulse during the weak-point window, otherwise a
   // red hit-flash on the carapace.
   const mats = model.userData.bodyMats as THREE.Material[] | undefined;

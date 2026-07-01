@@ -15,7 +15,7 @@
  */
 import { makeArena3D, type Level3D } from '../level3d';
 import { buildFromLayout } from './generate';
-import { bossArena, scatterBuildingsAndWalls } from './bossArenas';
+import { bossArena, bossArenaArchon, scatterBuildingsAndWalls } from './bossArenas';
 import { loadCampaign } from './storage';
 import type { LevelLayout } from './layout';
 import type { BossKind } from '../enemy';
@@ -30,7 +30,7 @@ export const CAMPAIGN: Record<number, LevelLayout> = {};
 
 /** Regular bosses cycle in this order (by boss ordinal). New civilizations are appended
  *  as they ship, so deeper runs face more variety. */
-export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus'];
+export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus', 'archon'];
 
 /** Per-boss bespoke arena (modular-kit layout → drops/buildings/walls/theme). A boss
  *  without an entry falls back to the procedural makeArena3D. Each boss's terrain is
@@ -39,6 +39,7 @@ export const BOSS_ARENAS: Partial<Record<BossKind, (seed: number) => LevelLayout
   xeno: (seed) => bossArena({ theme: 'neon', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
   warrior: (seed) => bossArena({ theme: 'volcanic', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
   octopus: (seed) => bossArena({ theme: 'jungle', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
+  archon: bossArenaArchon,
 };
 
 /** Build a boss level's arena: its bespoke stocked layout, or the procedural fallback. */

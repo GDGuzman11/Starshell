@@ -22,6 +22,14 @@ export interface BossBrainState {
   pounceCd: number; // cooldown before the next pounce
   volleyCd: number; // cooldown for a boss special (Warlord grenade volley)
   fogCd: number; // cooldown for the Kraken's void fog
+  // Generic slots reused by the new civilization bosses (blink / charge / mutate /
+  // erupt / grow cooldowns + a mode/state counter + a committed target point).
+  abilityCd: number;
+  abilityCd2: number;
+  abilityT: number;
+  mode: number;
+  tgX: number;
+  tgZ: number;
 }
 
 export interface BossMove {
@@ -31,7 +39,7 @@ export interface BossMove {
 }
 
 export function makeBossBrain(): BossBrainState {
-  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2, pounce: 'none', pounceT: 0, pounceX: 0, pounceZ: 0, pounceCd: 4, volleyCd: 3, fogCd: 7 };
+  return { strafeSign: Math.random() < 0.5 ? 1 : -1, losBlockedT: 0, flipT: 1 + Math.random() * 2, pounce: 'none', pounceT: 0, pounceX: 0, pounceZ: 0, pounceCd: 4, volleyCd: 3, fogCd: 7, abilityCd: 3, abilityCd2: 5, abilityT: 0, mode: 0, tgX: 0, tgZ: 0 };
 }
 
 const STAND_MIN = 13; // back off if closer than this
