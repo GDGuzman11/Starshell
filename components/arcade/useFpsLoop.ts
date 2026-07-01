@@ -237,7 +237,10 @@ export function useFpsLoop(
     // grid, threaded into updateEnemies. Absent → bots use the old direct steering.
     let nav: NavGraph | null = null;
     // Resupply points (editor-placed stations + ammo/shield crates) for this level.
-    let resupply: { kind: string; x: number; z: number; cd: number; tick: number }[] = [];
+    let resupply: { kind: string; x: number; y: number; z: number; cd: number; tick: number }[] = [];
+    // Enemies partitioned by squad, precomputed once per level (squad membership is
+    // stable for a level) so the frame loop doesn't re-filter g.enemies every frame.
+    let squadGroups: Enemy[][] = [];
     // Enemy actors: a 3D model Group for regular enemies, a billboard Sprite for
     // bosses. Indexed parallel to g.enemies.
     let sprites: THREE.Object3D[] = [];
@@ -314,8 +317,11 @@ export function useFpsLoop(
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
       nav = buildNavGraph(g.level, grid);
-      // Collect resupply points (stations + ammo/shield crates) placed in the level.
-      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate' || m.kind === 'healthcrate').map((m) => ({ kind: m.kind, x: m.cx, z: m.cz, cd: 0, tick: 0 }));
+      // Collect resupply points (stations + ammo/shield/health crates) placed in the level.
+      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate' || m.kind === 'healthcrate').map((m) => ({ kind: m.kind, x: m.cx, y: 0, z: m.cz, cd: 0, tick: 0 }));
+      // Partition enemies by squad ONCE per level (membership is stable) so the frame
+      // loop reuses these arrays instead of re-filtering g.enemies every frame.
+      squadGroups = g.squads.map((_, s) => g.enemies.filter((e) => e.squadId === s));
       // Build the composer once; afterwards just repoint the RenderPass at the
       // new scene (do NOT recreate the renderer or the whole composer).
       if (!composer) {
@@ -1241,7 +1247,7 @@ export function useFpsLoop(
               }
             };
             for (const rp of resupply) {
-              if (p.y > 3) continue; // ground-level only
+              if (Math.abs(p.y - rp.y) > 3) continue; // must be near the pickup's height
               const near = Math.hypot(rp.x - p.x, rp.z - p.z);
               if (rp.kind === 'station') {
                 if (near < 5) {
@@ -1278,8 +1284,8 @@ export function useFpsLoop(
           let totalDamage = 0;
           let anySeen = false;
           for (let s = 0; s < g.squads.length; s++) {
-            const group = g.enemies.filter((e) => e.squadId === s);
-            if (!group.length) continue;
+            const group = squadGroups[s];
+            if (!group || !group.length) continue;
             const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
             for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
             if (world && res.bossShots.length) {
@@ -1533,10 +1539,18 @@ export function useFpsLoop(
           snap.slots = g.guns.map((gg, i) => ({ name: gg.name, active: i === g.active }));
           snap.throwName = g.throwable.name;
           snap.throwCount = g.throwCount;
-          const broodCount = g.enemies.filter((e) => e.minion && e.health > 0 && !e.dormant).length;
-          snap.bosses = g.enemies
-            .filter((e) => e.boss && e.health > 0)
-            .map((e) => {
+          // One pass over the enemies for the HUD: boss bars, brood count, alive count,
+          // and radar blips (rotated into player-facing space, forward = up).
+          const sinY = Math.sin(p.yaw);
+          const cosY = Math.cos(p.yaw);
+          let broodCount = 0;
+          let aliveLeft = 0;
+          const bossList: { name: string; ratio: number; phase: number; status: string; brood: number }[] = [];
+          const radar: { x: number; z: number; boss: boolean; kind?: 'ammo' | 'shield' | 'health' }[] = [];
+          for (const e of g.enemies) {
+            if (e.health <= 0) continue;
+            if (e.minion && !e.dormant) broodCount++;
+            if (e.boss) {
               const ratio = e.health / e.maxHealth;
               const phase = ratio > 0.65 ? 1 : ratio > 0.35 ? 2 : ratio > 0.15 ? 3 : 4;
               const status =
@@ -1547,26 +1561,24 @@ export function useFpsLoop(
                     : phase === 4
                       ? 'ENRAGED'
                       : 'HUNTING';
-              return { name: BOSSES[e.boss!].name, ratio, phase, status, brood: broodCount };
-            });
-          snap.enemiesLeft = g.enemies.filter((e) => e.health > 0 && !e.dormant && !e.destructible).length;
+              bossList.push({ name: BOSSES[e.boss].name, ratio, phase, status, brood: 0 });
+            }
+            if (!e.dormant && !e.destructible) {
+              aliveLeft++;
+              const dx = e.x - p.x;
+              const dz = e.z - p.z;
+              radar.push({ x: dx * cosY - dz * sinY, z: -dx * sinY - dz * cosY, boss: e.boss != null });
+            }
+          }
+          for (const b of bossList) b.brood = broodCount; // stamp once the count is known
+          snap.bosses = bossList;
+          snap.enemiesLeft = aliveLeft;
+          snap.radar = radar;
           snap.status = g.status;
           snap.kills = g.kills;
           snap.shotsFired = g.shotsFired;
           snap.shotsHit = g.shotsHit;
           snap.dmgDealt = g.dmgDealt;
-          // Radar: enemy positions rotated into player-facing space (forward = up).
-          const sinY = Math.sin(p.yaw);
-          const cosY = Math.cos(p.yaw);
-          snap.radar = g.enemies
-            .filter((e) => e.health > 0 && !e.dormant && !e.destructible)
-            .map((e) => {
-              const dx = e.x - p.x;
-              const dz = e.z - p.z;
-              const right = dx * cosY - dz * sinY;
-              const forward = -dx * sinY - dz * cosY;
-              return { x: right, z: forward, boss: e.boss != null };
-            });
           // Ammo / shield / health pickups on the radar (colour-coded).
           for (const rp of resupply) {
             const kind = rp.kind === 'ammocrate' ? 'ammo' : rp.kind === 'shieldcrate' ? 'shield' : rp.kind === 'healthcrate' ? 'health' : null;

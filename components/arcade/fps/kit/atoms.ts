@@ -7,7 +7,7 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import type { Box, Ladder, Ramp } from '../level3d';
+import type { Box, Ladder } from '../level3d';
 import { DIM, TEX } from './types';
 
 type Axis = 'x' | 'z';
@@ -120,13 +120,6 @@ export function windowBand(boxes: Box[], x: number, z: number, len: number, alon
   const lintelBase = yBase + DIM.windowSill + DIM.windowH;
   const lintelH = DIM.wallH - (DIM.windowSill + DIM.windowH);
   if (lintelH > 0.05) wall(boxes, x, z, len, along, lintelH, lintelBase, tex); // lintel
-}
-
-/** A walkable stair run (uses the ramp height-function system) at stair width,
- *  climbing from `yLo` to `yHi` along `dir` (points uphill). */
-export function stairRun(ramps: Ramp[], x: number, z: number, run: number, dir: Ramp['dir'], yLo: number, yHi: number, tex: number = TEX.rail): void {
-  const alongX = dir === '+x' || dir === '-x';
-  ramps.push({ x, z, sx: alongX ? run : DIM.stairW, sz: alongX ? DIM.stairW : run, yLo, yHi, dir, tex });
 }
 
 /** A ladder (vertical climb zone) with a top-exit direction (exX/exZ unit). */
