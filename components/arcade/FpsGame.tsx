@@ -13,7 +13,7 @@ import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import { makeArena3D } from './fps/level3d';
 import { makeModularArena } from './fps/kit/generate';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, type BossKind, type Difficulty, type HuntMemory } from './fps/enemy';
+import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 
@@ -24,7 +24,12 @@ const LEVELS = 20;
 const ARMOR_COST = 100;
 const GAUNTLET_BOSSES: BossKind[] = ['xeno', 'warrior', 'octopus']; // lvl-20 round order
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
-const campaignEnemies = (level: number, base: number) => Math.min(8, base + Math.floor((level - 1) / 2));
+// Player picks a squad count at the menu; it holds for every non-boss level (the
+// map is huge). Each squad is a 5-man fireteam → soldiers = squads × SQUAD_SIZE.
+const SQUAD_OPTIONS = [2, 4, 6, 8]; // → 10 / 20 / 30 / 40 soldiers
+// A modest map-size proxy (the arena grows with squads but never explodes to the
+// literal soldier count). Boss levels keep their compact 5-count arena.
+const mapCountFor = (squads: number) => 8 + squads;
 const campaignDiff = (base: Difficulty, level: number): Difficulty =>
   TIERS[Math.min(2, TIERS.indexOf(base) + (level > 14 ? 2 : level > 7 ? 1 : 0))];
 const goldFor = (level: number, kills: number) => 50 + level * 12 + kills * 15;
@@ -54,7 +59,7 @@ export function FpsGame() {
   const huntMemRef = useRef<HuntMemory | null>(null);
   const [mode, setMode] = useState<Mode>('menu');
   const [diff, setDiff] = useState<Difficulty>('normal');
-  const [enemies, setEnemies] = useState(2);
+  const [squads, setSquads] = useState(2); // number of enemy fireteams per non-boss level
   const [isTouch, setIsTouch] = useState(false);
   const [portrait, setPortrait] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
@@ -208,8 +213,8 @@ export function FpsGame() {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
-      const count = isBoss ? 5 : campaignEnemies(level, enemies);
-      const lvl = kitRef.current ? makeModularArena(count, seed) : makeArena3D(count, seed);
+      const mapCount = isBoss ? 5 : mapCountFor(squads);
+      const lvl = kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed);
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
@@ -218,9 +223,13 @@ export function FpsGame() {
       const gauntlet = level === 20;
       const round = gauntlet ? gauntletRef.current || 1 : 0;
       const bossKinds: BossKind[] = gauntlet ? [GAUNTLET_BOSSES[round - 1]] : level === 15 ? ['octopus'] : level === 10 ? ['warrior'] : ['xeno'];
-      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, campaignEnemies(level, enemies), level, Math.random);
+      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, Math.random);
       // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
+      // One shared-intel object per squad (boss levels are a single squad). All
+      // squads reference the same persistent HuntMemory so learning carries across.
+      const mem = (huntMemRef.current ??= makeHuntMemory());
+      const squadStates: Squad[] = Array.from({ length: isBoss ? 1 : squads }, () => ({ lastKnown: null, t: 0, mem }));
       gameRef.current = {
         level: lvl,
         player,
@@ -241,7 +250,7 @@ export function FpsGame() {
         shotsHit: 0,
         dmgDealt: 0,
         regenT: 0,
-        squad: { lastKnown: null, t: 0, mem: (huntMemRef.current ??= makeHuntMemory()) },
+        squads: squadStates,
         maxHp,
         god: godRef.current,
         elapsed: 0,
@@ -250,7 +259,7 @@ export function FpsGame() {
       setIntro({ level, boss: isBoss });
       setMode('play');
     },
-    [enemies, diff],
+    [squads, diff],
   );
 
   const beginCampaign = useCallback(
@@ -449,11 +458,12 @@ export function FpsGame() {
               ))}
             </div>
 
-            <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">STARTING SQUAD SIZE</p>
+            <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">ENEMY SQUADS · {squads * SQUAD_SIZE} SOLDIERS</p>
             <div className="mt-2 flex gap-2">
-              {[1, 2, 3, 4].map((n) => (
-                <button key={n} type="button" onClick={() => setEnemies(n)} className={`h-9 w-9 rounded-md border font-pixel text-[10px] transition-colors ${enemies === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-                  {n}
+              {SQUAD_OPTIONS.map((n) => (
+                <button key={n} type="button" onClick={() => setSquads(n)} className={`flex h-9 flex-col items-center justify-center rounded-md border px-2 font-pixel transition-colors ${squads === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                  <span className="text-[10px] leading-none">{n}</span>
+                  <span className="mt-0.5 text-[5px] leading-none opacity-70">{n * SQUAD_SIZE}</span>
                 </button>
               ))}
             </div>

@@ -66,7 +66,7 @@ export interface FpsGameState {
   shotsHit: number;
   dmgDealt: number;
   regenT: number;
-  squad: Squad;
+  squads: Squad[]; // one shared-intel object per squad (independent squads)
   maxHp: number;
   god?: boolean; // dev: invincible (health stays full)
   elapsed: number; // seconds since the level started (combat lock + boss grace)
@@ -504,6 +504,22 @@ export function useFpsLoop(
           prevPos.z = g.player.z;
         }
         const p = g.player;
+        // Loud events (gunfire, explosions, alerting throwables) cue only squads
+        // with a living member within earshot — distant squads stay unaware, so
+        // each squad keeps its own independent picture of where the player is.
+        const cueSquads = (ex: number, ez: number, earshot = 70) => {
+          for (let s = 0; s < g.squads.length; s++) {
+            const sq = g.squads[s];
+            for (const e of g.enemies) {
+              if (e.squadId !== s || e.health <= 0 || e.boss) continue;
+              if (Math.hypot(e.x - ex, e.z - ez) < earshot) {
+                sq.lastKnown = { x: ex, z: ez };
+                sq.t = now;
+                break;
+              }
+            }
+          }
+        };
         const ls = LOOK_SENS * sens.current;
         // Touch AIM ASSIST — a subtle slowdown + magnetism when a target is near the
         // reticle, and only while actively aiming (never drifts when idle).
@@ -784,8 +800,7 @@ export function useFpsLoop(
                 flashes.push({ mesh: fm, born: now, r: gun.splash * zoomBoost });
               }
               sfx.explosion();
-              g.squad.lastKnown = { x: p.x, z: p.z };
-              g.squad.t = now;
+              cueSquads(p.x, p.z);
               if (anyHit) {
                 g.shotsHit++;
                 snap.hitAt = now;
@@ -803,8 +818,14 @@ export function useFpsLoop(
                 hit.state = 'alert';
                 hit.lastSeen = { x: p.x, z: p.z };
                 hit.barUntil = now + 2500;
-                g.squad.lastKnown = { x: p.x, z: p.z };
-                g.squad.t = now;
+                {
+                  const hsq = g.squads[hit.squadId]; // a shot squadmate cues its own squad
+                  if (hsq) {
+                    hsq.lastKnown = { x: p.x, z: p.z };
+                    hsq.t = now;
+                  }
+                }
+                cueSquads(p.x, p.z); // and any other squad within earshot of the shot
                 snap.hitAt = now;
                 sfx.playImpact(gun.id, 'enemy');
                 if (hit.health <= 0) g.kills++;
@@ -993,11 +1014,8 @@ export function useFpsLoop(
                 snap.hitAt = now;
                 sfx.enemyHit();
               }
-              // Damaging/loud throwables cue the squad to the spot.
-              if (t.blast.dmg > 0 || t.status?.stun || t.cluster) {
-                g.squad.lastKnown = { x: cx, z: cz };
-                g.squad.t = now;
-              }
+              // Damaging/loud throwables cue any squad within earshot of the spot.
+              if (t.blast.dmg > 0 || t.status?.stun || t.cluster) cueSquads(cx, cz);
               clearMesh(gr.mesh);
               grenades.splice(i, 1);
             }
@@ -1043,8 +1061,7 @@ export function useFpsLoop(
                 if (Math.hypot(e.x - z.x, e.z - z.z) < z.r) e.slowT = Math.max(e.slowT, 0.3);
               }
             } else if (z.kind === 'decoy') {
-              g.squad.lastKnown = { x: z.x, z: z.z };
-              g.squad.t = now;
+              cueSquads(z.x, z.z, 100); // a decoy lures nearby squads to the spot
             }
             if (now > z.until) {
               clearMesh(z.mesh);
@@ -1160,27 +1177,37 @@ export function useFpsLoop(
             (f.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - age;
           }
 
-          // Enemies
-          const res = updateEnemies(g.enemies, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squad, smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
-          for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
-          if (world && res.bossShots.length) {
-            for (const bs of res.bossShots) {
-              projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
+          // Enemies — each squad runs its OWN independent brain (its own intel,
+          // captain buff, roaming healer, coordination) over just its members;
+          // their effects on the player are aggregated. Boss levels are one squad.
+          let totalDamage = 0;
+          let anySeen = false;
+          for (let s = 0; s < g.squads.length; s++) {
+            const group = g.enemies.filter((e) => e.squadId === s);
+            if (!group.length) continue;
+            const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
+            for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
+            if (world && res.bossShots.length) {
+              for (const bs of res.bossShots) {
+                projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
+              }
             }
-          }
-          if (res.bossFog) snap.fogAt = now;
-          if (world && res.bossTelegraphs.length) {
-            for (const bt of res.bossTelegraphs) {
-              telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'pounce' ? 0x9cff6a : 0xc08bff }, now);
+            if (res.bossFog) snap.fogAt = now;
+            if (world && res.bossTelegraphs.length) {
+              for (const bt of res.bossTelegraphs) {
+                telegraphs.spawn({ kind: bt.kind, scene: world.scene, x: bt.x, z: bt.z, radius: bt.radius, delay: bt.delay, color: bt.kind === 'pounce' ? 0x9cff6a : 0xc08bff }, now);
+              }
             }
+            totalDamage += res.damage;
+            if (res.seen) anySeen = true;
           }
-          if (res.damage > 0) {
-            p.health = Math.max(0, p.health - res.damage);
+          if (totalDamage > 0) {
+            p.health = Math.max(0, p.health - totalDamage);
             snap.hurtAt = now;
             sfx.hurt();
             if (p.health <= 0 && !g.god) g.status = 'lost';
           }
-          if (res.seen || res.damage > 0) g.regenT = 0;
+          if (anySeen || totalDamage > 0) g.regenT = 0;
           else {
             g.regenT += dt;
             if (g.regenT > 2) p.health = Math.min(g.maxHp, p.health + 24 * dt);
