@@ -14,7 +14,7 @@ import type { ModuleMeta } from './types';
 import { barricade, bridge, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
 import { ammoCrateProp, barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, shieldCrateProp, stationProp, wreckProp } from './props';
-import { cellToWorld, CELL, footprintOf, LAYOUT_VERSION, MODULE_KINDS, roofHeightOf, ROTATIONS, type BridgeSpan, type BuildingKind, type LevelLayout, type ModuleKind, type Placement, type PropKind, type Rot } from './layout';
+import { cellToWorld, CELL, footprintOf, LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type BridgeSpan, type BuildingKind, type LevelLayout, type ModuleKind, type Placement, type PropKind, type Rot } from './layout';
 import { placeModule } from './transform';
 
 type GP = { x: number; y: number; z: number }[];
@@ -289,8 +289,17 @@ export function makeBattlefieldLayout(theme: string, size: number, seed: number)
   const r = rng(seed);
   const pick = <T,>(a: T[]): T => a[Math.floor(r() * a.length)];
   const half = size / 2;
-  const maxCell = Math.max(2, Math.floor((half - 24) / CELL));
-  const spawnGz = Math.round((half * 0.86) / CELL); // spawn rows to keep clear
+  // Building anchors on an even grid spanning the WHOLE map (out to ~one building's
+  // half-width from the walls), so the arena is used edge-to-edge, not just the centre.
+  const reach = Math.max(2, Math.floor((half - 12) / CELL));
+  const cells: number[] = [];
+  for (let g = -reach; g <= reach; g++) if (g % 2 === 0) cells.push(g);
+  const spawns = [
+    { x: 0, z: -half * 0.86 },
+    { x: 0, z: half * 0.86 },
+  ];
+  const nearSpawn = (gx: number, gz: number) => spawns.some((s) => Math.hypot(cellToWorld(gx) - s.x, cellToWorld(gz) - s.z) < 22);
+
   const placements: Placement[] = [];
   const bridges: BridgeSpan[] = [];
   const occupied = new Set<string>();
@@ -298,56 +307,69 @@ export function makeBattlefieldLayout(theme: string, size: number, seed: number)
   const free = (gx: number, gz: number) => !occupied.has(key(gx, gz));
   const claim = (gx: number, gz: number) => occupied.add(key(gx, gz));
 
-  // Even grid rows available for buildings (off the spawn edges).
-  const rows: number[] = [];
-  for (let g = -maxCell + 1; g <= maxCell - 1; g++) if (g % 2 === 0) rows.push(g);
-
-  // Central command anchor.
+  // A HEIGHT-4 building compound (command + BARRACKS) filling the whole even grid at
+  // bridge-spacing (2 cells apart), all axis-aligned + the same roof height — so any
+  // orthogonal neighbours can be (and are) bridged. This guarantees well over 8
+  // aligned, same-height, connectable buildings spread across the map.
+  const H4 = 4;
+  const h4cells: { gx: number; gz: number; pi: number }[] = [];
   placements.push({ module: 'command', gx: 0, gz: 0, rot: 0 });
   claim(0, 0);
-
-  // Buildings scattered with variety, ringed around the centre, clear of spawns.
-  const buildingPool: BuildingKind[] = ['apartment', 'watchtower', 'barracks', 'bunker', 'ruin', 'apartment', 'barracks'];
-  for (const gx of rows) {
-    for (const gz of rows) {
-      if (Math.abs(gz) >= spawnGz - 1) continue;
-      if (Math.hypot(gx, gz) < 2.2 || !free(gx, gz)) continue;
-      if (r() < 0.42) {
-        const kind = pick(buildingPool);
-        placements.push({ module: kind, gx, gz, rot: pick([0, 90, 180, 270]) as Rot, params: kind === 'apartment' ? { levels: 2 + Math.floor(r() * 3) } : undefined });
-        claim(gx, gz);
-      }
+  h4cells.push({ gx: 0, gz: 0, pi: 0 });
+  for (const gx of cells) {
+    for (const gz of cells) {
+      if ((gx === 0 && gz === 0) || nearSpawn(gx, gz) || !free(gx, gz)) continue;
+      placements.push({ module: 'barracks', gx, gz, rot: 0 }); // rot 0 → clean bridge edges
+      h4cells.push({ gx, gz, pi: placements.length - 1 });
+      claim(gx, gz);
     }
   }
 
-  // Bridges: connect adjacent, aligned, same-roof-height building pairs (each pair once).
-  const buildings = placements.filter((p) => roofHeightOf(p.module, p.params?.levels ?? 3) != null);
-  for (const A of buildings) {
-    for (const B of buildings) {
-      const rhA = roofHeightOf(A.module, A.params?.levels ?? 3);
-      const rhB = roofHeightOf(B.module, B.params?.levels ?? 3);
-      if (rhA == null || rhB == null || rhA !== rhB) continue;
-      const sameRow = A.gz === B.gz && B.gx - A.gx === 2;
-      const sameCol = A.gx === B.gx && B.gz - A.gz === 2;
-      if (!sameRow && !sameCol) continue;
-      if (r() >= 0.55) continue;
-      const cxA = cellToWorld(A.gx);
-      const czA = cellToWorld(A.gz);
-      const fpA = footprintOf(A);
-      const cxB = cellToWorld(B.gx);
-      const czB = cellToWorld(B.gz);
-      const fpB = footprintOf(B);
-      if (sameRow) bridges.push({ x0: cxA + fpA.w / 2, z0: czA, x1: cxB - fpB.w / 2, z1: czA, y: rhA });
-      else bridges.push({ x0: cxA, z0: czA + fpA.d / 2, x1: cxA, z1: czB - fpB.d / 2, y: rhA });
+  // VARIETY: swap a minority of the barracks for taller towers / apartments / ruins
+  // for silhouette, but never drop the same-height compound below a safe count (keeps
+  // the ≥8 bridgeable guarantee). Converted cells are excluded from the compound.
+  const variety: BuildingKind[] = ['watchtower', 'apartment', 'ruin', 'bunker'];
+  const converted = new Set<string>();
+  let keep = h4cells.length - 1; // exclude the command hub from the swap budget
+  for (const c of h4cells) {
+    if (c.pi === 0) continue; // never convert the command hub
+    if (keep <= 10) break; // always leave a compound of ≥10 (well above 8)
+    if (r() < 0.3) {
+      const kind = pick(variety);
+      placements[c.pi] = { module: kind, gx: c.gx, gz: c.gz, rot: pick([0, 90, 180, 270]) as Rot, params: kind === 'apartment' ? { levels: 2 + Math.floor(r() * 3) } : undefined };
+      converted.add(key(c.gx, c.gz));
+      keep--;
     }
   }
 
-  // Strategic cover in the lanes between structures — dense down the central approach.
+  // Bridge every orthogonal neighbour pair still in the height-4 compound (each once).
+  const compound = new Map<string, Placement>();
+  for (const c of h4cells) if (!converted.has(key(c.gx, c.gz))) compound.set(key(c.gx, c.gz), placements[c.pi]);
+  const bridgeBetween = (A: Placement, B: Placement) => {
+    const cxA = cellToWorld(A.gx);
+    const czA = cellToWorld(A.gz);
+    const fpA = footprintOf(A);
+    const cxB = cellToWorld(B.gx);
+    const czB = cellToWorld(B.gz);
+    const fpB = footprintOf(B);
+    if (Math.abs(cxB - cxA) >= Math.abs(czB - czA)) bridges.push({ x0: cxA + Math.sign(cxB - cxA) * (fpA.w / 2), z0: czA, x1: cxB - Math.sign(cxB - cxA) * (fpB.w / 2), z1: czA, y: H4 });
+    else bridges.push({ x0: cxA, z0: czA + Math.sign(czB - czA) * (fpA.d / 2), x1: cxA, z1: czB - Math.sign(czB - czA) * (fpB.d / 2), y: H4 });
+  };
+  for (const [k, A] of compound) {
+    const [gx, gz] = k.split(',').map(Number);
+    const east = compound.get(key(gx + 2, gz));
+    if (east) bridgeBetween(A, east);
+    const south = compound.get(key(gx, gz + 2));
+    if (south) bridgeBetween(A, south);
+  }
+
+  // Strategic cover in the ODD-cell lanes between the buildings, across the whole map —
+  // denser down the central approach so crossing open ground always has cover.
   const coverPool: PropKind[] = ['barrier', 'sandbags', 'dragonteeth', 'rubble', 'container', 'wreck', 'crates', 'coverwall'];
-  for (let gx = -maxCell; gx <= maxCell; gx++) {
-    for (let gz = -maxCell + 1; gz <= maxCell - 1; gz++) {
-      if (Math.abs(gz) >= spawnGz || !free(gx, gz)) continue;
-      const p = gx === 0 ? 0.6 : gx % 2 !== 0 || gz % 2 !== 0 ? 0.32 : 0.12;
+  for (let gx = -reach; gx <= reach; gx++) {
+    for (let gz = -reach; gz <= reach; gz++) {
+      if ((gx % 2 === 0 && gz % 2 === 0) || nearSpawn(gx, gz) || !free(gx, gz)) continue;
+      const p = gx === 0 ? 0.6 : 0.34;
       if (r() < p) {
         placements.push({ module: pick(coverPool), gx, gz, rot: pick([0, 90]) as Rot });
         claim(gx, gz);
@@ -355,23 +377,12 @@ export function makeBattlefieldLayout(theme: string, size: number, seed: number)
     }
   }
 
-  // A few tall sightline breakers mid-field.
-  const breakers: PropKind[] = ['fueltank', 'commtower'];
-  for (let i = 0; i < 3; i++) {
-    const gx = pick(rows);
-    const gz = pick(rows.filter((g) => Math.abs(g) < spawnGz - 1));
-    if (gz != null && free(gx, gz)) {
-      placements.push({ module: pick(breakers), gx, gz, rot: 0 });
-      claim(gx, gz);
-    }
-  }
-
-  // Resupply: a station + an ammo + a shield crate out in the field (never on spawns).
-  for (const kind of ['station', 'ammocrate', 'shieldcrate'] as PropKind[]) {
-    for (let t = 0; t < 16; t++) {
-      const gx = Math.round((r() * 2 - 1) * (maxCell - 1));
-      const gz = Math.round((r() * 2 - 1) * (maxCell - 1));
-      if (Math.abs(gz) >= spawnGz || (gx === 0 && gz === 0) || !free(gx, gz)) continue;
+  // Tall sightline breakers + resupply (station + ammo + shield) out in the field.
+  for (const kind of ['fueltank', 'commtower', 'station', 'ammocrate', 'shieldcrate'] as PropKind[]) {
+    for (let t = 0; t < 24; t++) {
+      const gx = pick([-1, 1]) * (1 + Math.floor(r() * reach));
+      const gz = pick([-1, 1]) * (1 + Math.floor(r() * reach));
+      if (nearSpawn(gx, gz) || !free(gx, gz)) continue;
       placements.push({ module: kind, gx, gz, rot: 0 });
       claim(gx, gz);
       break;
