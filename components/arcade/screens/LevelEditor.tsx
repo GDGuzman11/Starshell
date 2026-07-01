@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, cellToWorld, footprintOf, roofHeightOf, type BridgeSpan, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
 import { THEME_LIST } from '../fps/kit/themes';
+import { makeBattlefieldLayout } from '../fps/kit/generate';
 import { deleteLayout, listLayouts, loadLayout, saveLayout, type SavedMeta } from '../fps/kit/storage';
 
 const CANVAS = 460;
@@ -291,6 +292,14 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     deleteLayout(id);
     setSaved(listLayouts());
   };
+  const doRandomize = () => {
+    const l = makeBattlefieldLayout(theme, size, (Math.random() * 1e9) | 0);
+    setPlacements(l.placements);
+    setBridges(l.bridges ?? []);
+    setSelected(null);
+    setBridgeFrom(null);
+    flash('BATTLEFIELD GENERATED');
+  };
   const doExport = () => {
     const json = JSON.stringify(currentLayout());
     try {
@@ -403,6 +412,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
           </div>
         )}
 
+        <button type="button" onClick={doRandomize} className="mt-1 min-h-[28px] rounded border border-[#ffd27a]/50 bg-[#ffd27a]/10 px-2 font-pixel text-[8px] uppercase text-[#ffd27a] hover:bg-[#ffd27a]/20">⚄ RANDOMIZE BATTLEFIELD</button>
         <div className="mt-1 flex gap-1">
           <button type="button" onClick={() => onPlay(currentLayout())} className="min-h-[30px] flex-1 rounded border border-[#aef5c8]/50 bg-[#aef5c8]/15 px-2 uppercase text-[#aef5c8] hover:bg-[#aef5c8]/25">PLAY ▸</button>
           <button type="button" onClick={doExport} className="min-h-[30px] rounded border border-[#7fdfff]/40 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">EXPORT</button>

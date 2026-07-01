@@ -14,7 +14,7 @@ import type { ModuleMeta } from './types';
 import { barricade, bridge, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
 import { barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, wreckProp } from './props';
-import { cellToWorld, MODULE_KINDS, ROTATIONS, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
+import { cellToWorld, CELL, footprintOf, LAYOUT_VERSION, MODULE_KINDS, roofHeightOf, ROTATIONS, type BridgeSpan, type BuildingKind, type LevelLayout, type ModuleKind, type Placement, type PropKind, type Rot } from './layout';
 import { placeModule } from './transform';
 
 type GP = { x: number; y: number; z: number }[];
@@ -268,4 +268,96 @@ export function makeSampleLayout(theme = 'wartorn'): LevelLayout {
     });
   });
   return { v: 1, theme, size: 200, seed: 12345, placements };
+}
+
+/**
+ * PURPOSEFUL battlefield randomizer → an editable LevelLayout (not random noise):
+ * a central command anchor, buildings scattered on an even grid with variety +
+ * spacing, bridges connecting aligned same-height building pairs, and cover placed
+ * STRATEGICALLY in the lanes between structures (dense down the central approach) so
+ * crossing open ground always has something to hide behind, plus a few tall sightline
+ * breakers. Loads into the editor so it can be hand-tweaked.
+ */
+export function makeBattlefieldLayout(theme: string, size: number, seed: number): LevelLayout {
+  const r = rng(seed);
+  const pick = <T,>(a: T[]): T => a[Math.floor(r() * a.length)];
+  const half = size / 2;
+  const maxCell = Math.max(2, Math.floor((half - 24) / CELL));
+  const spawnGz = Math.round((half * 0.86) / CELL); // spawn rows to keep clear
+  const placements: Placement[] = [];
+  const bridges: BridgeSpan[] = [];
+  const occupied = new Set<string>();
+  const key = (gx: number, gz: number) => `${gx},${gz}`;
+  const free = (gx: number, gz: number) => !occupied.has(key(gx, gz));
+  const claim = (gx: number, gz: number) => occupied.add(key(gx, gz));
+
+  // Even grid rows available for buildings (off the spawn edges).
+  const rows: number[] = [];
+  for (let g = -maxCell + 1; g <= maxCell - 1; g++) if (g % 2 === 0) rows.push(g);
+
+  // Central command anchor.
+  placements.push({ module: 'command', gx: 0, gz: 0, rot: 0 });
+  claim(0, 0);
+
+  // Buildings scattered with variety, ringed around the centre, clear of spawns.
+  const buildingPool: BuildingKind[] = ['apartment', 'watchtower', 'barracks', 'bunker', 'ruin', 'apartment', 'barracks'];
+  for (const gx of rows) {
+    for (const gz of rows) {
+      if (Math.abs(gz) >= spawnGz - 1) continue;
+      if (Math.hypot(gx, gz) < 2.2 || !free(gx, gz)) continue;
+      if (r() < 0.42) {
+        const kind = pick(buildingPool);
+        placements.push({ module: kind, gx, gz, rot: pick([0, 90, 180, 270]) as Rot, params: kind === 'apartment' ? { levels: 2 + Math.floor(r() * 3) } : undefined });
+        claim(gx, gz);
+      }
+    }
+  }
+
+  // Bridges: connect adjacent, aligned, same-roof-height building pairs (each pair once).
+  const buildings = placements.filter((p) => roofHeightOf(p.module, p.params?.levels ?? 3) != null);
+  for (const A of buildings) {
+    for (const B of buildings) {
+      const rhA = roofHeightOf(A.module, A.params?.levels ?? 3);
+      const rhB = roofHeightOf(B.module, B.params?.levels ?? 3);
+      if (rhA == null || rhB == null || rhA !== rhB) continue;
+      const sameRow = A.gz === B.gz && B.gx - A.gx === 2;
+      const sameCol = A.gx === B.gx && B.gz - A.gz === 2;
+      if (!sameRow && !sameCol) continue;
+      if (r() >= 0.55) continue;
+      const cxA = cellToWorld(A.gx);
+      const czA = cellToWorld(A.gz);
+      const fpA = footprintOf(A);
+      const cxB = cellToWorld(B.gx);
+      const czB = cellToWorld(B.gz);
+      const fpB = footprintOf(B);
+      if (sameRow) bridges.push({ x0: cxA + fpA.w / 2, z0: czA, x1: cxB - fpB.w / 2, z1: czA, y: rhA });
+      else bridges.push({ x0: cxA, z0: czA + fpA.d / 2, x1: cxA, z1: czB - fpB.d / 2, y: rhA });
+    }
+  }
+
+  // Strategic cover in the lanes between structures — dense down the central approach.
+  const coverPool: PropKind[] = ['barrier', 'sandbags', 'dragonteeth', 'rubble', 'container', 'wreck', 'crates', 'coverwall'];
+  for (let gx = -maxCell; gx <= maxCell; gx++) {
+    for (let gz = -maxCell + 1; gz <= maxCell - 1; gz++) {
+      if (Math.abs(gz) >= spawnGz || !free(gx, gz)) continue;
+      const p = gx === 0 ? 0.6 : gx % 2 !== 0 || gz % 2 !== 0 ? 0.32 : 0.12;
+      if (r() < p) {
+        placements.push({ module: pick(coverPool), gx, gz, rot: pick([0, 90]) as Rot });
+        claim(gx, gz);
+      }
+    }
+  }
+
+  // A few tall sightline breakers mid-field.
+  const breakers: PropKind[] = ['fueltank', 'commtower'];
+  for (let i = 0; i < 3; i++) {
+    const gx = pick(rows);
+    const gz = pick(rows.filter((g) => Math.abs(g) < spawnGz - 1));
+    if (gz != null && free(gx, gz)) {
+      placements.push({ module: pick(breakers), gx, gz, rot: 0 });
+      claim(gx, gz);
+    }
+  }
+
+  return { v: LAYOUT_VERSION, theme, size, seed, placements, bridges };
 }
