@@ -13,6 +13,7 @@ import { rng } from '../rand';
 import type { ModuleMeta } from './types';
 import { barricade, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
+import { barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, wreckProp } from './props';
 import { cellToWorld, MODULE_KINDS, ROTATIONS, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
 import { placeModule } from './transform';
 
@@ -173,6 +174,29 @@ function placeKind(kind: ModuleKind, cx: number, cz: number, rot: Rot, levels: n
       return placeModule((b, l, r, g) => ruinModule(b, l, r, g, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
     case 'bunker':
       return placeModule((b, l, r, g) => bunkerModule(b, l, r, g, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    // Props (cover + battlefield objects) — footprint-only, no interior nav.
+    case 'coverwall':
+      return placeModule((b) => coverWallProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'sandbags':
+      return placeModule((b) => sandbagProp(b, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'container':
+      return placeModule((b) => containerProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'barrier':
+      return placeModule((b) => barrierProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'dragonteeth':
+      return placeModule((b) => dragonTeethProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'fueltank':
+      return placeModule((b) => fuelTankProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'commtower':
+      return placeModule((b) => commTowerProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'guardpost':
+      return placeModule((b) => guardPostProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'crates':
+      return placeModule((b) => crateStackProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'rubble':
+      return placeModule((b) => rubbleProp(b, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'wreck':
+      return placeModule((b) => wreckProp(b, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
   }
 }
 

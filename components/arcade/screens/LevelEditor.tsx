@@ -10,7 +10,7 @@
  * the full 3D "preview" is the Play button. Mouse + touch via pointer events.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CELL, LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, cellToWorld, footprintOf, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
+import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, cellToWorld, footprintOf, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
 import { THEME_LIST } from '../fps/kit/themes';
 import { deleteLayout, listLayouts, loadLayout, saveLayout, type SavedMeta } from '../fps/kit/storage';
 
@@ -22,8 +22,19 @@ const MOD_COLOR: Record<ModuleKind, string> = {
   apartment: '#5ab0d0',
   ruin: '#a06a50',
   bunker: '#6a9a7a',
+  coverwall: '#8a8a8a',
+  sandbags: '#b0a060',
+  container: '#c07040',
+  barrier: '#9a9aa2',
+  dragonteeth: '#808890',
+  fueltank: '#c0a040',
+  commtower: '#90a0b0',
+  guardpost: '#7a8a6a',
+  crates: '#b08040',
+  rubble: '#8a7a6a',
+  wreck: '#70605a',
 };
-const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK' };
+const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK', coverwall: 'WALL', sandbags: 'SAND', container: 'CONT', barrier: 'BARR', dragonteeth: 'TEETH', fueltank: 'TANK', commtower: 'ANT', guardpost: 'POST', crates: 'CRAT', rubble: 'RUBL', wreck: 'WRCK' };
 
 export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -243,14 +254,22 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       <div className="flex w-full max-w-xs flex-col gap-2 font-pixel text-[8px]">
         <p className="text-[9px] tracking-[0.2em] text-[#aef5c8]">LEVEL EDITOR</p>
 
-        <p className="text-white/45">PIECES</p>
+        <p className="text-white/45">BUILDINGS</p>
         <div className="flex flex-wrap gap-1">
-          {MODULE_KINDS.map((k) => (
+          {BUILDING_KINDS.map((k) => (
             <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[26px] rounded border px-2 uppercase transition-colors ${tool === k ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
               {MOD_ABBR[k]}
             </button>
           ))}
-          <button type="button" onClick={() => setTool(null)} className={`min-h-[26px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+        </div>
+        <p className="text-white/45">COVER &amp; PROPS</p>
+        <div className="flex flex-wrap gap-1">
+          {PROP_KINDS.map((k) => (
+            <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors ${tool === k ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`} style={{ borderLeftColor: MOD_COLOR[k], borderLeftWidth: 3 }}>
+              {MOD_ABBR[k]}
+            </button>
+          ))}
+          <button type="button" onClick={() => setTool(null)} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
             SELECT
           </button>
         </div>
