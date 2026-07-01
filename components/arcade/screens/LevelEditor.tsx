@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, blankLayout, cellToWorld, footprintOf, roofHeightOf, type BridgeSpan, type CampaignSlot, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
 import { THEME_LIST } from '../fps/kit/themes';
 import { makeBattlefieldLayout } from '../fps/kit/generate';
-import { loadCampaign, saveCampaign } from '../fps/kit/storage';
+import { loadCampaign, saveCampaign, validateLayout } from '../fps/kit/storage';
 
 const CANVAS = 440;
 const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate'];
@@ -84,6 +84,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const dragRef = useRef(false);
   const cardDragRef = useRef<number | null>(null); // campaign card being dragged
   const loadingRef = useRef(false); // suppress the dirty flag while loading a slot
+  const fileRef = useRef<HTMLInputElement>(null); // hidden import file picker
 
   const flash = useCallback((m: string) => {
     setNote(m);
@@ -378,20 +379,16 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     setDirty(true); // a fresh battlefield is a change to be saved
     flash('BATTLEFIELD GENERATED');
   };
+  // COMPLETE export: EVERY level (authored or not), round-trippable via IMPORT and
+  // bake-able for players. Downloads one JSON file + copies it to the clipboard.
   const doExportCampaign = () => {
-    const authored = campaign.map((s, i) => ({ slot: s, level: i + 1 })).filter((e) => e.slot.authored);
-    // Code block for pasting into levels.ts (clipboard + console).
-    const block = `// Paste into CAMPAIGN in components/arcade/fps/kit/levels.ts (keyed by authored level #):\n${authored.map((e) => `  ${e.level}: ${JSON.stringify(e.slot.layout)},`).join('\n')}`;
+    const data = {
+      v: LAYOUT_VERSION,
+      generated: new Date().toISOString(),
+      levels: campaign.map((s, i) => ({ level: i + 1, authored: s.authored, layout: s.layout })),
+    };
+    const json = JSON.stringify(data, null, 2);
     try {
-      navigator.clipboard?.writeText(block);
-    } catch {
-      /* ignore */
-    }
-    // eslint-disable-next-line no-console
-    console.log(block);
-    // Download a JSON file so it can be dropped into the repo for review/baking.
-    try {
-      const json = JSON.stringify({ v: LAYOUT_VERSION, levels: authored.map((e) => ({ level: e.level, layout: e.slot.layout })) }, null, 2);
       const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
       const a = document.createElement('a');
       a.href = url;
@@ -401,7 +398,44 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     } catch {
       /* ignore */
     }
-    flash(`EXPORTED ${authored.length} LEVEL(S) → file + clipboard`);
+    try {
+      navigator.clipboard?.writeText(json);
+    } catch {
+      /* ignore */
+    }
+    flash(`EXPORTED ALL ${campaign.length} LEVELS → file`);
+  };
+
+  // IMPORT a campaign JSON file (from EXPORT) back into the editor — restore/continue
+  // a big campaign across sessions. Accepts the export shape or a raw slot array.
+  const doImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as unknown;
+        const raw = parsed as { levels?: unknown };
+        const arr: unknown[] = Array.isArray(raw?.levels) ? (raw.levels as unknown[]) : Array.isArray(parsed) ? (parsed as unknown[]) : [];
+        const slots: CampaignSlot[] = arr
+          .map((it): CampaignSlot | null => {
+            const o = it as { layout?: unknown; authored?: unknown };
+            const layout = validateLayout(o?.layout ?? it);
+            return layout ? { authored: o?.authored !== false, layout } : null;
+          })
+          .filter((s): s is CampaignSlot => s !== null);
+        if (!slots.length) return flash('NO LEVELS IN FILE');
+        commit(slots);
+        loadInto(slots[0].layout);
+        setActiveIdx(0);
+        setDirty(false);
+        flash(`IMPORTED ${slots.length} LEVELS`);
+      } catch {
+        flash('IMPORT FAILED — bad file');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const themeName = useMemo(() => THEME_LIST.find((t) => t.id === theme)?.name ?? theme, [theme]);
@@ -566,11 +600,13 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
             <button type="button" onClick={() => onPlay(currentLayout())} className="min-h-[30px] rounded border border-[#7fdfff]/50 bg-[#7fdfff]/10 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20">PLAY ▸</button>
           </div>
           <div className="flex gap-1">
-            <button type="button" onClick={doExportCampaign} className="min-h-[28px] flex-1 rounded border border-[#7fdfff]/40 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">EXPORT CAMPAIGN</button>
+            <button type="button" onClick={doExportCampaign} className="min-h-[28px] flex-1 rounded border border-[#7fdfff]/40 px-2 uppercase text-[#7fdfff] hover:bg-[#7fdfff]/15">⬇ EXPORT ALL</button>
+            <button type="button" onClick={() => fileRef.current?.click()} className="min-h-[28px] rounded border border-[#aef5c8]/40 px-2 uppercase text-[#aef5c8] hover:bg-[#aef5c8]/15">⬆ IMPORT</button>
             <button type="button" onClick={onBack} className="min-h-[28px] rounded border border-white/20 px-2 uppercase text-white/60 hover:bg-white/10">◂ BACK</button>
           </div>
+          <input ref={fileRef} type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
 
-          <p className="text-[7px] leading-relaxed text-white/35">Timeline squares = campaign levels (bosses auto-insert every 5th in-game). Click a square to edit it; SAVE writes it to your local campaign so your own playthrough uses it. Empty squares fall back to a procedural arena. EXPORT to ship to real players.{note && <span className="text-[#aef5c8]"> · {note}</span>}</p>
+          <p className="text-[7px] leading-relaxed text-white/35">Timeline squares = campaign levels (bosses auto-insert every 5th in-game). Click a square to edit it; SAVE writes it to your local campaign so your own playthrough uses it. EXPORT ALL downloads the WHOLE campaign as one JSON file (round-trippable via IMPORT, and bake-able for players). Empty squares fall back to a procedural arena.{note && <span className="text-[#aef5c8]"> · {note}</span>}</p>
         </div>
       </div>
     </div>
