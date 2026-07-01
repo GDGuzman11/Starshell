@@ -236,6 +236,8 @@ export function useFpsLoop(
     // Nav graph for enemy long-range pathing — built once per level alongside the
     // grid, threaded into updateEnemies. Absent → bots use the old direct steering.
     let nav: NavGraph | null = null;
+    // Resupply points (editor-placed stations + ammo/shield crates) for this level.
+    let resupply: { kind: string; x: number; z: number; cd: number; tick: number }[] = [];
     // Enemy actors: a 3D model Group for regular enemies, a billboard Sprite for
     // bosses. Indexed parallel to g.enemies.
     let sprites: THREE.Object3D[] = [];
@@ -312,6 +314,8 @@ export function useFpsLoop(
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
       nav = buildNavGraph(g.level, grid);
+      // Collect resupply points (stations + ammo/shield crates) placed in the level.
+      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate').map((m) => ({ kind: m.kind, x: m.cx, z: m.cz, cd: 0, tick: 0 }));
       // Build the composer once; afterwards just repoint the RenderPass at the
       // new scene (do NOT recreate the renderer or the whole composer).
       if (!composer) {
@@ -1223,6 +1227,45 @@ export function useFpsLoop(
               sfx.swap();
               clearMesh(d.mesh);
               drops.splice(i, 1);
+            }
+          }
+
+          // Resupply points (editor-placed). A STATION continuously tops up ammo +
+          // overshield while you stand under it; an AMMO / SHIELD crate auto-grabs a
+          // burst when you're beside it, then cools down before it can be used again.
+          if (resupply.length) {
+            const refillAmmo = (frac: number) => {
+              for (let gi = 0; gi < g.guns.length; gi++) {
+                const base = g.guns[gi].reserve;
+                g.reserves[gi] = Math.min(Math.ceil(base * 1.5), g.reserves[gi] + Math.ceil(base * frac));
+              }
+            };
+            for (const rp of resupply) {
+              if (p.y > 3) continue; // ground-level only
+              const near = Math.hypot(rp.x - p.x, rp.z - p.z);
+              if (rp.kind === 'station') {
+                if (near < 5) {
+                  rp.tick -= dt;
+                  if (rp.tick <= 0) {
+                    rp.tick = 0.4; // pulse every 0.4 s inside
+                    refillAmmo(0.1);
+                    p.armor = Math.min(p.maxArmor, p.armor + 10);
+                    snap.pickupAt = now;
+                    sfx.swap();
+                  }
+                } else {
+                  rp.tick = 0; // reset so re-entering pulses immediately
+                }
+              } else {
+                rp.cd -= dt;
+                if (near < 2.4 && rp.cd <= 0) {
+                  if (rp.kind === 'ammocrate') refillAmmo(0.5);
+                  else p.armor = Math.min(p.maxArmor, p.armor + 50);
+                  rp.cd = 8; // cooldown before it recharges
+                  snap.pickupAt = now;
+                  sfx.swap();
+                }
+              }
             }
           }
 

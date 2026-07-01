@@ -14,7 +14,7 @@ export const LAYOUT_VERSION = 1 as const;
 export const CELL = 16; // metres per placement cell
 
 export type BuildingKind = 'barracks' | 'watchtower' | 'command' | 'apartment' | 'ruin' | 'bunker';
-export type PropKind = 'coverwall' | 'sandbags' | 'container' | 'barrier' | 'dragonteeth' | 'fueltank' | 'commtower' | 'guardpost' | 'crates' | 'rubble' | 'wreck';
+export type PropKind = 'coverwall' | 'sandbags' | 'container' | 'barrier' | 'dragonteeth' | 'fueltank' | 'commtower' | 'guardpost' | 'crates' | 'rubble' | 'wreck' | 'station' | 'ammocrate' | 'shieldcrate';
 export type ModuleKind = BuildingKind | PropKind;
 export type Rot = 0 | 90 | 180 | 270;
 
@@ -60,7 +60,7 @@ export function blankLayout(theme = 'wartorn', size = 200): LevelLayout {
 }
 
 export const BUILDING_KINDS: BuildingKind[] = ['barracks', 'watchtower', 'command', 'apartment', 'ruin', 'bunker'];
-export const PROP_KINDS: PropKind[] = ['coverwall', 'sandbags', 'container', 'barrier', 'dragonteeth', 'fueltank', 'commtower', 'guardpost', 'crates', 'rubble', 'wreck'];
+export const PROP_KINDS: PropKind[] = ['coverwall', 'sandbags', 'container', 'barrier', 'dragonteeth', 'fueltank', 'commtower', 'guardpost', 'crates', 'rubble', 'wreck', 'station', 'ammocrate', 'shieldcrate'];
 export const MODULE_KINDS: ModuleKind[] = [...BUILDING_KINDS, ...PROP_KINDS];
 export const ROTATIONS: Rot[] = [0, 90, 180, 270];
 
@@ -83,6 +83,9 @@ export const FOOTPRINT: Record<ModuleKind, { w: number; d: number }> = {
   crates: { w: 3.2, d: 3 },
   rubble: { w: 4, d: 4 },
   wreck: { w: 4, d: 3 },
+  station: { w: 6, d: 6 },
+  ammocrate: { w: 2, d: 2 },
+  shieldcrate: { w: 2, d: 2 },
 };
 
 /** Roof/top-deck height of a building, or null for props / roofless buildings

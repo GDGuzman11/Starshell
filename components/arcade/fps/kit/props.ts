@@ -11,7 +11,7 @@
 import type { Box } from '../level3d';
 import { DIM, TEX } from './types';
 import type { ModuleMeta } from './types';
-import { barricade, crate, doorwayWall, railing, rubble, wall, wreck } from './atoms';
+import { barricade, column, crate, doorwayWall, floorSlab, railing, rubble, wall, wreck } from './atoms';
 
 /** Minimal prop meta — footprint + height, no walkable floors or connectors. */
 function propMeta(kind: string, cx: number, cz: number, sx: number, sz: number, height: number): ModuleMeta {
@@ -101,4 +101,34 @@ export function rubbleProp(boxes: Box[], cx: number, cz: number, rand: () => num
 export function wreckProp(boxes: Box[], cx: number, cz: number, rand: () => number): ModuleMeta {
   wreck(boxes, cx, cz, rand);
   return propMeta('wreck', cx, cz, 4, 3, 2);
+}
+
+// ── RESUPPLY (wired to the game — see useFpsLoop) ────────────────────────────
+
+/** A RESUPPLY STATION — a small tower-sized canopy you walk under: standing inside
+ *  it continuously replenishes BOTH ammo and shield (reusable). */
+export function stationProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
+  const W = 6;
+  const hw = W / 2;
+  const h = 5;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) column(boxes, cx + sx * (hw - 0.4), cz + sz * (hw - 0.4), h, 0, TEX.wall);
+  floorSlab(boxes, cx, cz, W, W, h); // canopy roof
+  boxes.push({ x: cx, y: 0.7, z: cz, sx: 1.6, sy: 1.4, sz: 1.6, tex: TEX.rail }); // glowing resupply core
+  return propMeta('station', cx, cz, W, W, h);
+}
+
+/** An AMMO crate — auto-grabbed when you're right beside it (bursts ammo, then
+ *  briefly cools down). Amber marker in-world. */
+export function ammoCrateProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
+  boxes.push({ x: cx, y: 0.9, z: cz, sx: 2, sy: 1.8, sz: 2, tex: TEX.panel });
+  boxes.push({ x: cx, y: 1.85, z: cz, sx: 2.15, sy: 0.18, sz: 2.15, tex: TEX.rail }); // lid band
+  return propMeta('ammocrate', cx, cz, 2, 2, 2);
+}
+
+/** A SHIELD crate — auto-grabbed when you're right beside it (bursts overshield,
+ *  then briefly cools down). Cyan marker in-world. */
+export function shieldCrateProp(boxes: Box[], cx: number, cz: number): ModuleMeta {
+  boxes.push({ x: cx, y: 0.9, z: cz, sx: 2, sy: 1.8, sz: 2, tex: TEX.panel });
+  boxes.push({ x: cx, y: 1.85, z: cz, sx: 2.15, sy: 0.18, sz: 2.15, tex: TEX.rail });
+  return propMeta('shieldcrate', cx, cz, 2, 2, 2);
 }

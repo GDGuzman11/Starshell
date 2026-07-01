@@ -13,7 +13,7 @@ import { rng } from '../rand';
 import type { ModuleMeta } from './types';
 import { barricade, bridge, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
-import { barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, wreckProp } from './props';
+import { ammoCrateProp, barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, shieldCrateProp, stationProp, wreckProp } from './props';
 import { cellToWorld, CELL, footprintOf, LAYOUT_VERSION, MODULE_KINDS, roofHeightOf, ROTATIONS, type BridgeSpan, type BuildingKind, type LevelLayout, type ModuleKind, type Placement, type PropKind, type Rot } from './layout';
 import { placeModule } from './transform';
 
@@ -197,6 +197,13 @@ function placeKind(kind: ModuleKind, cx: number, cz: number, rot: Rot, levels: n
       return placeModule((b) => rubbleProp(b, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
     case 'wreck':
       return placeModule((b) => wreckProp(b, 0, 0, rand), rot, cx, cz, boxes, ladders, ramps, gps);
+    // Resupply (wired to the game).
+    case 'station':
+      return placeModule((b) => stationProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'ammocrate':
+      return placeModule((b) => ammoCrateProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
+    case 'shieldcrate':
+      return placeModule((b) => shieldCrateProp(b, 0, 0), rot, cx, cz, boxes, ladders, ramps, gps);
   }
 }
 
@@ -356,6 +363,18 @@ export function makeBattlefieldLayout(theme: string, size: number, seed: number)
     if (gz != null && free(gx, gz)) {
       placements.push({ module: pick(breakers), gx, gz, rot: 0 });
       claim(gx, gz);
+    }
+  }
+
+  // Resupply: a station + an ammo + a shield crate out in the field (never on spawns).
+  for (const kind of ['station', 'ammocrate', 'shieldcrate'] as PropKind[]) {
+    for (let t = 0; t < 16; t++) {
+      const gx = Math.round((r() * 2 - 1) * (maxCell - 1));
+      const gz = Math.round((r() * 2 - 1) * (maxCell - 1));
+      if (Math.abs(gz) >= spawnGz || (gx === 0 && gz === 0) || !free(gx, gz)) continue;
+      placements.push({ module: kind, gx, gz, rot: 0 });
+      claim(gx, gz);
+      break;
     }
   }
 

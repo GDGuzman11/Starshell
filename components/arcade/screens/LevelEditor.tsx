@@ -18,6 +18,7 @@ import { makeBattlefieldLayout } from '../fps/kit/generate';
 import { loadCampaign, saveCampaign } from '../fps/kit/storage';
 
 const CANVAS = 440;
+const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate'];
 const MOD_COLOR: Record<ModuleKind, string> = {
   barracks: '#5aa06a',
   watchtower: '#7a7ad0',
@@ -36,8 +37,11 @@ const MOD_COLOR: Record<ModuleKind, string> = {
   crates: '#b08040',
   rubble: '#8a7a6a',
   wreck: '#70605a',
+  station: '#7affa0',
+  ammocrate: '#ffcf5a',
+  shieldcrate: '#5ad0ff',
 };
-const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK', coverwall: 'WALL', sandbags: 'SAND', container: 'CONT', barrier: 'BARR', dragonteeth: 'TEETH', fueltank: 'TANK', commtower: 'ANT', guardpost: 'POST', crates: 'CRAT', rubble: 'RUBL', wreck: 'WRCK' };
+const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR', command: 'CMD', apartment: 'APT', ruin: 'RUIN', bunker: 'BNK', coverwall: 'WALL', sandbags: 'SAND', container: 'CONT', barrier: 'BARR', dragonteeth: 'TEETH', fueltank: 'TANK', commtower: 'ANT', guardpost: 'POST', crates: 'CRAT', rubble: 'RUBL', wreck: 'WRCK', station: 'STN', ammocrate: 'AMMO', shieldcrate: 'SHLD' };
 
 export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -406,11 +410,21 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
           </div>
           <p className="text-white/45">COVER &amp; PROPS</p>
           <div className="flex flex-wrap gap-1">
-            {PROP_KINDS.map((k) => (
+            {PROP_KINDS.filter((k) => !RESUPPLY_KINDS.includes(k)).map((k) => (
               <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className={`min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors ${tool === k ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`} style={{ borderLeftColor: MOD_COLOR[k], borderLeftWidth: 3 }}>
                 {MOD_ABBR[k]}
               </button>
             ))}
+          </div>
+          <p className="text-white/45">RESUPPLY <span className="text-white/30">(wired to the game)</span></p>
+          <div className="flex flex-wrap gap-1">
+            {RESUPPLY_KINDS.map((k) => (
+              <button key={k} type="button" onClick={() => { setTool(k); setSelected(null); }} className="min-h-[24px] rounded border px-2 text-[7px] uppercase transition-colors" style={{ borderColor: tool === k ? MOD_COLOR[k] : 'rgba(255,255,255,0.15)', background: tool === k ? MOD_COLOR[k] + '22' : 'rgba(255,255,255,0.04)', color: MOD_COLOR[k] }}>
+                {k === 'station' ? '⊕ STATION' : k === 'ammocrate' ? '▣ AMMO' : '◆ SHIELD'}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1">
             <button type="button" onClick={() => { setTool('bridge'); setSelected(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === 'bridge' ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
               BRIDGE
             </button>
