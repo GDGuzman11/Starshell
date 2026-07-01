@@ -189,21 +189,32 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
   // Resupply markers — a floating colour-coded ring above each station / crate so
   // the player can read what it gives from a distance (green = station both, amber
   // = ammo, cyan = shield). Purely visual; the replenish logic lives in useFpsLoop.
-  const RESUPPLY_MARK: Record<string, { color: number; y: number }> = {
-    station: { color: 0x7affa0, y: 5.6 },
-    ammocrate: { color: 0xffcf5a, y: 2.7 },
-    shieldcrate: { color: 0x5ad0ff, y: 2.7 },
+  const RESUPPLY_MARK: Record<string, { color: number; y: number; pickup: boolean }> = {
+    station: { color: 0xe0ffe6, y: 5.6, pickup: false },
+    ammocrate: { color: 0xffcf5a, y: 1.4, pickup: true },
+    shieldcrate: { color: 0x5ad0ff, y: 1.4, pickup: true },
+    healthcrate: { color: 0xff5d8a, y: 1.4, pickup: true },
   };
   for (const m of level.modules ?? []) {
     const mk = RESUPPLY_MARK[m.kind];
     if (!mk) continue;
-    const mat = new THREE.MeshBasicMaterial({ color: mk.color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-    const geo = new THREE.TorusGeometry(0.7, 0.13, 8, 20);
-    const ring = new THREE.Mesh(geo, mat);
-    ring.position.set(m.cx, mk.y, m.cz);
+    const mat = new THREE.MeshBasicMaterial({ color: mk.color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    const ringGeo = new THREE.TorusGeometry(0.7, 0.13, 8, 20);
+    const ring = new THREE.Mesh(ringGeo, mat);
+    ring.position.set(m.cx, mk.y + 0.3, m.cz);
     ring.rotation.x = Math.PI / 2;
     scene.add(ring);
-    disposables.push(geo, mat);
+    disposables.push(ringGeo);
+    // Floating pickups get a small glowing cube (non-solid) so they read as a grab.
+    if (mk.pickup) {
+      const cubeGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+      const cube = new THREE.Mesh(cubeGeo, mat);
+      cube.position.set(m.cx, mk.y, m.cz);
+      cube.rotation.set(0.6, 0.7, 0);
+      scene.add(cube);
+      disposables.push(cubeGeo);
+    }
+    disposables.push(mat);
   }
 
   // Ziplines — glowing cyan cables + a marker at the grab end.
