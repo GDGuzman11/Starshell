@@ -86,8 +86,7 @@ export function FpsGame() {
   const fsActive = fullscreen || pseudoFs;
   const [showSettings, setShowSettings] = useState(false);
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1 });
-  const [dev, setDev] = useState(false); // dev level-warp tools (npm run dev, or ?dev=1 on a deploy)
-  const [devLevel, setDevLevel] = useState(5);
+  const [dev, setDev] = useState(false); // dev tools (npm run dev only)
   const [god, setGodState] = useState(false); // dev god-mode (invincible)
   const godRef = useRef(false);
   const setGod = useCallback((v: boolean) => {
@@ -320,24 +319,6 @@ export function FpsGame() {
       startLevel(1, lo, 100, ups, buildFromLayout(layout));
     },
     [lastLoadout, startLevel],
-  );
-
-  // DEV: jump straight into any level (default loadout) to inspect it — bosses
-  // especially — without playing through. Gated to dev / ?dev=1.
-  const devWarp = useCallback(
-    (level: number) => {
-      const lo = lastLoadout;
-      const ups: Record<string, Upg> = {};
-      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
-      huntMemRef.current = makeHuntMemory();
-      gauntletRef.current = isGauntletLevel(level) ? 1 : 0;
-      sandboxRef.current = false;
-      setRun({ level, gold: 0, maxHp: 100, upgrades: ups });
-      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
-      if (isTouch && !fsActive) toggleFullscreen();
-      startLevel(level, lo, 100, ups);
-    },
-    [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
   );
 
   // DEV: warp straight into a specific BOSS + its bespoke arena (to test each boss
@@ -573,31 +554,6 @@ export function FpsGame() {
                       {k}
                     </button>
                   ))}
-                </div>
-                <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO LEVEL</p>
-                <div className="flex flex-wrap justify-center gap-1.5">
-                  {([[5, 'XENO'], [10, 'WARLORD'], [15, 'KRAKEN'], [20, 'GAUNTLET']] as [number, string][]).map(([lv, name]) => (
-                    <button
-                      key={lv}
-                      type="button"
-                      onClick={() => devWarp(lv)}
-                      className="min-h-[32px] rounded border border-[#ffd27a]/40 bg-black/30 px-2 font-pixel text-[7px] text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/15"
-                    >
-                      {lv} {name}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setDevLevel((n) => Math.max(1, n - 1))} className="h-7 w-7 rounded border border-white/20 font-pixel text-[11px] text-white/70 hover:bg-white/10">
-                    −
-                  </button>
-                  <span className="w-14 text-center font-pixel text-[8px] text-white/80">LVL {devLevel}</span>
-                  <button type="button" onClick={() => setDevLevel((n) => Math.min(20, n + 1))} className="h-7 w-7 rounded border border-white/20 font-pixel text-[11px] text-white/70 hover:bg-white/10">
-                    +
-                  </button>
-                  <button type="button" onClick={() => devWarp(devLevel)} className="min-h-[32px] rounded border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-3 font-pixel text-[8px] text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
-                    WARP ▸
-                  </button>
                 </div>
                 <div className="flex gap-2">
                   <button
