@@ -180,10 +180,31 @@ export function useFpsLoop(
     camera.rotation.order = 'YXZ';
     const isTouch = 'ontouchstart' in window;
     const ballGeo = new THREE.SphereGeometry(1, 10, 8);
-    // Shared drop visuals (a small glowing cube — amber = ammo, cyan = shield).
-    const dropGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
-    const dropAmmoMat = new THREE.MeshBasicMaterial({ color: 0xffcf5a });
-    const dropShieldMat = new THREE.MeshBasicMaterial({ color: 0x5ad0ff });
+    // Pickup SYMBOLS (emissive so Bloom catches them): AMMO = 4 white bullets bunched,
+    // SHIELD = a gold sphere, HEALTH = a green cross. Reused for placed (relocating)
+    // pickups and enemy-death drops so all drops read the same.
+    const pkMat = {
+      ammo: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.85, roughness: 0.4, metalness: 0.3 }),
+      shield: new THREE.MeshStandardMaterial({ color: 0xffd24a, emissive: 0xffc400, emissiveIntensity: 1.0, roughness: 0.3, metalness: 0.5 }),
+      health: new THREE.MeshStandardMaterial({ color: 0x4dff7a, emissive: 0x25ff5c, emissiveIntensity: 1.1, roughness: 0.4, metalness: 0.1 }),
+    };
+    const mkPickup = (kind: 'ammo' | 'shield' | 'health'): THREE.Group => {
+      const g = new THREE.Group();
+      if (kind === 'health') {
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.32, 0.32), pkMat.health)); // green cross
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.95, 0.32), pkMat.health));
+      } else if (kind === 'ammo') {
+        for (const [ox, oy] of [[-0.16, 0.17], [0.16, 0.17], [-0.16, -0.17], [0.16, -0.17]]) {
+          const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.36, 4, 8), pkMat.ammo); // bullet
+          b.position.set(ox, oy, 0);
+          g.add(b);
+        }
+      } else {
+        g.add(new THREE.Mesh(new THREE.SphereGeometry(0.46, 16, 12), pkMat.shield)); // gold sphere
+      }
+      return g;
+    };
+    const disposeObj = (o: THREE.Object3D) => o.traverse((c) => (c as THREE.Mesh).geometry?.dispose?.());
 
     // Render tier — drives material cost (emissive walls) + post-FX weight.
     // Phones / low-memory devices get the cheaper Lambert walls + bloom-only.
@@ -259,7 +280,10 @@ export function useFpsLoop(
     const flashes: Flash[] = [];
     const zones: Zone[] = [];
     // Player pickups: enemies drop these; auto-collected on proximity.
-    const drops: { x: number; y: number; z: number; kind: 'ammo' | 'shield'; mesh: THREE.Mesh; born: number }[] = [];
+    const drops: { x: number; y: number; z: number; kind: 'ammo' | 'shield'; mesh: THREE.Object3D; born: number }[] = [];
+    // Placed pickups (from the arena's ammo/shield/health crates): dynamic symbols that
+    // RELOCATE to a new open spot after being collected.
+    const pickups: { kind: 'ammo' | 'shield' | 'health'; x: number; z: number; mesh: THREE.Group; respawnT: number; born: number }[] = [];
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
@@ -270,6 +294,12 @@ export function useFpsLoop(
     const clearMesh = (m: THREE.Mesh) => {
       world?.scene.remove(m);
       (m.material as THREE.Material).dispose();
+    };
+    // Remove a Group (pickups/drops) — dispose its per-instance geometries; the shared
+    // pkMat materials live for the whole mount.
+    const clearGroup = (o: THREE.Object3D) => {
+      world?.scene.remove(o);
+      disposeObj(o);
     };
     const disposeExtras = () => {
       for (const s of sprites) {
@@ -297,12 +327,14 @@ export function useFpsLoop(
       for (const s of smokes) clearMesh(s.mesh);
       for (const f of flashes) clearMesh(f.mesh);
       for (const z of zones) clearMesh(z.mesh);
-      for (const d of drops) clearMesh(d.mesh);
+      for (const d of drops) clearGroup(d.mesh);
+      for (const pk of pickups) clearGroup(pk.mesh);
       grenades.length = 0;
       smokes.length = 0;
       flashes.length = 0;
       zones.length = 0;
       drops.length = 0;
+      pickups.length = 0;
       projectiles.clear();
       telegraphs.clear();
       for (const hz of bossHazards) clearMesh(hz.mesh);
@@ -317,8 +349,17 @@ export function useFpsLoop(
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
       nav = buildNavGraph(g.level, grid);
-      // Collect resupply points (stations + ammo/shield/health crates) placed in the level.
-      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station' || m.kind === 'ammocrate' || m.kind === 'shieldcrate' || m.kind === 'healthcrate').map((m) => ({ kind: m.kind, x: m.cx, y: 0, z: m.cz, cd: 0, tick: 0 }));
+      // Resupply STATIONS (fixed structures; continuous top-up).
+      resupply = (g.level.modules ?? []).filter((m) => m.kind === 'station').map((m) => ({ kind: m.kind, x: m.cx, y: 0, z: m.cz, cd: 0, tick: 0 }));
+      // Placed ammo/shield/health crates → dynamic relocating pickup symbols.
+      for (const m of g.level.modules ?? []) {
+        const kind = m.kind === 'ammocrate' ? 'ammo' : m.kind === 'shieldcrate' ? 'shield' : m.kind === 'healthcrate' ? 'health' : null;
+        if (!kind) continue;
+        const mesh = mkPickup(kind);
+        mesh.position.set(m.cx, 1.0, m.cz);
+        world!.scene.add(mesh);
+        pickups.push({ kind, x: m.cx, z: m.cz, mesh, respawnT: 0, born: performance.now() + Math.random() * 1200 });
+      }
       // Partition enemies by squad ONCE per level (membership is stable) so the frame
       // loop reuses these arrays instead of re-filtering g.enemies every frame.
       squadGroups = g.squads.map((_, s) => g.enemies.filter((e) => e.squadId === s));
@@ -562,7 +603,7 @@ export function useFpsLoop(
           if (e.boss || e.destructible) return;
           if (Math.random() > 0.34) return;
           const kind: 'ammo' | 'shield' = Math.random() < 0.55 ? 'ammo' : 'shield';
-          const mesh = new THREE.Mesh(dropGeo, kind === 'ammo' ? dropAmmoMat : dropShieldMat);
+          const mesh = mkPickup(kind);
           mesh.position.set(e.x, e.y + 0.6, e.z);
           world?.scene.add(mesh);
           drops.push({ x: e.x, y: e.y, z: e.z, kind, mesh, born: now });
@@ -1233,49 +1274,70 @@ export function useFpsLoop(
               }
               snap.pickupAt = now;
               sfx.swap();
-              clearMesh(d.mesh);
+              clearGroup(d.mesh);
               drops.splice(i, 1);
             }
           }
 
-          // Resupply points (editor-placed). A STATION continuously tops up ammo +
-          // overshield while you stand under it; an AMMO / SHIELD crate auto-grabs a
-          // burst when you're beside it, then cools down before it can be used again.
-          if (resupply.length) {
-            const refillAmmo = (frac: number) => {
-              for (let gi = 0; gi < g.guns.length; gi++) {
-                const base = g.guns[gi].reserve;
-                g.reserves[gi] = Math.min(Math.ceil(base * 1.5), g.reserves[gi] + Math.ceil(base * frac));
+          // Resupply. A refill helper shared by stations + pickups.
+          const refillAmmo = (frac: number) => {
+            for (let gi = 0; gi < g.guns.length; gi++) {
+              const base = g.guns[gi].reserve;
+              g.reserves[gi] = Math.min(Math.ceil(base * 1.5), g.reserves[gi] + Math.ceil(base * frac));
+            }
+          };
+          // STATIONS: stand under one to continuously top up ammo + overshield.
+          for (const rp of resupply) {
+            if (Math.abs(p.y - rp.y) > 3) continue;
+            if (Math.hypot(rp.x - p.x, rp.z - p.z) < 5) {
+              rp.tick -= dt;
+              if (rp.tick <= 0) {
+                rp.tick = 0.4;
+                refillAmmo(0.1);
+                p.armor = Math.min(p.maxArmor, p.armor + 10);
+                snap.pickupAt = now;
+                sfx.swap();
               }
+            } else {
+              rp.tick = 0;
+            }
+          }
+          // PICKUPS: walk over one to grab it; it then DISAPPEARS and regenerates at a
+          // new open spot elsewhere on the map (never sits recharging in place).
+          if (pickups.length) {
+            const randomOpenXZ = (): { x: number; z: number } => {
+              const rh = g.level.size / 2 - 10;
+              for (let t = 0; t < 40; t++) {
+                const x = (Math.random() * 2 - 1) * rh;
+                const z = (Math.random() * 2 - 1) * rh;
+                if (grid && grid.queryAABB(x - 0.6, z - 0.6, x + 0.6, z + 0.6).some((b) => !b.dead && b.y - b.sy / 2 < 1.6)) continue;
+                if (Math.hypot(x - p.x, z - p.z) < 12) continue;
+                return { x, z };
+              }
+              return { x: 0, z: 0 };
             };
-            for (const rp of resupply) {
-              if (Math.abs(p.y - rp.y) > 3) continue; // must be near the pickup's height
-              const near = Math.hypot(rp.x - p.x, rp.z - p.z);
-              if (rp.kind === 'station') {
-                if (near < 5) {
-                  rp.tick -= dt;
-                  if (rp.tick <= 0) {
-                    rp.tick = 0.4; // pulse every 0.4 s inside
-                    refillAmmo(0.1);
-                    p.armor = Math.min(p.maxArmor, p.armor + 10);
-                    snap.pickupAt = now;
-                    sfx.swap();
-                  }
-                } else {
-                  rp.tick = 0; // reset so re-entering pulses immediately
+            for (const pk of pickups) {
+              if (pk.respawnT > 0) {
+                pk.respawnT -= dt;
+                if (pk.respawnT <= 0) {
+                  const np = randomOpenXZ();
+                  pk.x = np.x;
+                  pk.z = np.z;
+                  pk.mesh.position.set(pk.x, 1.0, pk.z);
+                  pk.mesh.visible = true;
                 }
-              } else {
-                // Floating pickup — walk over it (non-solid). Grants a burst, then
-                // recharges after a short cooldown.
-                rp.cd -= dt;
-                if (near < 2.4 && rp.cd <= 0) {
-                  if (rp.kind === 'ammocrate') refillAmmo(0.5);
-                  else if (rp.kind === 'shieldcrate') p.armor = Math.min(p.maxArmor, p.armor + 50);
-                  else p.health = Math.min(g.maxHp, p.health + 50); // healthcrate
-                  rp.cd = 8; // cooldown before it recharges
-                  snap.pickupAt = now;
-                  sfx.swap();
-                }
+                continue;
+              }
+              pk.mesh.rotation.y += dt * 2;
+              pk.mesh.position.y = 1.0 + Math.sin((now - pk.born) / 300) * 0.13;
+              if (p.y < 3 && Math.hypot(pk.x - p.x, pk.z - p.z) < 2.2) {
+                if (pk.kind === 'ammo') refillAmmo(0.5);
+                else if (pk.kind === 'shield') p.armor = Math.min(p.maxArmor, p.armor + 50);
+                else p.health = Math.min(g.maxHp, p.health + 50);
+                snap.pickupAt = now;
+                sfx.swap();
+                pk.mesh.visible = false;
+                pk.respawnT = 1.6; // disappear, then regenerate elsewhere
               }
             }
           }
@@ -1581,13 +1643,13 @@ export function useFpsLoop(
           snap.shotsFired = g.shotsFired;
           snap.shotsHit = g.shotsHit;
           snap.dmgDealt = g.dmgDealt;
-          // Ammo / shield / health pickups on the radar (colour-coded).
-          for (const rp of resupply) {
-            const kind = rp.kind === 'ammocrate' ? 'ammo' : rp.kind === 'shieldcrate' ? 'shield' : rp.kind === 'healthcrate' ? 'health' : null;
-            if (!kind) continue;
-            const dx = rp.x - p.x;
-            const dz = rp.z - p.z;
-            snap.radar.push({ x: dx * cosY - dz * sinY, z: -dx * sinY - dz * cosY, boss: false, kind });
+          // Ammo / shield / health pickups on the radar (colour-coded dots). Hidden
+          // while respawning.
+          for (const pk of pickups) {
+            if (!pk.mesh.visible) continue;
+            const dx = pk.x - p.x;
+            const dz = pk.z - p.z;
+            snap.radar.push({ x: dx * cosY - dz * sinY, z: -dx * sinY - dz * cosY, boss: false, kind: pk.kind });
           }
           onSnapshot({ ...snap });
         }
