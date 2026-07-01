@@ -90,7 +90,7 @@ export function hurtEnemy(e: Enemy, amount: number): void {
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
-export type BossKind = 'xeno' | 'warrior' | 'octopus';
+export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon';
 export interface BossDef {
   name: string;
   health: number;
@@ -110,6 +110,9 @@ export const BOSSES: Record<BossKind, BossDef> = {
   xeno: { name: 'XENOMORPH', health: 3500, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 22, meleeRate: 0.7, rangeDmg: 14, rangeRate: 0.6, acc: 0.85, color: 0x9cff6a },
   warrior: { name: 'WARLORD', health: 4000, scale: 4, radius: 1.6, meleeRange: 4, meleeDmg: 24, meleeRate: 0.6, rangeDmg: 11, rangeRate: 0.16, acc: 0.9, color: 0xff9a3a },
   octopus: { name: 'KRAKEN', health: 4500, scale: 4.3, radius: 1.9, meleeRange: 5, meleeDmg: 20, meleeRate: 0.5, rangeDmg: 16, rangeRate: 0.4, acc: 0.88, color: 0xc08bff },
+  // ARCHON — Ancient AI: a hovering geometric construct. Precise, high-accuracy
+  // ranged fire; blink-teleports between vantage points. Lower melee (it never brawls).
+  archon: { name: 'ARCHON', health: 4200, scale: 3.4, radius: 1.5, meleeRange: 3, meleeDmg: 16, meleeRate: 0.7, rangeDmg: 15, rangeRate: 0.42, acc: 0.95, color: 0x49a6ff },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -565,6 +568,12 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['crawler', 'crawler', 'crawler', 'crawler', 'sentinel'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
     (['spore', 'spore', 'crawler'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.65)));
     (['spore', 'sentinel', 'crawler'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.35)));
+  } else if (kind === 'archon') {
+    // ARCHON RETINUE — geometric drones: Facets orbit + snipe, Constructors hold the
+    // line (tanky), Sentries lock down as turrets. Reinforcement wings blink in.
+    (['facet', 'facet', 'facet', 'facet', 'constructor', 'constructor', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['facet', 'facet', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.65)));
+    (['facet', 'constructor', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.35)));
   }
   return out;
 }
@@ -899,6 +908,21 @@ export function updateEnemies(
             const my = e.y + 0.9;
             bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 27, dmg: md.ranged, color: 0xc08bff, splash: 0 });
           }
+        } else if (e.minion === 'facet' || e.minion === 'constructor' || e.minion === 'sentry') {
+          // ARCHON drones — precise blue bolts. Facet orbits fast; Constructor holds
+          // mid-range (tanky); Sentry is a near-stationary turret.
+          if (e.minion === 'sentry') {
+            const [rx, rz] = wallRepulse(e, lvl, grid);
+            if (rx || rz) moveEnemy(e, lvl, rx, rz, P.speed * 0.4, dt, R, grid);
+          } else if (dist < 11) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
+          else if (dist > 24) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
+          else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
+          if (sees[i] && e.fireCd <= 0 && dist < 30) {
+            e.fireCd = e.minion === 'facet' ? 1.1 : e.minion === 'sentry' ? 1.3 : 1.6;
+            const my = e.y + 0.9;
+            const tt = dist / 38;
+            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x + pvx * tt, player.y + 1 - my, tgt.z - e.z + pvz * tt], speed: 38, dmg: md.ranged, color: 0x49a6ff, splash: 0 });
+          }
         } else {
           // STALKER: circle wide, then lunge in for a strike (e.track = lunge timer).
           e.track += dt;
@@ -1028,6 +1052,25 @@ export function updateEnemies(
               }
             }
           }
+          // ARCHON BLINK: teleport to a fresh vantage at standoff on a new bearing,
+          // then leave its core exposed briefly (weak-point window) — punish the
+          // reposition. Its geometric intelligence never lets you settle an angle.
+          if (e.boss === 'archon' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist > 12 && dist < 50) {
+              brain.abilityCd = ((desp ? 3 : 5.5) + Math.random() * 2) * eAgg;
+              const ang = Math.atan2(e.z - player.z, e.x - player.x) + (Math.random() < 0.5 ? 1 : -1) * (0.9 + Math.random() * 0.6);
+              const rr = 15 + Math.random() * 6;
+              const lim = lvl.size / 2 - 4;
+              const nx = Math.max(-lim, Math.min(lim, player.x + Math.cos(ang) * rr));
+              const nz = Math.max(-lim, Math.min(lim, player.z + Math.sin(ang) * rr));
+              if (!blocked(lvl, nx, nz, bd.radius, grid)) {
+                e.x = nx;
+                e.z = nz;
+                e.weakUntil = now + 1500;
+              }
+            }
+          }
           if (dist < bd.meleeRange) {
             if (e.fireCd <= 0) {
               e.fireCd = bd.meleeRate;
@@ -1044,6 +1087,14 @@ export function updateEnemies(
               const lx = player.x + pvx * tt * 0.7;
               const lz = player.z + pvz * tt * 0.7;
               bossShots.push({ kind: 'acid', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, player.y + 1.0 - muzzleY, lz - e.z], speed: 26, dmg: Math.round(bd.rangeDmg * 1.4), color: 0x9cff6a, splash: 2.6 });
+            } else if (e.boss === 'archon') {
+              // PRECISION BOLT: a fast, hard-leading energy bolt (geometric aim).
+              e.fireCd = bd.rangeRate;
+              const my = e.y + bd.scale * 0.5;
+              const tt = dist / 40;
+              const lx = player.x + pvx * tt;
+              const lz = player.z + pvz * tt;
+              bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [lx - e.x, player.y + 1 - my, lz - e.z], speed: 40, dmg: bd.rangeDmg, color: 0x49a6ff, splash: 0 });
             } else {
               e.fireCd = bd.rangeRate;
               tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
