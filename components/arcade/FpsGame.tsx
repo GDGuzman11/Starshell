@@ -10,15 +10,17 @@ import { OrientationGate } from './mobile/OrientationGate';
 import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
-import { makeArena3D } from './fps/level3d';
+import { makeArena3D, type Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
+import { LevelEditor } from './screens/LevelEditor';
+import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { THEME_LIST } from './fps/kit/themes';
 
-type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize';
+type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const LEVELS = 20;
@@ -55,6 +57,7 @@ export function FpsGame() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<FpsGameState | null>(null);
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
+  const sandboxRef = useRef(false); // editor "Play" sandbox → win/lose returns to the editor
   // Squad learning, persisted across a run's levels (reset on a new campaign) so
   // later fights hunt the player smarter. The SAME object feeds every level's squad.
   const huntMemRef = useRef<HuntMemory | null>(null);
@@ -224,13 +227,13 @@ export function FpsGame() {
   }, [pseudoFs]);
 
   const startLevel = useCallback(
-    (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>) => {
+    (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>, presetLevel?: Level3D) => {
       resolvedRef.current = false;
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const isBoss = level % 5 === 0;
       const mapCount = isBoss ? 5 : mapCountFor(squads);
-      const lvl = layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed);
-      if (devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override
+      const lvl = presetLevel ?? (layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : makeArena3D(mapCount, seed));
+      if (!presetLevel && devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override (preset carries its own)
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
@@ -285,12 +288,30 @@ export function FpsGame() {
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory(); // fresh learning each new campaign
       gauntletRef.current = 0;
+      sandboxRef.current = false;
       setRecovery(null);
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
     },
     [startLevel],
+  );
+
+  // DEV editor "Play": drop straight into a hand-authored layout as a one-off
+  // sandbox (default loadout). Win/lose returns to the editor, not the campaign.
+  const playLayout = useCallback(
+    (layout: LevelLayout) => {
+      const lo = lastLoadout;
+      const ups: Record<string, Upg> = {};
+      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      huntMemRef.current = makeHuntMemory();
+      gauntletRef.current = 0;
+      sandboxRef.current = true;
+      setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
+      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      startLevel(1, lo, 100, ups, buildFromLayout(layout));
+    },
+    [lastLoadout, startLevel],
   );
 
   // DEV: jump straight into any level (default loadout) to inspect it — bosses
@@ -302,6 +323,7 @@ export function FpsGame() {
       for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
       huntMemRef.current = makeHuntMemory();
       gauntletRef.current = level === 20 ? 1 : 0;
+      sandboxRef.current = false;
       setRun({ level, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       if (isTouch && !fsActive) toggleFullscreen();
@@ -324,6 +346,11 @@ export function FpsGame() {
   useEffect(() => {
     if (mode !== 'play' || !snap || snap.status === 'playing' || resolvedRef.current) return;
     resolvedRef.current = true;
+    if (sandboxRef.current) {
+      // Editor sandbox: win or lose, just bounce back to the editor.
+      setMode('editor');
+      return;
+    }
     setRunStats((rs) => ({
       ...rs,
       kills: rs.kills + snap.kills,
@@ -356,7 +383,7 @@ export function FpsGame() {
   useEffect(() => {
     if (mode !== 'play') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMode('menu');
+      if (e.key === 'Escape') setMode(sandboxRef.current ? 'editor' : 'menu');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -507,6 +534,9 @@ export function FpsGame() {
 
             {dev && (
               <div className="mt-4 flex flex-col items-center gap-2 rounded-md border border-[#ffd27a]/30 bg-[#ffd27a]/[0.05] px-3 py-2">
+                <button type="button" onClick={() => setMode('editor')} className="min-h-[30px] rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-4 font-pixel text-[8px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
+                  ▸ Level Editor
+                </button>
                 <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO LEVEL</p>
                 <div className="flex flex-wrap justify-center gap-1.5">
                   {([[5, 'XENO'], [10, 'WARLORD'], [15, 'KRAKEN'], [20, 'GAUNTLET']] as [number, string][]).map(([lv, name]) => (
@@ -608,6 +638,8 @@ export function FpsGame() {
             onBack={() => setMode('shop')}
           />
         )}
+
+        {mode === 'editor' && <LevelEditor onPlay={playLayout} onBack={() => setMode('menu')} />}
 
         {mode === 'complete' && (
           <RunStatsCard
