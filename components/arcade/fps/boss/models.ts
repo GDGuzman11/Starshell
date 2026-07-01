@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
-import { accent, box, capsuleZ, coneZ, cylZ, metal } from '../models/parts';
+import { accent, box, capsuleY, capsuleZ, coneZ, cylZ, metal, wraith } from '../models/parts';
 import { buildHumanoid } from '../enemies/models/humanoid';
 import type { BossKind } from '../enemy';
 
@@ -26,6 +26,7 @@ export interface BossParts {
   ring?: THREE.Group; // ARCHON light-ring (spun)
   orbit?: THREE.Group; // ARCHON orbiting facets (counter-spun)
   core?: THREE.Group; // exposed core group (weak point)
+  legs?: THREE.Group[]; // BEHEMOTH quadruped legs (diagonal gait)
 }
 
 /** XENOMORPH — the Hive Hunter. Black glossy biomechanical predator: elongated
@@ -246,11 +247,126 @@ function buildArchon(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** BEHEMOTH — Planet Siege Beast / Living Fortress. A massive armored QUADRUPED
+ *  with fortress structures grown on its back, a low horned head, and a glowing
+ *  molten weak-plate on its rear flank (exposed after a stomp). Sandstone armor. */
+function buildBehemoth(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a4a34, tier, 0.75, 0.35); // sandstone armor
+  const dark = metal(0x2e2418, tier, 0.72, 0.3);
+  const glow = accent(0xffb14a, tier, 1.7); // molten core
+  const root = new THREE.Group();
+  const hipY = 1.5;
+
+  // Bulk armored hull + upper deck.
+  const torso = new THREE.Group();
+  torso.position.y = hipY;
+  torso.add(box(1.9, 1.1, 2.7, body, 0, 0, 0)); // main hull
+  torso.add(box(1.6, 0.5, 2.3, dark, 0, 0.7, 0)); // upper deck
+  // Fortress structures grown on the back (little towers + spikes).
+  torso.add(box(0.42, 0.9, 0.42, dark, -0.55, 1.15, -0.55));
+  torso.add(box(0.42, 1.15, 0.42, dark, 0.5, 1.28, 0.25));
+  for (const [sx, sz] of [[-0.55, 0.7], [0.6, -0.7], [0, 0.95]]) torso.add(coneZ(0, 0.16, 0.6, dark, sx, 1.0, sz)); // ridge spikes
+  // Molten shed-plate weak core on the rear flank.
+  const core = box(0.7, 0.6, 0.32, glow, 0, 0.35, -1.42);
+  core.name = 'core';
+  torso.add(core);
+  root.add(torso);
+
+  // Low horned head at the front.
+  const head = new THREE.Group();
+  head.position.set(0, hipY - 0.25, 1.55);
+  head.add(box(0.95, 0.75, 0.85, dark, 0, 0, 0));
+  head.add(box(0.12, 0.1, 0.1, glow, -0.27, 0.12, 0.44)); // eyes
+  head.add(box(0.12, 0.1, 0.1, glow, 0.27, 0.12, 0.44));
+  head.add(coneZ(0, 0.09, 0.4, body, -0.32, 0.3, 0.2)); // horns
+  head.add(coneZ(0, 0.09, 0.4, body, 0.32, 0.3, 0.2));
+  root.add(head);
+
+  // Four pillar legs (diagonal-trot gait posed in the animator).
+  const legs: THREE.Group[] = [];
+  for (const [lx, lz] of [[-0.85, 1.05], [0.85, 1.05], [-0.85, -1.05], [0.85, -1.05]]) {
+    const g = new THREE.Group();
+    g.position.set(lx, hipY, lz);
+    g.add(box(0.38, 1.0, 0.38, dark, 0, -0.55, 0)); // upper
+    g.add(box(0.32, 0.85, 0.32, body, 0, -1.2, 0.04)); // lower
+    g.add(box(0.46, 0.22, 0.54, dark, 0, -1.6, 0.08)); // foot
+    legs.push(g);
+    root.add(g);
+  }
+
+  root.userData.parts = { torso, head, legs } satisfies BossParts;
+  root.userData.bodyMats = [body, dark];
+  root.userData.hipY = hipY;
+  return root;
+}
+
+/** SPECTER — Stealth Civilization. An impossibly THIN, TALL wraith of translucent
+ *  plates that flicker (opacity posed in the animator); elongated skull, long claw
+ *  arms, trailing wisps instead of legs (it hovers). Goes solid + flashing right
+ *  after a phase-strike (the weak-point window). */
+function buildSpecter(tier: RenderTier): THREE.Group {
+  const body = wraith(0x2a1a44, 0.5, 0xb877ff); // spectral violet ghost plate
+  const dark = wraith(0x18102c, 0.45, 0x8844ff);
+  const glow = accent(0xd7a6ff, tier, 2.1); // bright spectral eyes (opaque)
+  const root = new THREE.Group();
+
+  // Tall thin floating torso.
+  const torso = new THREE.Group();
+  torso.position.y = 2.0;
+  torso.add(capsuleY(0.2, 1.1, body, 0, 0, 0)); // elongated core
+  for (let i = 0; i < 3; i++) torso.add(box(0.5 - i * 0.08, 0.05, 0.08, dark, 0, 0.2 - i * 0.28, 0.14)); // chest ribs
+
+  // Elongated skull with glowing slit eyes.
+  const head = new THREE.Group();
+  head.position.set(0, 0.9, 0.06);
+  head.add(coneZ(0, 0.16, 0.6, dark, 0, 0, -0.1)); // skull points back
+  head.add(box(0.04, 0.14, 0.05, glow, -0.09, 0.02, 0.16)); // slit eyes
+  head.add(box(0.04, 0.14, 0.05, glow, 0.09, 0.02, 0.16));
+  torso.add(head);
+
+  // Long thin claw arms.
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Group();
+    arm.position.set(sx * 0.28, 0.35, 0.04);
+    arm.rotation.z = sx * 0.35;
+    arm.add(box(0.07, 0.9, 0.07, body, 0, -0.45, 0));
+    for (const c of [-0.05, 0, 0.05]) arm.add(box(0.02, 0.22, 0.03, glow, c, -0.98, 0.02)); // claws
+    torso.add(arm);
+  }
+
+  // Trailing wisps (no solid legs — it hovers).
+  const wisps: THREE.Group[] = [];
+  for (const sx of [-0.16, 0, 0.16]) {
+    const w = new THREE.Group();
+    w.position.set(sx, -0.55, 0);
+    let seg: THREE.Group = w;
+    let r = 0.13;
+    for (let k = 0; k < 4; k++) {
+      const s = new THREE.Group();
+      s.position.set(0, -0.28, 0);
+      s.add(box(r, 0.28, r, k % 2 ? dark : body, 0, -0.14, 0));
+      seg.add(s);
+      seg = s;
+      r *= 0.75;
+    }
+    wisps.push(w);
+    torso.add(w);
+  }
+  root.add(torso);
+
+  root.userData.parts = { torso, head, core: head } satisfies BossParts;
+  root.userData.wisps = wisps;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
 /** Build the 3D model for a boss. */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
   if (kind === 'warrior') return buildWarlord(tier);
   if (kind === 'octopus') return buildKraken(tier);
   if (kind === 'archon') return buildArchon(tier);
+  if (kind === 'behemoth') return buildBehemoth(tier);
+  if (kind === 'specter') return buildSpecter(tier);
   return null;
 }

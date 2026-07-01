@@ -9,9 +9,24 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
-import { accent, box, capsuleZ, coneZ, metal } from '../models/parts';
+import { accent, box, capsuleY, capsuleZ, coneZ, metal, wraith } from '../models/parts';
 
-export type MinionKind = 'broodling' | 'spitter' | 'stalker' | 'crawler' | 'spore' | 'sentinel' | 'facet' | 'constructor' | 'sentry';
+export type MinionKind =
+  | 'broodling'
+  | 'spitter'
+  | 'stalker'
+  | 'crawler'
+  | 'spore'
+  | 'sentinel'
+  | 'facet'
+  | 'constructor'
+  | 'sentry'
+  | 'rampart'
+  | 'grazer'
+  | 'sporeback'
+  | 'phantom'
+  | 'mirror'
+  | 'wisp';
 
 export interface MinionDef {
   hp: number;
@@ -35,11 +50,21 @@ export const MINIONS: Record<MinionKind, MinionDef> = {
   facet: { hp: 60, speedMul: 1.6, scale: 1.0, melee: 0, ranged: 11, color: 0x141824 },
   constructor: { hp: 165, speedMul: 0.85, scale: 1.35, melee: 0, ranged: 13, color: 0x1a2130 },
   sentry: { hp: 185, speedMul: 0.3, scale: 1.3, melee: 0, ranged: 14, color: 0x12161f },
+  // Behemoth herd (sandstone/amber) — siege-beasts
+  rampart: { hp: 260, speedMul: 0.7, scale: 1.6, melee: 16, ranged: 0, color: 0x5a4a34 }, // walking wall / tank melee
+  grazer: { hp: 120, speedMul: 1.9, scale: 1.2, melee: 18, ranged: 0, color: 0x7a5a34 }, // armored charger
+  sporeback: { hp: 150, speedMul: 0.8, scale: 1.25, melee: 0, ranged: 12, color: 0x6a6a3a }, // ranged + heals the boss
+  // Specter haunt (spectral violet) — wraiths
+  phantom: { hp: 80, speedMul: 1.8, scale: 1.35, melee: 15, ranged: 0, color: 0x2a1a44 }, // cloaked ambusher
+  mirror: { hp: 1, speedMul: 1.5, scale: 1.35, melee: 0, ranged: 0, color: 0x3a2a5a }, // illusory decoy (pops in 1 hit)
+  wisp: { hp: 60, speedMul: 1.3, scale: 0.9, melee: 0, ranged: 10, color: 0x4a2a6a }, // fear/blur floater
 };
 
 const GREEN = 0x6aff7a;
 const VIOLET = 0xc08bff;
 const AZURE = 0x49a6ff;
+const AMBER = 0xffb14a;
+const SPECTRAL = 0xd7a6ff;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -234,6 +259,135 @@ function buildSentry(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Behemoth Rampart: a wide low wall-beast with a big front armor plate (mobile cover). */
+function buildRampart(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a4a34, tier, 0.75, 0.35);
+  const dark = metal(0x2e2418, tier, 0.72, 0.3);
+  const glow = accent(AMBER, tier, 1.4);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.72;
+  core.add(box(1.2, 1.0, 0.7, body, 0, 0, 0)); // wide body
+  core.add(box(1.45, 1.25, 0.22, dark, 0, 0.12, 0.44)); // big front wall plate
+  core.add(box(0.14, 0.1, 0.08, glow, -0.32, 0.4, 0.55)); // eyes over the plate
+  core.add(box(0.14, 0.1, 0.08, glow, 0.32, 0.4, 0.55));
+  root.add(core);
+  for (const sx of [-1, 1])
+    for (const sz of [-0.2, 0.2]) root.add(box(0.22, 0.72, 0.22, dark, sx * 0.46, 0.36, sz)); // stubby legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Behemoth Grazer: a low horned armored charger. */
+function buildGrazer(tier: RenderTier): THREE.Group {
+  const body = metal(0x7a5a34, tier, 0.6, 0.4);
+  const dark = metal(0x3a2a18, tier, 0.6, 0.4);
+  const glow = accent(AMBER, tier, 1.5);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.62;
+  core.add(capsuleZ(0.34, 0.7, body, 0, 0, 0)); // charging body
+  core.add(box(0.42, 0.42, 0.4, dark, 0, 0.02, 0.5)); // armored head
+  core.add(coneZ(0, 0.07, 0.4, dark, -0.17, 0.14, 0.72)); // horns
+  core.add(coneZ(0, 0.07, 0.4, dark, 0.17, 0.14, 0.72));
+  core.add(box(0.06, 0.05, 0.05, glow, -0.14, 0.05, 0.7)); // eyes
+  core.add(box(0.06, 0.05, 0.05, glow, 0.14, 0.05, 0.7));
+  root.add(core);
+  for (const sx of [-1, 1])
+    for (const sz of [-0.22, 0.22]) root.add(box(0.12, 0.62, 0.12, dark, sx * 0.24, 0.31, sz)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Behemoth Sporeback: a hunched beast with a bright heal-pod on its back (regrows
+ *  the boss's plates + spits ranged spores). */
+function buildSporeback(tier: RenderTier): THREE.Group {
+  const body = metal(0x6a6a3a, tier, 0.62, 0.35);
+  const dark = metal(0x2e2e18, tier, 0.62, 0.35);
+  const glow = accent(0xaef54a, tier, 1.9); // sickly heal-green
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.78;
+  core.rotation.x = 0.24;
+  core.add(capsuleZ(0.32, 0.42, body, 0, 0, 0)); // body
+  core.add(coneZ(0, 0.12, 0.3, dark, 0, 0.06, 0.34)); // head
+  core.add(box(0.34, 0.32, 0.18, glow, 0, 0.3, -0.22)); // heal pod on the back
+  core.add(box(0.05, 0.04, 0.05, glow, -0.1, 0.1, 0.42)); // eyes
+  core.add(box(0.05, 0.04, 0.05, glow, 0.1, 0.1, 0.42));
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.1, 0.6, 0.12, dark, sx * 0.2, 0.3, 0)); // legs
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Specter Phantom: a tall thin cloaked wraith with long claws + glowing eyes. */
+function buildPhantom(tier: RenderTier): THREE.Group {
+  const body = wraith(0x2a1a44, 0.42, 0xb877ff);
+  const glow = accent(SPECTRAL, tier, 1.8);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.05;
+  core.add(capsuleY(0.16, 0.55, body, 0, 0.1, 0)); // thin torso
+  core.add(coneZ(0, 0.13, 0.42, body, 0, 0.42, -0.06)); // elongated skull
+  core.add(box(0.04, 0.03, 0.06, glow, -0.06, 0.42, 0.14)); // eyes
+  core.add(box(0.04, 0.03, 0.06, glow, 0.06, 0.42, 0.14));
+  for (const sx of [-1, 1]) {
+    const arm = box(0.05, 0.6, 0.05, body, sx * 0.22, 0.02, 0.05);
+    arm.rotation.z = sx * 0.28;
+    core.add(arm);
+  }
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.06, 0.85, 0.08, body, sx * 0.12, 0.45, 0)); // wispy legs
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Specter Mirror: a faint illusory duplicate — a barely-there humanoid silhouette. */
+function buildMirror(tier: RenderTier): THREE.Group {
+  const body = wraith(0x3a2a5a, 0.3, 0x9a6aff);
+  const glow = accent(SPECTRAL, tier, 1.2);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.0;
+  core.add(capsuleY(0.18, 0.55, body, 0, 0.1, 0)); // torso
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), body)); // head
+  (core.children[1] as THREE.Mesh).position.set(0, 0.5, 0);
+  core.add(box(0.04, 0.03, 0.06, glow, 0, 0.5, 0.14)); // single dim eye-slit
+  for (const sx of [-1, 1]) {
+    const arm = box(0.06, 0.5, 0.06, body, sx * 0.24, 0.04, 0);
+    arm.rotation.z = sx * 0.3;
+    core.add(arm);
+  }
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.08, 0.8, 0.1, body, sx * 0.12, 0.42, 0)); // legs
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Specter Wisp: a small floating spectral orb with tendrils (fear/blur emitter). */
+function buildWisp(tier: RenderTier): THREE.Group {
+  const body = wraith(0x4a2a6a, 0.5, 0xb877ff);
+  const glow = accent(SPECTRAL, tier, 2.1);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.25; // floats
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), body)); // orb
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), glow)); // bright core
+  for (const a of [0, 1, 2, 3]) {
+    const ang = (a / 4) * Math.PI * 2;
+    core.add(box(0.03, 0.28, 0.03, body, Math.cos(ang) * 0.18, -0.22, Math.sin(ang) * 0.18)); // tendrils
+  }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
@@ -243,6 +397,12 @@ export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Grou
   if (kind === 'facet') return buildFacet(tier);
   if (kind === 'constructor') return buildConstructor(tier);
   if (kind === 'sentry') return buildSentry(tier);
+  if (kind === 'rampart') return buildRampart(tier);
+  if (kind === 'grazer') return buildGrazer(tier);
+  if (kind === 'sporeback') return buildSporeback(tier);
+  if (kind === 'phantom') return buildPhantom(tier);
+  if (kind === 'mirror') return buildMirror(tier);
+  if (kind === 'wisp') return buildWisp(tier);
   return buildSentinel(tier);
 }
 

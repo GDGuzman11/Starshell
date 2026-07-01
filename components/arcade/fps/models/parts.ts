@@ -43,6 +43,12 @@ export function accent(color: number, tier: RenderTier, intensity = 1.5): THREE.
   if (tier === 'mobile') return new THREE.MeshBasicMaterial({ color });
   return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.35, metalness: 0.1 });
 }
+/** Translucent spectral material (wraiths / illusions). Animators flicker the
+ *  `opacity` to sell the phasing; kept as MeshStandard on both tiers so hit-flash
+ *  emissive still reads on the ghostly body. */
+export function wraith(color: number, opacity = 0.5, glow = 0x8844ff): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color, transparent: true, opacity, roughness: 0.55, metalness: 0.1, emissive: new THREE.Color(glow), emissiveIntensity: 0.3 });
+}
 
 // ── geometry helpers (all return a positioned Mesh) ───────────────────────────
 export function box(w: number, h: number, d: number, mat: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {

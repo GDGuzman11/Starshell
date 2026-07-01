@@ -90,7 +90,7 @@ export function hurtEnemy(e: Enemy, amount: number): void {
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
-export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon';
+export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter';
 export interface BossDef {
   name: string;
   health: number;
@@ -113,6 +113,12 @@ export const BOSSES: Record<BossKind, BossDef> = {
   // ARCHON — Ancient AI: a hovering geometric construct. Precise, high-accuracy
   // ranged fire; blink-teleports between vantage points. Lower melee (it never brawls).
   archon: { name: 'ARCHON', health: 4200, scale: 3.4, radius: 1.5, meleeRange: 3, meleeDmg: 16, meleeRate: 0.7, rangeDmg: 15, rangeRate: 0.42, acc: 0.95, color: 0x49a6ff },
+  // BEHEMOTH — Living Fortress: a huge armored quadruped. Very tanky + big radius;
+  // slow relentless advance, heavy stomps + boulder lobs. Never kites.
+  behemoth: { name: 'BEHEMOTH', health: 5200, scale: 3.0, radius: 2.4, meleeRange: 6, meleeDmg: 26, meleeRate: 0.9, rangeDmg: 16, rangeRate: 0.9, acc: 0.7, color: 0xffb14a },
+  // SPECTER — Stealth Wraith: thin, fast, fragile. Teleport phase-strikes + fear
+  // pulses; goes solid only briefly after a strike. Low HP (a glass ambusher).
+  specter: { name: 'SPECTER', health: 3400, scale: 3.3, radius: 1.3, meleeRange: 4, meleeDmg: 24, meleeRate: 0.8, rangeDmg: 12, rangeRate: 0.5, acc: 0.8, color: 0xb877ff },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -574,6 +580,16 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['facet', 'facet', 'facet', 'facet', 'constructor', 'constructor', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
     (['facet', 'facet', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.65)));
     (['facet', 'constructor', 'sentry'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.35)));
+  } else if (kind === 'behemoth') {
+    // BEHEMOTH HERD — Ramparts wall you off, Grazers charge, Sporebacks heal the beast.
+    (['rampart', 'rampart', 'grazer', 'grazer', 'grazer', 'sporeback', 'sporeback'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['grazer', 'grazer', 'rampart'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['grazer', 'sporeback', 'rampart'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'specter') {
+    // SPECTER HAUNT — Phantoms ambush, Mirrors decoy your fire, Wisps blur your vision.
+    (['phantom', 'phantom', 'phantom', 'mirror', 'mirror', 'wisp', 'wisp'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['phantom', 'mirror', 'wisp'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['phantom', 'phantom', 'mirror'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
   }
   return out;
 }
@@ -871,15 +887,44 @@ export function updateEnemies(
         tz /= tl;
         const perpX = -tz;
         const perpZ = tx;
-        const mc = e.minion === 'crawler' || e.minion === 'spore' || e.minion === 'sentinel' ? 0xc08bff : 0x6aff7a;
-        if (e.minion === 'broodling' || e.minion === 'crawler') {
-          // Rush + erratic weave; bite on contact.
+        const mc = e.minion === 'crawler' || e.minion === 'spore' || e.minion === 'sentinel' ? 0xc08bff : e.minion === 'phantom' || e.minion === 'mirror' || e.minion === 'wisp' ? 0xb877ff : e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'sporeback' ? 0xffb14a : 0x6aff7a;
+        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer') {
+          // Rush + erratic weave; bite/ram on contact. (Ramparts advance as mobile cover;
+          // Grazers are fast chargers — both close and strike.)
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
           moveEnemy(e, lvl, tx + perpX * jitter, tz + perpZ * jitter, P.speed * md.speedMul * aggro, dt, R, grid);
-          if (dist < 2.4 && e.fireCd <= 0) {
-            e.fireCd = 0.8;
+          const reach = e.minion === 'rampart' ? 3.0 : 2.4;
+          if (dist < reach && e.fireCd <= 0) {
+            e.fireCd = e.minion === 'grazer' ? 0.6 : 0.8;
             damage += md.melee;
             tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: mc });
+          }
+        } else if (e.minion === 'mirror') {
+          // SPECTER MIRROR: an illusory decoy — drifts at you to draw fire, no attack;
+          // pops in one hit (hp 1).
+          moveEnemy(e, lvl, tx + perpX * Math.sin(now * 0.004 + e.wander) * 0.4, tz, P.speed * md.speedMul * aggro, dt, R, grid);
+        } else if (e.minion === 'sporeback' || e.minion === 'wisp') {
+          // Behemoth Sporeback / Specter Wisp: standoff ranged support. The Sporeback's
+          // pod HEALS the boss when it's near it (regrows plates); the Wisp periodically
+          // clouds your vision (fear pulse).
+          if (dist < 12) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
+          else if (dist > 22) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
+          else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
+          if (e.minion === 'sporeback') {
+            const bossE = enemies.find((b) => b.boss && b.health > 0 && !b.dormant);
+            if (bossE && Math.hypot(bossE.x - e.x, bossE.z - e.z) < 14) bossE.health = Math.min(bossE.maxHealth, bossE.health + 18 * dt);
+          } else {
+            e.track += dt;
+            if (e.track > 5) {
+              e.track = 0;
+              bossFog = true;
+            }
+          }
+          if (sees[i] && e.fireCd <= 0 && dist < 28) {
+            e.fireCd = e.minion === 'wisp' ? 1.4 : 1.6;
+            const my = e.y + 0.9;
+            const col = e.minion === 'wisp' ? 0xb877ff : 0xaef54a;
+            bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: col, splash: 0 });
           }
         } else if (e.minion === 'spore') {
           // VOID SPORE bomber: drift in slowly, then self-destruct in a burst.
@@ -933,7 +978,7 @@ export function updateEnemies(
             if (dist < 2.6 && e.fireCd <= 0) {
               e.fireCd = 1.0;
               damage += md.melee;
-              tracers.push({ from: [e.x, e.y + 0.6, e.z], to: peye, color: 0x6aff7a });
+              tracers.push({ from: [e.x, e.y + 0.6, e.z], to: peye, color: mc });
               e.track = 0;
             }
             if (e.track > 3.4) e.track = 0;
@@ -999,6 +1044,17 @@ export function updateEnemies(
           const mv = tickBossBrain(brain, e.x, e.z, tgtB.x, tgtB.z, sees[i], dist, dt);
           let wx = mv.wx;
           let wz = mv.wz;
+          let speedMul = mv.speedMul;
+          if (e.boss === 'behemoth') {
+            // LIVING FORTRESS: never kites — a slow, relentless advance that herds the
+            // player off the open centre it dominates, with a slight strafe.
+            const dbx = tgtB.x - e.x;
+            const dbz = tgtB.z - e.z;
+            const dbl = Math.hypot(dbx, dbz) || 1;
+            wx = dbx / dbl - (dbz / dbl) * brain.strafeSign * 0.2;
+            wz = dbz / dbl + (dbx / dbl) * brain.strafeSign * 0.2;
+            speedMul = 0.75;
+          }
           for (let j = 0; j < enemies.length; j++) {
             if (j === i || enemies[j].health <= 0) continue;
             const dx = e.x - enemies[j].x;
@@ -1011,7 +1067,7 @@ export function updateEnemies(
             }
           }
           const wl = Math.hypot(wx, wz) || 1;
-          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * mv.speedMul * (desp ? 1.35 : 1) * eSpd, dt, bd.radius, grid);
+          moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * speedMul * (desp ? 1.35 : 1) * eSpd, dt, bd.radius, grid);
 
           // KRAKEN TENTACLE ERUPTION: a telegraphed ground burst at the player's
           // predicted spot that damages + launches them up (resolved in the loop).
@@ -1069,6 +1125,51 @@ export function updateEnemies(
                 e.z = nz;
                 e.weakUntil = now + 1500;
               }
+            }
+          }
+          // BEHEMOTH: a ground STOMP shockwave to herd you off open ground (its shed-plate
+          // flank is exposed briefly after), plus an arcing BOULDER lob to deny range.
+          if (e.boss === 'behemoth' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist < 16) {
+              brain.abilityCd = ((desp ? 4 : 6.5) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 11, delay: 0.8 });
+              e.weakUntil = now + 1800;
+            }
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist > 10 && dist < 46) {
+              brain.volleyCd = ((desp ? 2.5 : 4) + Math.random() * 2) * eAgg;
+              const muzzleY = e.y + bd.scale * 0.7;
+              const tt = dist / 20;
+              const lx = player.x + pvx * tt * 0.6;
+              const lz = player.z + pvz * tt * 0.6;
+              const hd = Math.hypot(lx - e.x, lz - e.z);
+              bossShots.push({ kind: 'grenade', x: e.x, y: muzzleY, z: e.z, dir: [lx - e.x, hd * 0.5, lz - e.z], speed: 18, dmg: Math.round(bd.rangeDmg * 1.3), color: 0xcaa26a, splash: 3.4, gravity: 22 });
+            }
+          }
+          // SPECTER: PHASE-STRIKE — blink to the player's flank, hit, then go solid +
+          // flashing (weak-point window). Plus a periodic FEAR PULSE that clouds vision.
+          if (e.boss === 'specter' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist > 6) {
+              brain.abilityCd = ((desp ? 2.5 : 4) + Math.random() * 1.5) * eAgg;
+              const ang = Math.atan2(e.z - player.z, e.x - player.x) + (Math.random() < 0.5 ? 1 : -1) * (1.6 + Math.random() * 0.8);
+              const rr = 4.5 + Math.random() * 2;
+              const lim = lvl.size / 2 - 4;
+              const nx = Math.max(-lim, Math.min(lim, player.x + Math.cos(ang) * rr));
+              const nz = Math.max(-lim, Math.min(lim, player.z + Math.sin(ang) * rr));
+              if (!blocked(lvl, nx, nz, bd.radius, grid)) {
+                e.x = nx;
+                e.z = nz;
+                damage += bd.meleeDmg; // the ambush strike
+                tracers.push({ from: [e.x, e.y + bd.scale * 0.5, e.z], to: peye, color: 0xb877ff });
+                e.weakUntil = now + 1500;
+              }
+            }
+            brain.fogCd -= dt;
+            if (brain.fogCd <= 0) {
+              brain.fogCd = (desp ? 4 : 7) + Math.random() * 2;
+              bossFog = true;
             }
           }
           if (dist < bd.meleeRange) {

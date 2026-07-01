@@ -12,7 +12,7 @@ import type { BossParts } from './models';
 
 export function poseBossModel(
   model: THREE.Group,
-  _kind: BossKind,
+  kind: BossKind,
   moving: boolean,
   step: number,
   hitFlash: number,
@@ -28,6 +28,17 @@ export function poseBossModel(
   const gait = moving ? Math.sin(step * 2.4) : 0;
   if (parts.legL) parts.legL.rotation.x = gait * 0.5;
   if (parts.legR) parts.legR.rotation.x = -gait * 0.5;
+
+  // BEHEMOTH quadruped: a heavy diagonal trot (legs 0/3 vs 1/2) + a ground-shake bob.
+  if (parts.legs) {
+    const g2 = moving ? Math.sin(step * 2.0) : 0;
+    for (let li = 0; li < parts.legs.length; li++) parts.legs[li].rotation.x = g2 * 0.33 * (li === 0 || li === 3 ? 1 : -1);
+    if (parts.torso) parts.torso.position.y = (parts.torso.userData.baseY ??= parts.torso.position.y) + (moving ? Math.abs(g2) * 0.06 : 0);
+  }
+
+  // SPECTER wisps drift; the whole wraith flickers translucent (solid when weak).
+  const wisps = model.userData.wisps as THREE.Group[] | undefined;
+  if (wisps) for (let i = 0; i < wisps.length; i++) wisps[i].rotation.x = Math.sin(t * 1.7 + i * 1.3) * 0.28;
 
   // Restless tail (Xenomorph) + head sway.
   if (parts.tail) {
@@ -56,8 +67,11 @@ export function poseBossModel(
   if (mats) {
     const hf = hitFlash > 0 ? Math.min(1, hitFlash / 0.12) : 0;
     const wk = weak ? 0.4 + 0.4 * (0.5 + 0.5 * Math.sin(t * 12)) : 0;
+    // SPECTER: flicker translucent (phasing); go solid during the weak window.
+    const op = kind === 'specter' ? (weak ? 1 : Math.max(0.22, 0.4 + 0.18 * Math.sin(t * 9) + 0.1 * Math.sin(t * 23))) : 0;
     for (const m of mats) {
       const sm = m as THREE.MeshStandardMaterial;
+      if (kind === 'specter' && sm.transparent) sm.opacity = op;
       if (sm.emissive) {
         if (wk > 0) sm.emissive.setRGB(wk * 0.2, wk, wk * 0.35);
         else sm.emissive.setRGB(hf * 0.8, hf * 0.12, hf * 0.12);

@@ -67,6 +67,29 @@ export function bossArenaArchon(seed: number): LevelLayout {
   return bossArena({ theme: 'neon', size: 176, placements: p, drops: 14 }, seed);
 }
 
+/** BEHEMOTH arena — a wide VOLCANIC field with a big OPEN centre the fortress dominates,
+ *  ringed by bunkers + loose cover the player hugs, and abundant drops so you dart out
+ *  from the rim to resupply. */
+export function bossArenaBehemoth(seed: number): LevelLayout {
+  const p: Placement[] = [];
+  for (const [gx, gz] of [[-5, -5], [5, -5], [-5, 5], [5, 5], [-5, 0], [5, 0], [0, -5], [0, 5]]) p.push({ module: 'bunker', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-3, -4, 0], [3, 4, 0], [-4, 3, 90], [4, -3, 90]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  for (const [gx, gz] of [[-2, -3], [2, 3], [-3, 2], [3, -2]]) p.push({ module: 'sandbags', gx, gz, rot: 0 });
+  return bossArena({ theme: 'volcanic', size: 200, placements: p, drops: 14 }, seed);
+}
+
+/** SPECTER arena — a DENSE, dark NEON warren: buildings + alleys + extra loose walls it
+ *  phases through to flank you, with extra drops + a third station so you can keep
+ *  repositioning against its ambushes. */
+export function bossArenaSpecter(seed: number): LevelLayout {
+  const p = scatterBuildingsAndWalls(168, seed);
+  const occ = new Set(p.map((q) => key(q.gx, q.gz)));
+  for (const [gx, gz, rot] of [[-3, -1, 90], [3, 1, 90], [-1, 3, 0], [1, -3, 0], [-2, 2, 90], [2, -2, 0]] as [number, number, Rot][]) {
+    if (!occ.has(key(gx, gz))) p.push({ module: 'coverwall', gx, gz, rot });
+  }
+  return bossArena({ theme: 'neon', size: 168, placements: p, drops: 16, stations: 3 }, seed);
+}
+
 /** Functional buildings + loose cover walls scattered across a boss arena, leaving the
  *  centre + spawns open for the fight. A default terrain until a boss gets bespoke one. */
 export function scatterBuildingsAndWalls(size: number, seed: number): Placement[] {
