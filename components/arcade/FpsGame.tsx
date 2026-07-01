@@ -106,8 +106,10 @@ export function FpsGame() {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       const s = Number(localStorage.getItem('starshell.sens'));
       if (Number.isFinite(s) && s > 0) setSensitivityState(s);
-      const q = new URLSearchParams(window.location.search);
-      setDev(q.has('dev') || process.env.NODE_ENV !== 'production');
+      // Dev tools (God Mode / level-warp / Kit Arena / Level Editor) are LOCAL-DEV
+      // ONLY — they never appear on the deployed public site, and there is no URL
+      // that unlocks them. Author + test levels locally; only the results ship.
+      setDev(process.env.NODE_ENV !== 'production');
     } catch {
       /* ignore */
     }
