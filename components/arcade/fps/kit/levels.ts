@@ -15,6 +15,7 @@
  */
 import { makeArena3D, type Level3D } from '../level3d';
 import { buildFromLayout } from './generate';
+import { bossArena, scatterBuildingsAndWalls } from './bossArenas';
 import { loadCampaign } from './storage';
 import type { LevelLayout } from './layout';
 import type { BossKind } from '../enemy';
@@ -27,8 +28,24 @@ import type { BossKind } from '../enemy';
  */
 export const CAMPAIGN: Record<number, LevelLayout> = {};
 
-/** Regular bosses cycle in this order (by boss ordinal). */
+/** Regular bosses cycle in this order (by boss ordinal). New civilizations are appended
+ *  as they ship, so deeper runs face more variety. */
 export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus'];
+
+/** Per-boss bespoke arena (modular-kit layout → drops/buildings/walls/theme). A boss
+ *  without an entry falls back to the procedural makeArena3D. Each boss's terrain is
+ *  supplied per batch; for now every boss gets a stocked building+cover spread. */
+export const BOSS_ARENAS: Partial<Record<BossKind, (seed: number) => LevelLayout>> = {
+  xeno: (seed) => bossArena({ theme: 'neon', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
+  warrior: (seed) => bossArena({ theme: 'volcanic', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
+  octopus: (seed) => bossArena({ theme: 'jungle', size: 160, placements: scatterBuildingsAndWalls(160, seed) }, seed),
+};
+
+/** Build a boss level's arena: its bespoke stocked layout, or the procedural fallback. */
+export function buildBossArena(kind: BossKind, mapCount: number, seed: number): Level3D {
+  const make = BOSS_ARENAS[kind];
+  return make ? buildFromLayout(make(seed)) : makeArena3D(mapCount, seed);
+}
 
 /** How many non-boss levels the campaign has: the local timeline length (dev), else
  *  the highest baked key, else the default 16. */
@@ -57,15 +74,16 @@ export function isBossLevel(level: number, total = campaignTotalLevels()): boole
 export function isGauntletLevel(level: number, total = campaignTotalLevels()): boolean {
   return level === total;
 }
-/** The (regular) boss kind for a 5th-level boss — cycles xeno → warrior → octopus. */
+/** The (regular) boss kind for a 5th-level boss — cycles through GAUNTLET_ORDER. */
 export function bossKindFor(level: number): BossKind {
-  return GAUNTLET_ORDER[(((Math.floor(level / 5) - 1) % 3) + 3) % 3];
+  const n = GAUNTLET_ORDER.length;
+  return GAUNTLET_ORDER[(((Math.floor(level / 5) - 1) % n) + n) % n];
 }
 
 /** Resolve a campaign level to a playable Level3D. Boss/gauntlet + empty slots use the
  *  procedural arena; authored non-boss slots use their baked/local layout. */
 export function resolveLevel(level: number, mapCount: number, seed: number): Level3D {
-  if (isBossLevel(level)) return makeArena3D(mapCount, seed); // boss / gauntlet arena
+  if (isBossLevel(level)) return buildBossArena(bossKindFor(level), mapCount, seed); // bespoke stocked boss arena
   const ord = authoredOrdinal(level);
   const local = loadCampaign()[ord - 1]; // dev workshop override
   if (local?.authored) return buildFromLayout({ ...local.layout, seed });
