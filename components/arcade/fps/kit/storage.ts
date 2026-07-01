@@ -5,7 +5,7 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import { LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
+import { LAYOUT_VERSION, MODULE_KINDS, ROTATIONS, type BridgeSpan, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
 import { THEMES } from './themes';
 
 const INDEX_KEY = 'starshell.layouts'; // JSON array of SavedMeta
@@ -40,8 +40,18 @@ export function validateLayout(raw: unknown): LevelLayout | null {
         })
         .filter((p): p is Placement => p !== null)
     : [];
+  const bridges: BridgeSpan[] = Array.isArray(o.bridges)
+    ? (o.bridges as unknown[])
+        .map((b): BridgeSpan | null => {
+          if (!b || typeof b !== 'object') return null;
+          const q = b as Record<string, unknown>;
+          if (!isNum(q.x0) || !isNum(q.z0) || !isNum(q.x1) || !isNum(q.z1) || !isNum(q.y)) return null;
+          return { x0: q.x0, z0: q.z0, x1: q.x1, z1: q.z1, y: q.y };
+        })
+        .filter((b): b is BridgeSpan => b !== null)
+    : [];
   const cell = (v: unknown) => (v && typeof v === 'object' && isNum((v as Record<string, unknown>).gx) && isNum((v as Record<string, unknown>).gz) ? { gx: Math.round((v as Record<string, number>).gx), gz: Math.round((v as Record<string, number>).gz) } : undefined);
-  return { v: LAYOUT_VERSION, theme, size, seed, placements, spawn: cell(o.spawn), enemySpawn: cell(o.enemySpawn), name: typeof o.name === 'string' ? o.name.slice(0, 40) : undefined };
+  return { v: LAYOUT_VERSION, theme, size, seed, placements, bridges, spawn: cell(o.spawn), enemySpawn: cell(o.enemySpawn), name: typeof o.name === 'string' ? o.name.slice(0, 40) : undefined };
 }
 
 export function listLayouts(): SavedMeta[] {

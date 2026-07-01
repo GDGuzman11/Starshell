@@ -11,7 +11,7 @@
 import type { Box, Ladder, Level3D, Ramp } from '../level3d';
 import { rng } from '../rand';
 import type { ModuleMeta } from './types';
-import { barricade, crate, debris, rubble, wreck } from './atoms';
+import { barricade, bridge, crate, debris, rubble, wreck } from './atoms';
 import { apartmentBlockModule, barracksModule, bunkerModule, commandCenterModule, ruinModule, watchTowerModule } from './modules';
 import { barrierProp, commTowerProp, containerProp, coverWallProp, crateStackProp, dragonTeethProp, fuelTankProp, guardPostProp, rubbleProp, sandbagProp, wreckProp } from './props';
 import { cellToWorld, MODULE_KINDS, ROTATIONS, type LevelLayout, type ModuleKind, type Placement, type Rot } from './layout';
@@ -230,6 +230,15 @@ export function buildFromLayout(layout: LevelLayout): Level3D {
     const cz = cellToWorld(pl.gz);
     modules.push(placeKind(pl.module, cx, cz, pl.rot, pl.params?.levels ?? 3, boxes, ladders, ramps, grapplePoints, r));
     occupied.push({ x: cx, z: cz, rad: 13 });
+  }
+
+  // Bridges — a flush walkable span between two building roofs (top surface at y).
+  for (const br of layout.bridges ?? []) {
+    const along = Math.abs(br.x1 - br.x0) >= Math.abs(br.z1 - br.z0) ? 'x' : 'z';
+    const cx = (br.x0 + br.x1) / 2;
+    const cz = (br.z0 + br.z1) / 2;
+    const len = Math.hypot(br.x1 - br.x0, br.z1 - br.z0);
+    bridge(boxes, cx, cz, len, along, br.y);
   }
 
   // Light street clutter in the empty spaces (skips buildings + spawns).

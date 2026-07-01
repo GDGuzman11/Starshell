@@ -26,12 +26,22 @@ export interface Placement {
   params?: { levels?: number }; // apartment storeys (2..4)
 }
 
+/** A bridge span connecting two building roofs, flush at height `y` (world coords). */
+export interface BridgeSpan {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  y: number;
+}
+
 export interface LevelLayout {
   v: number; // LAYOUT_VERSION (migration guard)
   theme: string; // ThemeId
   size: number; // arena metres (square)
   seed: number; // clutter-fill determinism
   placements: Placement[];
+  bridges?: BridgeSpan[]; // roof-to-roof spans
   spawn?: { gx: number; gz: number }; // else derived (−z end)
   enemySpawn?: { gx: number; gz: number }; // else derived (+z end)
   name?: string; // user label (saved layouts)

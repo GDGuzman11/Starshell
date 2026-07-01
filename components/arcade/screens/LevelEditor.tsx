@@ -10,7 +10,7 @@
  * the full 3D "preview" is the Play button. Mouse + touch via pointer events.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, cellToWorld, footprintOf, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
+import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, cellToWorld, footprintOf, roofHeightOf, type BridgeSpan, type LevelLayout, type ModuleKind, type Placement, type Rot } from '../fps/kit/layout';
 import { THEME_LIST } from '../fps/kit/themes';
 import { deleteLayout, listLayouts, loadLayout, saveLayout, type SavedMeta } from '../fps/kit/storage';
 
@@ -39,9 +39,11 @@ const MOD_ABBR: Record<ModuleKind, string> = { barracks: 'BRK', watchtower: 'TWR
 export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [placements, setPlacements] = useState<Placement[]>([]);
+  const [bridges, setBridges] = useState<BridgeSpan[]>([]);
+  const [bridgeFrom, setBridgeFrom] = useState<number | null>(null); // first building of a pending bridge
   const [theme, setTheme] = useState('wartorn');
   const [size, setSize] = useState(200);
-  const [tool, setTool] = useState<ModuleKind | null>('command');
+  const [tool, setTool] = useState<ModuleKind | 'bridge' | null>('command');
   const [rot, setRot] = useState<Rot>(0);
   const [apt, setApt] = useState(3);
   const [selected, setSelected] = useState<number | null>(null);
@@ -64,8 +66,8 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
   const px2world = useCallback((px: number) => px / scale - half, [scale, half]);
 
   const currentLayout = useCallback(
-    (): LevelLayout => ({ v: LAYOUT_VERSION, theme, size, seed: 12345, placements, name: name || undefined }),
-    [theme, size, placements, name],
+    (): LevelLayout => ({ v: LAYOUT_VERSION, theme, size, seed: 12345, placements, bridges, name: name || undefined }),
+    [theme, size, placements, bridges, name],
   );
 
   // Redraw the board whenever anything visible changes.
@@ -106,7 +108,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     mark(-half * 0.86, '#5ad06a', 'YOU');
     mark(half * 0.86, '#ff5d6e', 'ENEMY');
     // hover ghost
-    if (tool && hover) {
+    if (tool && tool !== 'bridge' && hover) {
       const fp = footprintOf({ module: tool, gx: hover.gx, gz: hover.gz, rot });
       const cx = cellToWorld(hover.gx);
       const cz = cellToWorld(hover.gz);
@@ -139,7 +141,24 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       x.font = '8px monospace';
       x.fillText(MOD_ABBR[p.module], w2p(cx) - 9, w2p(cz) + 3);
     });
-  }, [placements, size, selected, tool, rot, hover, half, scale, w2p]);
+    // bridges (gold spans between roofs)
+    x.strokeStyle = '#ffd27a';
+    x.lineWidth = 4;
+    bridges.forEach((b) => {
+      x.beginPath();
+      x.moveTo(w2p(b.x0), w2p(b.z0));
+      x.lineTo(w2p(b.x1), w2p(b.z1));
+      x.stroke();
+    });
+    // pending bridge source highlight
+    if (tool === 'bridge' && bridgeFrom != null && placements[bridgeFrom]) {
+      const p = placements[bridgeFrom];
+      const fp = footprintOf(p);
+      x.strokeStyle = '#ffd27a';
+      x.lineWidth = 3;
+      x.strokeRect(w2p(cellToWorld(p.gx) - fp.w / 2), w2p(cellToWorld(p.gz) - fp.d / 2), fp.w * scale, fp.d * scale);
+    }
+  }, [placements, bridges, bridgeFrom, size, selected, tool, rot, hover, half, scale, w2p]);
 
   const eventCell = (e: React.PointerEvent) => {
     const cv = canvasRef.current!;
@@ -159,9 +178,57 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     return -1;
   };
 
+  const bridgeHitTest = (wx: number, wz: number): number => {
+    for (let i = bridges.length - 1; i >= 0; i--) {
+      const b = bridges[i];
+      const dx = b.x1 - b.x0;
+      const dz = b.z1 - b.z0;
+      const len2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((wx - b.x0) * dx + (wz - b.z0) * dz) / len2));
+      if (Math.hypot(wx - (b.x0 + t * dx), wz - (b.z0 + t * dz)) < 3) return i;
+    }
+    return -1;
+  };
+  // Snap a flush bridge between two buildings' facing roof edges (same height + aligned).
+  const tryBridge = (aIdx: number, bIdx: number) => {
+    const A = placements[aIdx];
+    const B = placements[bIdx];
+    const rhA = roofHeightOf(A.module, A.params?.levels ?? 3);
+    const rhB = roofHeightOf(B.module, B.params?.levels ?? 3);
+    if (rhA == null || rhB == null) return flash('bridge needs two roofed buildings');
+    if (rhA !== rhB) return flash('roof heights must match');
+    const cxA = cellToWorld(A.gx);
+    const czA = cellToWorld(A.gz);
+    const fpA = footprintOf(A);
+    const cxB = cellToWorld(B.gx);
+    const czB = cellToWorld(B.gz);
+    const fpB = footprintOf(B);
+    const dx = cxB - cxA;
+    const dz = czB - czA;
+    let span: BridgeSpan;
+    if (Math.abs(dx) >= Math.abs(dz)) {
+      if (Math.abs(dz) > 8) return flash('align the two buildings on a row');
+      const z = (czA + czB) / 2;
+      span = { x0: cxA + Math.sign(dx) * (fpA.w / 2), z0: z, x1: cxB - Math.sign(dx) * (fpB.w / 2), z1: z, y: rhA };
+    } else {
+      if (Math.abs(dx) > 8) return flash('align the two buildings on a column');
+      const x = (cxA + cxB) / 2;
+      span = { x0: x, z0: czA + Math.sign(dz) * (fpA.d / 2), x1: x, z1: czB - Math.sign(dz) * (fpB.d / 2), y: rhA };
+    }
+    setBridges((bs) => [...bs, span]);
+    flash('BRIDGE SNAPPED');
+  };
+
   const onDown = (e: React.PointerEvent) => {
     const { gx, gz, wx, wz } = eventCell(e);
     const hit = hitTest(wx, wz);
+    if (tool === 'bridge') {
+      if (hit < 0) return setBridgeFrom(null); // clicked empty → cancel
+      if (bridgeFrom == null) return setBridgeFrom(hit); // pick first building
+      if (hit !== bridgeFrom) tryBridge(bridgeFrom, hit); // second → snap
+      setBridgeFrom(null);
+      return;
+    }
     if (tool) {
       if (placements.some((p) => p.gx === gx && p.gz === gz)) {
         setSelected(placements.findIndex((p) => p.gx === gx && p.gz === gz));
@@ -175,7 +242,9 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
       dragRef.current = true;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } else {
-      setSelected(null);
+      const bi = bridgeHitTest(wx, wz); // SELECT on empty near a bridge → delete it
+      if (bi >= 0) setBridges((bs) => bs.filter((_, i) => i !== bi));
+      else setSelected(null);
     }
   };
   const onMove = (e: React.PointerEvent) => {
@@ -210,10 +279,12 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     const l = loadLayout(id);
     if (!l) return flash('LOAD FAILED');
     setPlacements(l.placements);
+    setBridges(l.bridges ?? []);
     setTheme(l.theme);
     setSize(l.size);
     setName(l.name ?? '');
     setSelected(null);
+    setBridgeFrom(null);
     flash('LOADED');
   };
   const doDelete = (id: string) => {
@@ -269,10 +340,14 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
               {MOD_ABBR[k]}
             </button>
           ))}
-          <button type="button" onClick={() => setTool(null)} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+          <button type="button" onClick={() => { setTool('bridge'); setSelected(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === 'bridge' ? 'border-[#ffd27a] bg-[#ffd27a]/20 text-[#ffd27a]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+            BRIDGE
+          </button>
+          <button type="button" onClick={() => { setTool(null); setBridgeFrom(null); }} className={`min-h-[24px] rounded border px-2 uppercase transition-colors ${tool === null ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
             SELECT
           </button>
         </div>
+        {tool === 'bridge' && <p className="text-[7px] text-[#ffd27a]/80">Click two aligned, same-height buildings to span a bridge. In SELECT, click a bridge to delete.</p>}
 
         <div className="flex flex-wrap items-center gap-1">
           <button type="button" onClick={rotateSel} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">
@@ -281,7 +356,7 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
           <button type="button" onClick={deleteSel} disabled={selected == null} className="min-h-[26px] rounded border border-[#ff5d6e]/40 px-2 uppercase text-[#ff9aa6] disabled:opacity-30 hover:bg-[#ff5d6e]/10">
             DELETE
           </button>
-          <button type="button" onClick={() => { setPlacements([]); setSelected(null); }} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">
+          <button type="button" onClick={() => { setPlacements([]); setBridges([]); setSelected(null); setBridgeFrom(null); }} className="min-h-[26px] rounded border border-white/20 px-2 uppercase text-white/70 hover:bg-white/10">
             CLEAR
           </button>
         </div>
