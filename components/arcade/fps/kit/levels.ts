@@ -15,7 +15,7 @@
  */
 import { makeArena3D, type Level3D } from '../level3d';
 import { buildFromLayout } from './generate';
-import { bossArena, bossArenaArchon, bossArenaBehemoth, bossArenaChimera, bossArenaColossus, bossArenaLeviathan, bossArenaMonolith, bossArenaOblivion, bossArenaSpecter, scatterBuildingsAndWalls } from './bossArenas';
+import { bossArena, bossArenaArchon, bossArenaBehemoth, bossArenaChimera, bossArenaColossus, bossArenaInfestor, bossArenaLeviathan, bossArenaMonolith, bossArenaOblivion, bossArenaOracle, bossArenaSpecter, scatterBuildingsAndWalls } from './bossArenas';
 import { loadCampaign } from './storage';
 import type { LevelLayout } from './layout';
 import type { BossKind } from '../enemy';
@@ -30,7 +30,7 @@ export const CAMPAIGN: Record<number, LevelLayout> = {};
 
 /** Regular bosses cycle in this order (by boss ordinal). New civilizations are appended
  *  as they ship, so deeper runs face more variety. */
-export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus', 'archon', 'behemoth', 'specter', 'leviathan', 'monolith', 'oblivion', 'colossus', 'chimera'];
+export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus', 'archon', 'behemoth', 'specter', 'leviathan', 'monolith', 'oblivion', 'colossus', 'chimera', 'oracle', 'infestor'];
 
 /** Per-boss bespoke arena (modular-kit layout → drops/buildings/walls/theme). A boss
  *  without an entry falls back to the procedural makeArena3D. Each boss's terrain is
@@ -47,6 +47,8 @@ export const BOSS_ARENAS: Partial<Record<BossKind, (seed: number) => LevelLayout
   oblivion: bossArenaOblivion,
   colossus: bossArenaColossus,
   chimera: bossArenaChimera,
+  oracle: bossArenaOracle,
+  infestor: bossArenaInfestor,
 };
 
 /** Build a boss level's arena: its bespoke stocked layout, or the procedural fallback. */

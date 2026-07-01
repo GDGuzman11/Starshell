@@ -586,6 +586,115 @@ function buildChimera(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** ORACLE — Reality & Time. A tall thin floating entity that UNFOLDS like a fractal
+ *  flower: a slim stalk ringed by petals that open (exposing the temporal core = weak)
+ *  and fold. Deep indigo with temporal-gold glow. */
+function buildOracle(tier: RenderTier): THREE.Group {
+  const body = metal(0x2a2440, tier, 0.4, 0.5); // deep indigo
+  const dark = metal(0x161228, tier, 0.45, 0.45);
+  const glow = accent(0xffd98a, tier, 2.0); // temporal gold
+  const root = new THREE.Group();
+  const cy = 1.9;
+
+  const torso = new THREE.Group();
+  torso.position.y = cy;
+  torso.add(capsuleY(0.16, 0.9, body, 0, 0, 0)); // slim stalk
+
+  // Temporal core (exposed when the petals open).
+  const core = new THREE.Group();
+  core.position.y = 0.2;
+  const cm = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), glow);
+  cm.name = 'core';
+  core.add(cm);
+  torso.add(core);
+
+  // Petal ring (opened/folded in the animator).
+  const petals: THREE.Group[] = [];
+  const N = 6;
+  for (let i = 0; i < N; i++) {
+    const p = new THREE.Group();
+    p.position.y = 0.2;
+    p.rotation.y = (i / N) * Math.PI * 2;
+    p.add(coneZ(0, 0.16, 0.8, i % 2 ? dark : body, 0, 0, 0.5)); // petal blade
+    p.add(box(0.04, 0.04, 0.6, glow, 0, 0, 0.5)); // glowing vein
+    petals.push(p);
+    torso.add(p);
+  }
+  root.add(torso);
+
+  root.userData.parts = { torso, core } satisfies BossParts;
+  root.userData.petals = petals;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
+/** INFESTOR — Parasitic Evolution. A writhing composite MASS of linked parasites (a
+ *  lumpy cluster of blobs + oozing tendrils) with a pulsing heart-node (weak when it
+ *  splits). Sickly ooze green. */
+function buildInfestor(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a4a1a, tier, 0.6, 0.3); // ooze
+  const dark = metal(0x222e10, tier, 0.65, 0.3);
+  const glow = accent(0x9cd84a, tier, 1.7); // sickly green
+  const root = new THREE.Group();
+
+  const torso = new THREE.Group();
+  torso.position.y = 1.1;
+  for (const [dx, dy, dz, r] of [
+    [0, 0, 0, 0.7],
+    [0.4, 0.1, 0.2, 0.42],
+    [-0.35, 0.15, -0.1, 0.46],
+    [0.1, 0.45, -0.2, 0.4],
+    [-0.2, -0.2, 0.3, 0.36],
+  ] as [number, number, number, number][]) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), r > 0.5 ? body : dark);
+    m.position.set(dx, dy, dz);
+    torso.add(m);
+  }
+  // Pulsing heart-node (weak when split).
+  const core = new THREE.Group();
+  core.position.set(0, 0.05, 0.5);
+  const heart = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), glow);
+  heart.name = 'core';
+  core.add(heart);
+  torso.add(core);
+  // Scattered parasite eyes.
+  for (const [ex, ey, ez] of [
+    [0.3, 0.2, 0.55],
+    [-0.25, 0.3, 0.5],
+    [0.05, 0.5, 0.35],
+  ] as [number, number, number][])
+    torso.add(box(0.06, 0.06, 0.06, glow, ex, ey, ez));
+  root.add(torso);
+
+  // Oozing tendrils (reuse the Kraken tentacle sway).
+  const tentacles: THREE.Group[] = [];
+  const N = 5;
+  for (let i = 0; i < N; i++) {
+    const tt = new THREE.Group();
+    tt.rotation.y = (i / N) * Math.PI * 2;
+    tt.position.y = 0.6;
+    let seg: THREE.Group = tt;
+    let r = 0.14;
+    for (let k = 0; k < 3; k++) {
+      const s = new THREE.Group();
+      s.position.set(0, -0.1, 0.28);
+      s.rotation.x = 0.55;
+      s.add(box(r, r, 0.3, k % 2 ? dark : body, 0, 0, 0.15));
+      seg.add(s);
+      seg = s;
+      r *= 0.75;
+    }
+    seg.add(box(0.06, 0.06, 0.16, glow, 0, 0, 0.1));
+    tentacles.push(tt);
+    root.add(tt);
+  }
+
+  root.userData.parts = { torso, core } satisfies BossParts;
+  root.userData.tentacles = tentacles;
+  root.userData.bodyMats = [body, dark];
+  return root;
+}
+
 /** Build the 3D model for a boss. */
 export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | null {
   if (kind === 'xeno') return buildXenomorph(tier);
@@ -599,5 +708,7 @@ export function buildBossModel(kind: BossKind, tier: RenderTier): THREE.Group | 
   if (kind === 'oblivion') return buildOblivion(tier);
   if (kind === 'colossus') return buildColossus(tier);
   if (kind === 'chimera') return buildChimera(tier);
+  if (kind === 'oracle') return buildOracle(tier);
+  if (kind === 'infestor') return buildInfestor(tier);
   return null;
 }

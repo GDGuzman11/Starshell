@@ -41,7 +41,13 @@ export type MinionKind =
   | 'fabricator'
   | 'splice'
   | 'genepod'
-  | 'regenerator';
+  | 'regenerator'
+  | 'echo'
+  | 'mote'
+  | 'seer'
+  | 'spawnling'
+  | 'host'
+  | 'latcher';
 
 export interface MinionDef {
   hp: number;
@@ -93,6 +99,14 @@ export const MINIONS: Record<MinionKind, MinionDef> = {
   splice: { hp: 70, speedMul: 2.0, scale: 1.0, melee: 12, ranged: 0, color: 0x7a2a5a }, // fast mutant melee
   genepod: { hp: 180, speedMul: 0.3, scale: 1.2, melee: 0, ranged: 13, color: 0x5a2a4a }, // adaptive spitter/turret
   regenerator: { hp: 150, speedMul: 0.8, scale: 1.2, melee: 0, ranged: 10, color: 0x6a3a5a }, // grafts flesh (heals allies)
+  // Oracle choir (temporal gold) — time-entities
+  echo: { hp: 65, speedMul: 1.4, scale: 1.2, melee: 0, ranged: 12, color: 0x2a2440 }, // time-clone (ranged)
+  mote: { hp: 90, speedMul: 0.3, scale: 0.9, melee: 0, ranged: 9, color: 0x3a3458 }, // slow-field emitter
+  seer: { hp: 130, speedMul: 0.7, scale: 1.15, melee: 0, ranged: 11, color: 0x4a4030 }, // marks you → aim buff
+  // Infestor brood (ooze green) — parasites
+  spawnling: { hp: 45, speedMul: 2.1, scale: 0.85, melee: 10, ranged: 0, color: 0x3a4a1a }, // rush + infect
+  host: { hp: 120, speedMul: 0.9, scale: 1.3, melee: 20, ranged: 0, color: 0x2e3a18 }, // bursts into spawn (bomber)
+  latcher: { hp: 80, speedMul: 1.6, scale: 0.9, melee: 8, ranged: 0, color: 0x5a6a2a }, // attaches → heals boss
 };
 
 const GREEN = 0x6aff7a;
@@ -105,6 +119,8 @@ const CRYSTAL = 0x7fe8ff;
 const VOIDV = 0xc98bff;
 const HAZARD = 0xff8a3a;
 const FLESH = 0xff5ac8;
+const TEMPORAL = 0xffd98a;
+const OOZE = 0x9cd84a;
 
 /** Tiny low-crawling swarmer: flat dark body, sharp legs, green eyes. */
 function buildBroodling(tier: RenderTier): THREE.Group {
@@ -745,6 +761,130 @@ function buildRegenerator(tier: RenderTier): THREE.Group {
   return root;
 }
 
+/** Oracle Echo: a translucent floating time-clone — a small fractal bud (ranged). */
+function buildEcho(tier: RenderTier): THREE.Group {
+  const body = wraith(0x2a2440, 0.4, 0xffd98a);
+  const glow = accent(TEMPORAL, tier, 1.9);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 1.1; // floats
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), body));
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), glow));
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    core.add(coneZ(0, 0.06, 0.34, body, Math.cos(a) * 0.22, 0, Math.sin(a) * 0.22)); // petal buds
+  }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Oracle Mote: a low hovering slow-field emitter — a ringed lantern. */
+function buildMote(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a3458, tier, 0.4, 0.5);
+  const glow = accent(TEMPORAL, tier, 2.0);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.9; // hovers
+  core.add(capsuleY(0.16, 0.14, body, 0, 0, 0)); // lantern body
+  core.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), glow)); // glow heart
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 6, 20), glow);
+  ring.rotation.x = Math.PI * 0.5;
+  core.add(ring);
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Oracle Seer: a tall robed marker with a glowing single eye (buffs the choir's aim). */
+function buildSeer(tier: RenderTier): THREE.Group {
+  const body = metal(0x4a4030, tier, 0.5, 0.4);
+  const dark = metal(0x28221a, tier, 0.55, 0.4);
+  const glow = accent(TEMPORAL, tier, 2.0);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.5;
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.4, 1.0, 7), body); // upright robe (wide base)
+  robe.position.y = 0.1;
+  core.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), dark);
+  head.position.y = 0.7;
+  core.add(head);
+  core.add(box(0.16, 0.16, 0.1, glow, 0, 0.72, 0.16)); // single eye
+  root.add(core);
+  root.userData.bodyMats = [body, dark];
+  root.userData.core = core;
+  return root;
+}
+
+/** Infestor Spawnling: a tiny fast parasite with a snapping maw (rush + infect). */
+function buildSpawnling(tier: RenderTier): THREE.Group {
+  const body = metal(0x3a4a1a, tier, 0.55, 0.3);
+  const glow = accent(OOZE, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.3;
+  core.add(capsuleZ(0.16, 0.24, body, 0, 0, 0)); // little body
+  core.add(coneZ(0.12, 0, 0.2, glow, 0, 0, 0.28)); // maw
+  for (const sx of [-1, 1])
+    for (const sz of [-0.1, 0.1]) {
+      const leg = box(0.03, 0.2, 0.03, body, sx * 0.14, -0.1, sz);
+      leg.rotation.z = sx * 0.6;
+      core.add(leg);
+    }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Infestor Host: a bloated husk swollen with spawn (bursts on contact). */
+function buildHost(tier: RenderTier): THREE.Group {
+  const body = metal(0x2e3a18, tier, 0.6, 0.3);
+  const glow = accent(OOZE, tier, 1.9);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.7;
+  core.add(new THREE.Mesh(new THREE.SphereGeometry(0.44, 10, 8), body)); // bloated body
+  for (const [ex, ey, ez] of [
+    [0.18, 0.1, 0.34],
+    [-0.16, 0.2, 0.32],
+    [0.02, 0.32, 0.3],
+    [0.24, -0.12, 0.26],
+  ] as [number, number, number][])
+    core.add(box(0.09, 0.09, 0.09, glow, ex, ey, ez)); // glowing pustules
+  root.add(core);
+  for (const sx of [-1, 1]) root.add(box(0.09, 0.4, 0.1, body, sx * 0.16, 0.2, 0)); // stubby legs
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
+/** Infestor Latcher: a flat clinging parasite with a barbed sucker (heals the boss). */
+function buildLatcher(tier: RenderTier): THREE.Group {
+  const body = metal(0x5a6a2a, tier, 0.5, 0.3);
+  const glow = accent(OOZE, tier, 1.7);
+  const root = new THREE.Group();
+  const core = new THREE.Group();
+  core.position.y = 0.3;
+  core.add(capsuleZ(0.16, 0.3, body, 0, 0, 0)); // flat body
+  core.add(coneZ(0.14, 0, 0.22, glow, 0, 0, 0.28)); // barbed sucker
+  core.add(box(0.04, 0.03, 0.05, glow, -0.08, 0.06, 0.1)); // eyes
+  core.add(box(0.04, 0.03, 0.05, glow, 0.08, 0.06, 0.1));
+  for (const sx of [-1, 1])
+    for (const sz of [-0.12, 0.12]) {
+      const leg = box(0.03, 0.22, 0.03, body, sx * 0.15, -0.09, sz);
+      leg.rotation.z = sx * 0.7;
+      core.add(leg);
+    }
+  root.add(core);
+  root.userData.bodyMats = [body];
+  root.userData.core = core;
+  return root;
+}
+
 export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Group {
   if (kind === 'broodling') return buildBroodling(tier);
   if (kind === 'spitter') return buildSpitter(tier);
@@ -775,6 +915,12 @@ export function buildMinionModel(kind: MinionKind, tier: RenderTier): THREE.Grou
   if (kind === 'splice') return buildSplice(tier);
   if (kind === 'genepod') return buildGenepod(tier);
   if (kind === 'regenerator') return buildRegenerator(tier);
+  if (kind === 'echo') return buildEcho(tier);
+  if (kind === 'mote') return buildMote(tier);
+  if (kind === 'seer') return buildSeer(tier);
+  if (kind === 'spawnling') return buildSpawnling(tier);
+  if (kind === 'host') return buildHost(tier);
+  if (kind === 'latcher') return buildLatcher(tier);
   return buildSentinel(tier);
 }
 

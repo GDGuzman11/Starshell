@@ -90,7 +90,7 @@ export function hurtEnemy(e: Enemy, amount: number): void {
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
-export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion' | 'colossus' | 'chimera';
+export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion' | 'colossus' | 'chimera' | 'oracle' | 'infestor';
 export interface BossDef {
   name: string;
   health: number;
@@ -135,6 +135,12 @@ export const BOSSES: Record<BossKind, BossDef> = {
   // CHIMERA — Adaptive Bio-Weapon: fast, aggressive. Dash-slashes in, spine-volleys, and
   // periodically MUTATES (genome sac exposed = weak). Reconfigures relentlessly.
   chimera: { name: 'CHIMERA', health: 4600, scale: 3.0, radius: 1.7, meleeRange: 5, meleeDmg: 22, meleeRate: 0.6, rangeDmg: 14, rangeRate: 0.45, acc: 0.84, color: 0xff5ac8 },
+  // ORACLE — Reality & Time: a floating fractal flower. Unfolds (core exposed = weak) to
+  // fire convergence beams + a time-echo second bolt; rewinds a wounded ally to full.
+  oracle: { name: 'ORACLE', health: 4400, scale: 3.2, radius: 1.5, meleeRange: 4, meleeDmg: 16, meleeRate: 0.9, rangeDmg: 17, rangeRate: 0.5, acc: 0.9, color: 0xffd98a },
+  // INFESTOR — Parasitic Evolution: an oozing swarm-mass. Parasite-spray cones, splits
+  // (heart exposed = weak) with a knockback, and regenerates while its brood lives.
+  infestor: { name: 'INFESTOR', health: 5200, scale: 3.2, radius: 2.1, meleeRange: 5, meleeDmg: 22, meleeRate: 0.7, rangeDmg: 15, rangeRate: 0.7, acc: 0.8, color: 0x9cd84a },
 };
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
@@ -631,6 +637,16 @@ export function spawnBossMinions(lvl: Level3D, kind: BossKind, rand: () => numbe
     (['splice', 'splice', 'splice', 'genepod', 'genepod', 'regenerator', 'splice'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
     (['splice', 'splice', 'genepod'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
     (['splice', 'regenerator', 'genepod'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'oracle') {
+    // ORACLE CHOIR — Echoes fire time-clones, Motes emit slow-fields, Seers mark you for the choir.
+    (['echo', 'echo', 'echo', 'mote', 'mote', 'seer', 'seer'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['echo', 'mote', 'seer'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['echo', 'echo', 'seer'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
+  } else if (kind === 'infestor') {
+    // INFESTOR BROOD — Spawnlings rush-infect, Hosts burst into spawn, Latchers drain to heal it.
+    (['spawnling', 'spawnling', 'spawnling', 'spawnling', 'host', 'host', 'latcher'] as MinionKind[]).forEach((mk, i) => out.push(makeMinion(lvl, mk, i, rand)));
+    (['spawnling', 'spawnling', 'latcher'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.6)));
+    (['host', 'spawnling', 'latcher'] as MinionKind[]).forEach((mk, i) => out.push(dormantAt(makeMinion(lvl, mk, i, rand), 0.3)));
   }
   return out;
 }
@@ -945,8 +961,12 @@ export function updateEnemies(
                         ? 0xff8a3a
                         : e.minion === 'splice' || e.minion === 'genepod' || e.minion === 'regenerator'
                           ? 0xff5ac8
-                          : 0x6aff7a;
-        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'broodworm' || e.minion === 'leech' || e.minion === 'shard' || e.minion === 'shade' || e.minion === 'devourer' || e.minion === 'splice') {
+                          : e.minion === 'echo' || e.minion === 'mote' || e.minion === 'seer'
+                            ? 0xffd98a
+                            : e.minion === 'spawnling' || e.minion === 'host' || e.minion === 'latcher'
+                              ? 0x9cd84a
+                              : 0x6aff7a;
+        if (e.minion === 'broodling' || e.minion === 'crawler' || e.minion === 'rampart' || e.minion === 'grazer' || e.minion === 'broodworm' || e.minion === 'leech' || e.minion === 'shard' || e.minion === 'shade' || e.minion === 'devourer' || e.minion === 'splice' || e.minion === 'spawnling' || e.minion === 'latcher') {
           // Rush + erratic weave; bite/ram on contact. (Ramparts advance as mobile cover;
           // Grazers/Shards/Shades/Devourers are fast chargers; Leeches drain to heal the boss.)
           const jitter = Math.sin(now * 0.006 + e.wander) * 0.45;
@@ -956,7 +976,7 @@ export function updateEnemies(
             e.fireCd = e.minion === 'grazer' || e.minion === 'shard' || e.minion === 'splice' ? 0.6 : 0.8;
             damage += md.melee;
             tracers.push({ from: [e.x, e.y + 0.5, e.z], to: peye, color: mc });
-            if (e.minion === 'leech') {
+            if (e.minion === 'leech' || e.minion === 'latcher') {
               const bossE = enemies.find((b) => b.boss && b.health > 0 && !b.dormant);
               if (bossE) bossE.health = Math.min(bossE.maxHealth, bossE.health + 30); // drain → heal the boss
             }
@@ -976,12 +996,15 @@ export function updateEnemies(
           e.minion === 'artillery' ||
           e.minion === 'fabricator' ||
           e.minion === 'genepod' ||
-          e.minion === 'regenerator'
+          e.minion === 'regenerator' ||
+          e.minion === 'echo' ||
+          e.minion === 'mote' ||
+          e.minion === 'seer'
         ) {
           // STANDOFF RANGED SUPPORT (multi-faction). Sporeback heals the boss; Grower/
           // Fabricator/Regenerator repair the most-wounded ally; Wisp clouds your vision;
-          // Rift pulls you in (gravity well); Artillery lobs arc shells; the rest are
-          // near-stationary gunners (Maw-turret / Resonator / Warframe / Gene-pod).
+          // Rift pulls you in (gravity well); Artillery lobs arc shells; Seer marks you
+          // (buffs the squad's aim); the rest are near-stationary gunners.
           if (dist < 12) moveEnemy(e, lvl, -tx + perpX * e.side, -tz + perpZ * e.side, P.speed * md.speedMul * aggro, dt, R, grid);
           else if (dist > 22) moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
           else moveEnemy(e, lvl, perpX * e.side, perpZ * e.side, P.speed * md.speedMul * 0.6, dt, R, grid);
@@ -1012,6 +1035,8 @@ export function updateEnemies(
               e.track = 0;
               pushPlayer(player, e.x - player.x, e.z - player.z, 5); // gravity well: drag inward
             }
+          } else if (e.minion === 'seer' && sees[i]) {
+            squad.buffUntil = now + 200; // marks the player → the choir's aim is buffed
           }
           if (sees[i] && e.fireCd <= 0 && dist < 28) {
             e.fireCd = e.minion === 'wisp' ? 1.4 : e.minion === 'resonator' ? 1.2 : e.minion === 'artillery' ? 2.2 : 1.6;
@@ -1024,8 +1049,8 @@ export function updateEnemies(
               bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [tgt.x - e.x, player.y + 1 - my, tgt.z - e.z], speed: 26, dmg: md.ranged, color: mc, splash: 0 });
             }
           }
-        } else if (e.minion === 'spore') {
-          // VOID SPORE bomber: drift in slowly, then self-destruct in a burst.
+        } else if (e.minion === 'spore' || e.minion === 'host') {
+          // BOMBER (Void Spore / Infestor Host): drift in slowly, then burst on contact.
           moveEnemy(e, lvl, tx, tz, P.speed * md.speedMul * aggro, dt, R, grid);
           if (dist < 2.8) {
             damage += md.melee;
@@ -1154,6 +1179,15 @@ export function updateEnemies(
             speedMul = 0.75;
           }
           if (e.boss === 'monolith') speedMul = 0.12; // LIVING CRYSTAL: near-stationary artillery
+          if (e.boss === 'infestor') {
+            // SWARM-MASS: a slow oozing advance that floods toward the player.
+            const dbx = tgtB.x - e.x;
+            const dbz = tgtB.z - e.z;
+            const dbl = Math.hypot(dbx, dbz) || 1;
+            wx = dbx / dbl + (-dbz / dbl) * brain.strafeSign * 0.15;
+            wz = dbz / dbl + (dbx / dbl) * brain.strafeSign * 0.15;
+            speedMul = 0.62;
+          }
           if (e.boss === 'colossus') {
             // TITAN: relentless advance in mobile mode; locks stationary in siege mode.
             if (brain.mode === 1) speedMul = 0.05;
@@ -1404,6 +1438,66 @@ export function updateEnemies(
               brain.volleyCd = ((desp ? 2.5 : 4) + Math.random() * 1.5) * eAgg;
               const my = e.y + bd.scale * 0.6;
               for (let g = -1; g <= 1; g++) bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x - e.x + g * 3, player.y + 1 - my, player.z - e.z + g * 3], speed: 34, dmg: bd.rangeDmg, color: 0xff5ac8, splash: 0 });
+            }
+          }
+          // ORACLE: UNFOLD (petals open, core exposed = weak) to fire a CONVERGENCE beam +
+          // a TIME-ECHO lead bolt; between salvos it REWINDS a wounded ally to full.
+          if (e.boss === 'oracle' && sees[i]) {
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0) {
+              brain.mode = brain.mode === 1 ? 0 : 1;
+              brain.abilityCd = (brain.mode === 1 ? 2.6 : desp ? 3 : 4.5) * eAgg;
+              if (brain.mode === 1) e.weakUntil = now + 2600;
+            }
+            if (brain.mode === 1) {
+              brain.volleyCd -= dt;
+              if (brain.volleyCd <= 0 && dist < 55) {
+                brain.volleyCd = (desp ? 0.7 : 1.1) * eAgg;
+                const my = e.y + bd.scale * 0.7;
+                const tt = dist / 48;
+                bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x - e.x, player.y + 1 - my, player.z - e.z], speed: 50, dmg: bd.rangeDmg, color: 0xffd98a, splash: 0 });
+                bossShots.push({ kind: 'bolt', x: e.x, y: my, z: e.z, dir: [player.x + pvx * tt - e.x, player.y + 1 - my, player.z + pvz * tt - e.z], speed: 44, dmg: Math.round(bd.rangeDmg * 0.7), color: 0xffe9b0, splash: 0 });
+              }
+            }
+            brain.fogCd -= dt;
+            if (brain.fogCd <= 0) {
+              brain.fogCd = desp ? 4 : 6;
+              let best: Enemy | null = null;
+              let hurt = 0;
+              for (const a of enemies) {
+                if (!a.minion || a.health <= 0 || a.dormant) continue;
+                const miss = a.maxHealth - a.health;
+                if (miss > hurt) {
+                  hurt = miss;
+                  best = a;
+                }
+              }
+              if (best) best.health = best.maxHealth; // rewind to full
+            }
+          }
+          // INFESTOR: PARASITE-SPRAY cone of acid, periodic SPLIT (heart exposed = weak +
+          // knockback), and ASSIMILATE — regenerates while its brood is alive.
+          if (e.boss === 'infestor' && sees[i]) {
+            brain.volleyCd -= dt;
+            if (brain.volleyCd <= 0 && dist < 34) {
+              brain.volleyCd = ((desp ? 2 : 3.2) + Math.random() * 1.5) * eAgg;
+              const my = e.y + bd.scale * 0.6;
+              const base = Math.atan2(player.z - e.z, player.x - e.x);
+              for (let g = -1; g <= 1; g++) {
+                const ca = base + g * 0.24;
+                bossShots.push({ kind: 'acid', x: e.x, y: my, z: e.z, dir: [Math.cos(ca) * dist, player.y + 1 - my, Math.sin(ca) * dist], speed: 22, dmg: Math.round(bd.rangeDmg * 0.8), color: 0x9cd84a, splash: 2.0 });
+              }
+            }
+            brain.abilityCd -= dt;
+            if (brain.abilityCd <= 0 && dist < 16) {
+              brain.abilityCd = ((desp ? 4 : 6) + Math.random() * 2) * eAgg;
+              bossTelegraphs.push({ kind: 'slam', x: e.x, z: e.z, radius: 8, delay: 0.7 });
+              e.weakUntil = now + 2000;
+            }
+            brain.fogCd -= dt;
+            if (brain.fogCd <= 0) {
+              brain.fogCd = 1;
+              if (enemies.some((a) => a.minion && a.health > 0 && !a.dormant)) e.health = Math.min(e.maxHealth, e.health + 12); // feed on the brood
             }
           }
           if (dist < bd.meleeRange) {

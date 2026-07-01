@@ -57,6 +57,13 @@ export function poseBossModel(
       a.rotation.z = ((a.userData.baseZ ??= a.rotation.z) as number) + Math.sin(t * (1.5 + i * 0.2) + i) * (moving ? 0.3 : 0.18);
     }
 
+  // ORACLE: petals fold up when guarded, splay open (exposing the core) when weak.
+  const petals = model.userData.petals as THREE.Group[] | undefined;
+  if (petals) {
+    const openAmt = weak ? 1 : 0.1;
+    for (let i = 0; i < petals.length; i++) petals[i].rotation.x = -1.05 + openAmt * 0.9 + Math.sin(t * 1.4 + i) * 0.04;
+  }
+
   // Restless tail (Xenomorph) + head sway.
   if (parts.tail) {
     parts.tail.rotation.y = Math.sin(t * 1.1) * 0.3;

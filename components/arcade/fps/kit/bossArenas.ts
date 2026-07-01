@@ -143,6 +143,28 @@ export function bossArenaChimera(seed: number): LevelLayout {
   return bossArena({ theme: 'jungle', size: 172, placements: p, drops: 16 }, seed);
 }
 
+/** ORACLE arena — a sparse MOON expanse: scattered ruins + watchtower platforms to hold,
+ *  long open sightlines for its convergence beams, drops on the safe platforms so you
+ *  rotate through cover. */
+export function bossArenaOracle(seed: number): LevelLayout {
+  const p: Placement[] = [];
+  for (const [gx, gz] of [[-4, -4], [4, 4], [-4, 4], [4, -4]]) p.push({ module: 'watchtower', gx, gz, rot: 0 });
+  for (const [gx, gz] of [[-2, 0], [2, 0], [0, -3], [0, 3], [-3, 2], [3, -2]]) p.push({ module: 'ruin', gx, gz, rot: 0 });
+  for (const [gx, gz, rot] of [[-2, -2, 90], [2, 2, 90]] as [number, number, Rot][]) p.push({ module: 'coverwall', gx, gz, rot });
+  return bossArena({ theme: 'moon', size: 186, placements: p, drops: 14 }, seed);
+}
+
+/** INFESTOR arena — a dense JUNGLE of functional buildings it infests + rubble
+ *  everywhere; heavy drops so you keep moving ahead of the flood. */
+export function bossArenaInfestor(seed: number): LevelLayout {
+  const p = scatterBuildingsAndWalls(176, seed);
+  const occ = new Set(p.map((q) => key(q.gx, q.gz)));
+  for (const [gx, gz] of [[-2, -1], [2, 1], [-1, 2], [1, -2], [0, 3], [3, 0]] as [number, number][]) {
+    if (!occ.has(key(gx, gz))) p.push({ module: 'rubble', gx, gz, rot: 0 });
+  }
+  return bossArena({ theme: 'jungle', size: 176, placements: p, drops: 16, stations: 3 }, seed);
+}
+
 /** Functional buildings + loose cover walls scattered across a boss arena, leaving the
  *  centre + spawns open for the fight. A default terrain until a boss gets bespoke one. */
 export function scatterBuildingsAndWalls(size: number, seed: number): Placement[] {
