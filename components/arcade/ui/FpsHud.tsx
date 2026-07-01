@@ -63,14 +63,11 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
             px = (px / m) * RAD;
             py = (py / m) * RAD;
           }
-          // Pickups are small period dots in colours that contrast the red enemies:
-          // white = ammo, gold = shield, green = health.
-          const pickupColor = r.kind === 'ammo' ? '#ffffff' : r.kind === 'shield' ? '#ffd24a' : '#4dff7a';
           return (
             <div
               key={i}
-              className={`absolute rounded-full ${r.kind ? 'h-1 w-1' : r.boss ? 'h-2 w-2 bg-[#ff9a3a]' : 'h-1.5 w-1.5 bg-[#ff5d6e]'}`}
-              style={{ left: `calc(50% + ${px}px)`, top: `calc(50% + ${py}px)`, transform: 'translate(-50%,-50%)', backgroundColor: r.kind ? pickupColor : undefined }}
+              className={`absolute rounded-full ${r.boss ? 'h-2 w-2 bg-[#ff9a3a]' : 'h-1.5 w-1.5 bg-[#ff5d6e]'}`}
+              style={{ left: `calc(50% + ${px}px)`, top: `calc(50% + ${py}px)`, transform: 'translate(-50%,-50%)' }}
             />
           );
         })}

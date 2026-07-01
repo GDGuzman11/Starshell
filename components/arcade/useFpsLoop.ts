@@ -1643,14 +1643,7 @@ export function useFpsLoop(
           snap.shotsFired = g.shotsFired;
           snap.shotsHit = g.shotsHit;
           snap.dmgDealt = g.dmgDealt;
-          // Ammo / shield / health pickups on the radar (colour-coded dots). Hidden
-          // while respawning.
-          for (const pk of pickups) {
-            if (!pk.mesh.visible) continue;
-            const dx = pk.x - p.x;
-            const dz = pk.z - p.z;
-            snap.radar.push({ x: dx * cosY - dz * sinY, z: -dx * sinY - dz * cosY, boss: false, kind: pk.kind });
-          }
+          // (Pickups are not shown on the radar — the in-world icon is enough to find them.)
           onSnapshot({ ...snap });
         }
       }
