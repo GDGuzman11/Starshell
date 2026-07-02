@@ -19,6 +19,7 @@ import { buildChest } from './chests';
 import { buildShoulders } from './shoulders';
 import { buildBackpack } from './backpacks';
 import { buildBoot } from './boots';
+import { buildLimb } from './limbs';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -73,9 +74,8 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'limb': {
-      g.add(box(0.2 * b, 0.24 * b, 0.2 * b, body, 0, 0, 0)); // limb shell
-      for (let i = 0; i < spec.plates; i++) g.add(box(0.22 * b, 0.03, 0.22 * b, dark, 0, 0.08 * b - i * 0.06, 0));
-      if (trim) glowStrip(0.02, 0.16 * b, 0.02, 0.11 * b, 0, 0.02);
+      // Art-directed per-division limb geometry (Armor Overhaul, slice 6).
+      g.add(buildLimb(spec, rt));
       break;
     }
     case 'cap': {
