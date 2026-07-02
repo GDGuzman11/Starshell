@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { GUNS, PRIMARIES, SECONDARIES, SIDEARMS, THROWABLES, gunById, UNLOCK_GATE_LEVEL, type GunDef, type ThrowKind } from '../fps/weapons';
 import { GunPreview } from './GunPreview';
-import { loadArsenal, saveArsenal, isWeaponUnlocked, unlockWeapon, type ArsenalSave } from '../fps/arsenal/store';
+import { loadArsenal, saveArsenal, isWeaponUnlocked, unlockWeapon, equippedParts, type ArsenalSave } from '../fps/arsenal/store';
+import { applyEngineering } from '../fps/arsenal/parts';
 import { unlockWeaponPrice } from '../fps/arsenal/economy';
 
 // Normalization bounds for the stat bars (computed once over the whole arsenal).
@@ -52,6 +53,9 @@ export function FpsLoadout({
   const fg = GUNS.find((g) => g.id === focus);
   const ft = !fg ? THROWABLES.find((t) => t.id === focus) : undefined;
   const gateOpen = best >= UNLOCK_GATE_LEVEL;
+  // Installed (bought + equipped) components for the previewed gun → show on the model + stat bars.
+  const focusEquipped = useMemo(() => (fg ? equippedParts(save, focus, fg.family) : []), [save, focus, fg]);
+  const enh = fg ? applyEngineering(fg, focusEquipped) : null;
 
   // Select a gun; if it's locked, unlock it first (needs level 5 + enough AstroDiamonds).
   const tryPick = (set: (id: string) => void) => (id: string) => {
@@ -87,20 +91,21 @@ export function FpsLoadout({
       <div className="mt-2 flex min-h-0 flex-1 gap-3">
         <div className="flex w-[42%] shrink-0 flex-col sm:w-[44%]">
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
-            <GunPreview gunId={focus} />
+            <GunPreview gunId={focus} equipped={fg ? focusEquipped : undefined} />
             <div className="pointer-events-none absolute bottom-1 left-2">
               <p className="font-pixel text-[9px] text-white sm:text-[12px]">{fg?.name ?? ft?.name}</p>
               <p className="font-pixel text-[6px] uppercase text-white/45 sm:text-[8px]">{fg ? fg.family : ft ? THROW_SUB[ft.kind] : ''}</p>
             </div>
           </div>
           <div className="mt-1.5 shrink-0 space-y-1">
-            {fg && (
+            {fg && enh && (
               <>
-                <StatBar label="POWER" pct={Math.sqrt(fg.dmg / DMG_MAX)} value={`${fg.dmg}`} color="#ff5d6e" />
-                <StatBar label="MAG" pct={fg.mag / MAG_MAX} value={`${fg.mag}`} color="#7fdfff" />
-                <StatBar label="RELOAD" pct={RELOAD_MIN / fg.reload} value={`${fg.reload}s`} color="#aef5c8" />
+                <StatBar label="POWER" basePct={Math.sqrt(fg.dmg / DMG_MAX)} enhPct={Math.sqrt(enh.dmg / DMG_MAX)} value={`${enh.dmg}`} delta={enh.dmg > fg.dmg ? `+${enh.dmg - fg.dmg}` : ''} color="#ff5d6e" />
+                <StatBar label="MAG" basePct={fg.mag / MAG_MAX} enhPct={enh.mag / MAG_MAX} value={`${enh.mag}`} delta={enh.mag > fg.mag ? `+${enh.mag - fg.mag}` : ''} color="#7fdfff" />
+                <StatBar label="RELOAD" basePct={RELOAD_MIN / fg.reload} enhPct={RELOAD_MIN / enh.reload} value={`${enh.reload}s`} delta={enh.reload < fg.reload ? `-${(fg.reload - enh.reload).toFixed(2)}s` : ''} color="#7ad0ff" />
               </>
             )}
+            {focusEquipped.length > 0 && <p className="font-pixel text-[5px] text-[#aef5c8]/70 sm:text-[6px]">▮ base · ▮ engineered (+{focusEquipped.length} installed)</p>}
             {ft && (
               <div className="flex items-center justify-between font-pixel text-[7px] text-white/55 sm:text-[8px]">
                 <span>CARRY ×{ft.count}</span>
@@ -136,14 +141,25 @@ export function FpsLoadout({
   );
 }
 
-function StatBar({ label, pct, value, color }: { label: string; pct: number; value: string; color: string }) {
+/** A stat bar whose base value is `color`, with the component enhancement drawn as a
+ *  bright-green EXTENSION on the same track (or a dim segment if a tradeoff reduced it). */
+function StatBar({ label, basePct, enhPct, value, delta, color }: { label: string; basePct: number; enhPct: number; value: string; delta: string; color: string }) {
+  const base = clamp01(basePct);
+  const enh = clamp01(enhPct);
+  const lo = Math.min(base, enh);
+  const ext = Math.max(0, enh - base); // improvement beyond base
+  const down = enh < base - 0.001; // a tradeoff shrank it
   return (
     <div className="flex items-center gap-2">
       <span className="w-12 shrink-0 font-pixel text-[6px] uppercase text-white/45 sm:text-[7px]">{label}</span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.round(clamp01(pct) * 100)}%`, backgroundColor: color }} />
+      <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full transition-[width] duration-300" style={{ width: `${lo * 100}%`, backgroundColor: down ? '#8a8f9a' : color }} />
+        {ext > 0 && <div className="h-full transition-[width] duration-300" style={{ width: `${ext * 100}%`, backgroundColor: '#aef5c8' }} />}
       </div>
-      <span className="w-9 shrink-0 text-right font-pixel text-[7px] text-white sm:text-[8px]">{value}</span>
+      <span className="w-16 shrink-0 text-right font-pixel text-[7px] text-white sm:text-[8px]">
+        {value}
+        {delta && <span className="text-[#aef5c8]"> {delta}</span>}
+      </span>
     </div>
   );
 }

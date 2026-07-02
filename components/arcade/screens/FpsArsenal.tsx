@@ -103,7 +103,7 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
       <div className="flex flex-1 flex-col gap-2 lg:flex-row">
         {/* left: live preview + familiarity + service record */}
         <div className="flex flex-col gap-2 lg:w-[42%]">
-          <div className="relative h-52 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] sm:h-64">
+          <div className="relative h-52 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f] sm:h-64">
             <GunPreview gunId={weaponId} equipped={equipped} previewPart={sel} />
             {!hasSlots(weaponId) && <p className="absolute bottom-1 left-0 right-0 text-center text-[6px] text-white/35">visible attachment coming to this weapon</p>}
           </div>
