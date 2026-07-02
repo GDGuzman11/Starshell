@@ -316,21 +316,72 @@ const SLOT_ANCHORS: Record<string, Partial<Record<SlotKind, Anchor>>> = {
   },
 };
 
-/** True if a weapon has been slot-refactored (its parts visibly attach). */
-export function hasSlots(weaponId: string): boolean {
-  return !!SLOT_ANCHORS[weaponId];
+/** Every weapon now supports visible attachment (bespoke anchors where authored, else a
+ *  generic bbox-derived fallback), so this is always true. */
+export function hasSlots(_weaponId: string): boolean {
+  return true;
+}
+
+/** Generic anchor for a slot, derived from the base model's bounding box, so ANY weapon
+ *  without a bespoke SLOT_ANCHORS entry still mounts parts in sensible places (additive —
+ *  no base-mesh hiding). Convention: −Z is the muzzle/front, +Z the rear, +Y up. */
+function defaultAnchor(slot: SlotKind, b: THREE.Box3): Anchor {
+  const cx = (b.min.x + b.max.x) / 2;
+  const cy = (b.min.y + b.max.y) / 2;
+  const cz = (b.min.z + b.max.z) / 2;
+  const front = b.min.z;
+  const rear = b.max.z;
+  const top = b.max.y;
+  const bot = b.min.y;
+  const side = b.max.x;
+  const P = (x: number, y: number, z: number): Anchor => ({ pos: [x, y, z] });
+  switch (slot) {
+    case 'barrel':
+    case 'tube':
+    case 'emitter':
+    case 'warhead':
+      return P(cx, cy, front - 0.02);
+    case 'optic':
+    case 'scope':
+    case 'sight':
+    case 'targeting':
+      return P(cx, top + 0.02, cz);
+    case 'magazine':
+    case 'feed':
+      return P(cx, bot - 0.02, cz + 0.04);
+    case 'rear':
+    case 'stock':
+    case 'reactor':
+      return P(cx, cy, rear + 0.03);
+    case 'cooling':
+      return P(side + 0.02, cy + 0.03, cz - 0.04);
+    case 'core':
+      return P(cx, cy, cz + (rear - cz) * 0.5);
+    case 'stabilizer':
+    case 'stability':
+      return P(cx, bot - 0.01, cz);
+    case 'bolt':
+      return P(side + 0.02, cy + 0.02, cz + 0.05);
+    case 'grip':
+      return P(cx, bot - 0.03, cz + 0.08);
+    default:
+      return P(cx, cy, cz);
+  }
 }
 
 /** Build a weapon model with the player's EQUIPPED engineering parts overlaid at their
- *  slot anchors (hiding the base pieces they replace). Weapons without a slot map get
- *  their unmodified base model. */
+ *  slot anchors (hiding the base pieces they replace, where authored). Weapons without a
+ *  bespoke map still attach parts via a generic bbox-derived fallback. */
 export function buildEngineeredGun(id: string, tier: RenderTier, equipped: EngPart[]): THREE.Group {
   const g = buildGun(id, tier);
   const anchors = SLOT_ANCHORS[id];
-  if (!anchors) return g;
+  let bbox: THREE.Box3 | null = null;
   for (const part of equipped) {
-    const a = anchors[part.slot];
-    if (!a) continue;
+    let a = anchors?.[part.slot];
+    if (!a) {
+      if (!bbox) bbox = new THREE.Box3().setFromObject(g);
+      a = defaultAnchor(part.slot, bbox);
+    }
     if (a.hide) {
       const m = g.getObjectByName(a.hide);
       if (m) m.visible = false;
