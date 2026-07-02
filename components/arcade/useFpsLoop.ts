@@ -860,10 +860,17 @@ export function useFpsLoop(
             doFire = (wantShot || burstLeft.current > 0) && g.fireCd <= 0 && g.reloading <= 0 && canAmmo;
             if (doFire && gun.burst && burstLeft.current === 0) burstLeft.current = gun.burst;
           }
-          // Energy weapons vent heat + drain the overheat lockout when not firing.
+          // Energy weapons: heat climbs while the trigger is HELD (added per shot below),
+          // and vents only when you let off — NOT on the brief gaps between shots (that
+          // would cancel the gain). Overheating drains the meter over the lockout.
           if (gun.heat) {
-            if (overheat.current > 0) overheat.current -= dt;
-            if (!doFire) heat.current = Math.max(0, heat.current - dt / 2);
+            if (overheat.current > 0) {
+              overheat.current -= dt;
+              heat.current = Math.max(0, heat.current - dt / OVERHEAT_LOCK);
+              if (overheat.current <= 0) heat.current = 0;
+            } else if (!fireInput) {
+              heat.current = Math.max(0, heat.current - dt / 2);
+            }
           }
           if (doFire) {
             if (gun.heat) {
