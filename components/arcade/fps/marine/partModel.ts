@@ -13,9 +13,10 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
-import { accent, box, coneZ, cylY, cylZ, metal } from '../models/parts';
+import { accent, box, cylY, cylZ, metal } from '../models/parts';
 import { buildHelmet } from './helmets';
 import { buildChest } from './chests';
+import { buildShoulders } from './shoulders';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -65,17 +66,8 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'pauldron': {
-      for (const s of [-1, 1]) {
-        const x = s * 0.3;
-        g.add(box(0.2 * b, 0.16 * b, 0.28 * b, body, x, 0, 0)); // shoulder cap
-        g.add(box(0.22 * b, 0.05, 0.26 * b, dark, x, 0.09 * b, 0)); // ridge
-        if (spec.spikes > 1) {
-          const sp = coneZ(0.001, 0.06 * b, 0.16 * b, dark, x, 0.06 * b, 0);
-          sp.rotation.x = -0.6;
-          g.add(sp);
-        }
-        if (trim) glowStrip(0.03, 0.03, 0.2 * b, x + s * 0.1 * b, 0, 0);
-      }
+      // Art-directed per-division shoulder geometry (Armor Overhaul, slice 3).
+      g.add(buildShoulders(spec, rt));
       break;
     }
     case 'limb': {
