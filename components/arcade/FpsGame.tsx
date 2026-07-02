@@ -148,7 +148,7 @@ export function FpsGame() {
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, togglePov, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, togglePov, toggleCover, setPeek, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
   const [crouched, setCrouched] = useState(false);
   const [pov3, setPov3] = useState(false);
   const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
@@ -578,6 +578,40 @@ export function FpsGame() {
                 >
                   FIRE
                 </button>
+                {/* Cover: enter against a wall; while pinned, hold to peek/lean out or exit. */}
+                <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 gap-2">
+                  {snap.inCover ? (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Peek left"
+                        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setPeek(-1); }}
+                        onPointerUp={() => setPeek(0)}
+                        onPointerCancel={() => setPeek(0)}
+                        onPointerLeave={() => setPeek(0)}
+                        className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#7fdfff]/40 bg-[#7fdfff]/10 font-pixel text-[9px] text-[#7fdfff] backdrop-blur-sm active:bg-[#7fdfff]/25"
+                        style={{ width: 72 * cfg.btnScale, height: 56 * cfg.btnScale }}
+                      >
+                        ◂ PEEK
+                      </button>
+                      <TouchBtn onTap={() => toggleCover()} label="EXIT" color="#ff5d6e" scale={cfg.btnScale} />
+                      <button
+                        type="button"
+                        aria-label="Peek right"
+                        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setPeek(1); }}
+                        onPointerUp={() => setPeek(0)}
+                        onPointerCancel={() => setPeek(0)}
+                        onPointerLeave={() => setPeek(0)}
+                        className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#7fdfff]/40 bg-[#7fdfff]/10 font-pixel text-[9px] text-[#7fdfff] backdrop-blur-sm active:bg-[#7fdfff]/25"
+                        style={{ width: 72 * cfg.btnScale, height: 56 * cfg.btnScale }}
+                      >
+                        PEEK ▸
+                      </button>
+                    </>
+                  ) : (
+                    <TouchBtn onTap={() => toggleCover()} label="COVER" color="#ffd27a" scale={cfg.btnScale} />
+                  )}
+                </div>
                 {/* Big action buttons, opposite the joystick, clear of the aim region. */}
                 <div className={`pointer-events-none absolute bottom-4 z-40 flex flex-col gap-2 ${cfg.leftHanded ? 'left-3 items-start' : 'right-3 items-end'}`}>
                   <div className="flex gap-2">
@@ -606,7 +640,7 @@ export function FpsGame() {
             )}
             {!isTouch && (
               <p className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 font-pixel text-[6px] text-white/35">
-                CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · C CROUCH · V POV · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE (AIM A ROOFTOP RING) · LADDERS/ZIPS WALK IN
+                CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · C CROUCH · V POV · Q COVER (A/D PEEK) · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE · LADDERS/ZIPS WALK IN
               </p>
             )}
           </>
