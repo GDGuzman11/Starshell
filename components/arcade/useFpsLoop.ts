@@ -271,6 +271,9 @@ export function useFpsLoop(
     let prevEnemyXZ: { x: number; z: number }[] = [];
     let bossTexes: THREE.CanvasTexture[] = [];
     const tracers: { line: THREE.Line; geo: THREE.BufferGeometry; until: number }[] = [];
+    // Launcher rounds — fat glowing RPG shells that streak muzzle→impact (cosmetic; the
+    // hit is hitscan). Bigger + brighter than a bullet tracer so rockets read clearly.
+    const shells: { mesh: THREE.Mesh; from: Vec3; to: Vec3; born: number; dur: number; rad: number }[] = [];
     const projectiles = new ProjectileSystem(); // boss/minion projectiles (P0; spawned from P1)
     const telegraphs = new TelegraphSystem(); // ground warning decals (P0; spawned from P1)
     const bossHazards: { x: number; z: number; r: number; until: number; dps: number; mesh: THREE.Mesh; pull?: number }[] = []; // acid puddles / pull vortices
@@ -326,6 +329,8 @@ export function useFpsLoop(
       for (const g of grenades) clearMesh(g.mesh);
       for (const s of smokes) clearMesh(s.mesh);
       for (const f of flashes) clearMesh(f.mesh);
+      for (const s of shells) clearMesh(s.mesh);
+      shells.length = 0;
       for (const z of zones) clearMesh(z.mesh);
       for (const d of drops) clearGroup(d.mesh);
       for (const pk of pickups) clearGroup(pk.mesh);
@@ -886,6 +891,15 @@ export function useFpsLoop(
                 fm.position.set(ix, iy, iz);
                 world.scene.add(fm);
                 flashes.push({ mesh: fm, born: now, r: gun.splash * zoomBoost });
+                // Fat glowing RPG round streaking from the muzzle to the impact point.
+                const from: Vec3 = [eye[0] + sfx2 * 0.5, eye[1] - 0.1, eye[2] + sfz2 * 0.5];
+                const rad = 0.34 + gun.splash * 0.04; // bigger launchers fire bigger rounds
+                const sm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: gun.color, transparent: true, blending: THREE.AdditiveBlending }));
+                sm.scale.setScalar(rad);
+                sm.position.set(from[0], from[1], from[2]);
+                world.scene.add(sm);
+                const sdist = Math.hypot(ix - from[0], iy - from[1], iz - from[2]);
+                shells.push({ mesh: sm, from, to: [ix, iy, iz], born: now, dur: Math.min(0.2, 0.05 + sdist / 260), rad });
               }
               sfx.explosion();
               cueSquads(p.x, p.z);
@@ -1254,6 +1268,19 @@ export function useFpsLoop(
             }
             f.mesh.scale.setScalar(f.r * (0.3 + age * 0.9));
             (f.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - age;
+          }
+
+          // Launcher rounds: streak from muzzle to impact, pulsing, then vanish.
+          for (let i = shells.length - 1; i >= 0; i--) {
+            const s = shells[i];
+            const age = (now - s.born) / (s.dur * 1000);
+            if (age >= 1) {
+              clearMesh(s.mesh);
+              shells.splice(i, 1);
+              continue;
+            }
+            s.mesh.position.set(s.from[0] + (s.to[0] - s.from[0]) * age, s.from[1] + (s.to[1] - s.from[1]) * age, s.from[2] + (s.to[2] - s.from[2]) * age);
+            s.mesh.scale.setScalar(s.rad * (1 + Math.sin(age * Math.PI * 8) * 0.18));
           }
 
           // Drops: spin + bob, and AUTO-COLLECT on proximity. Ammo tops up every gun's
