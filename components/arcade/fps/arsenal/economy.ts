@@ -17,8 +17,10 @@ export interface PartGate {
   astro: number; // AstroDiamond cost (same as price)
 }
 
-const TIER_BASE: Record<Tier, number> = { military: 45, prototype: 240, legendary: 950 };
-const TIER_K: Record<Tier, number> = { military: 900, prototype: 2600, legendary: 5200 };
+// Legendary is pushed high on purpose: the strongest components should cost as much as a
+// gun (gun unlocks are 1200–6000 AD), so a top-tier legendary part is a real investment.
+const TIER_BASE: Record<Tier, number> = { military: 45, prototype: 240, legendary: 1100 };
+const TIER_K: Record<Tier, number> = { military: 900, prototype: 2600, legendary: 8000 };
 
 /** AstroDiamond price for a part of `tier` whose combined stat magnitude is `mag`. */
 export function priceFor(tier: Tier, mag: number): number {
