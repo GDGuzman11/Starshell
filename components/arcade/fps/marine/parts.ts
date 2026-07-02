@@ -31,6 +31,8 @@ export interface ArmorStats {
 /** Parametric geometry description — partModel.ts builds primitives from it. */
 export interface ArmorModelSpec {
   family: ArmorFamily;
+  division?: string; // identity for per-division geometry ('recruit' when undefined)
+  seed: number; // per-piece seed → distinct in-language variant
   bulk: number; // overall size factor (0.8..1.5)
   plates: number; // layered plates / detail segments
   vents: number; // vent cutouts / ribs
@@ -154,6 +156,8 @@ function buildSlot(slot: ArmorSlot): ArmorPiece[] {
       const animated = tier !== 'standard';
       const model: ArmorModelSpec = {
         family: slot.family,
+        division: slot.division ?? 'recruit',
+        seed: hashStr(`${slot.id}|${tier}|${i}|geo`),
         bulk: +(0.85 + r() * 0.5 + (tier === 'legendary' ? 0.15 : 0)).toFixed(2),
         plates: 1 + ((r() * 3) | 0) + (tier === 'legendary' ? 2 : tier === 'prototype' ? 1 : 0),
         vents: (r() * 4) | 0,
