@@ -17,6 +17,7 @@ import { accent, box, cylY, cylZ, metal } from '../models/parts';
 import { buildHelmet } from './helmets';
 import { buildChest } from './chests';
 import { buildShoulders } from './shoulders';
+import { buildBackpack } from './backpacks';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -94,10 +95,8 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'backpack': {
-      g.add(box(0.32 * b, 0.4 * b, 0.16 * b, body, 0, 0, 0)); // pack body
-      for (const s of [-1, 1]) g.add(cylY(0.06 * b, 0.34 * b, dark, s * 0.18 * b, 0, 0.02)); // canisters
-      if (trim) glowStrip(0.1 * b, 0.03, 0.03, 0, 0.14 * b, 0.09 * b);
-      addSpinner(-0.12 * b, 0.09 * b, 0.06 * b);
+      // Art-directed per-division backpack geometry (Armor Overhaul, slice 4).
+      g.add(buildBackpack(spec, rt));
       break;
     }
     case 'core': {
