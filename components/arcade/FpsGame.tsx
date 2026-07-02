@@ -10,6 +10,7 @@ import { OrientationGate } from './mobile/OrientationGate';
 import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { FpsArsenal } from './screens/FpsArsenal';
+import { AvatarPanel, LoadoutPanel } from './screens/MenuPanels';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
@@ -573,6 +574,13 @@ export function FpsGame() {
 
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
+            {/* Arcade-cabinet side screens (wide layouts only): pilot avatar + loadout preview. */}
+            <div className="pointer-events-none absolute left-5 top-1/2 hidden -translate-y-1/2 xl:block">
+              <AvatarPanel />
+            </div>
+            <div className="absolute right-5 top-1/2 hidden -translate-y-1/2 xl:block">
+              <LoadoutPanel />
+            </div>
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
             <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>
             {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
