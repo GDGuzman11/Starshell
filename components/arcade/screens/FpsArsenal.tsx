@@ -25,7 +25,7 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend: (n: number) => void; onBack: () => void }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
   const bosses = save.bosses;
-  const [weaponId, setWeaponId] = useState('ar');
+  const [weaponId, setWeaponId] = useState('ar01');
   const gun = gunById(weaponId);
   const cats = categoriesForFamily(gun.family);
   const [catId, setCatId] = useState(cats[0].id);
@@ -77,19 +77,27 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
         </div>
       </div>
 
-      {/* weapon rack */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {GUNS.map((g) => (
-          <button
-            key={g.id}
-            type="button"
-            onClick={() => pick(g.id)}
-            className={`whitespace-nowrap rounded border px-2.5 py-1 text-[7px] uppercase transition-colors sm:text-[8px] ${g.id === weaponId ? 'border-[#c8a8ff] bg-[#c8a8ff]/15 text-[#c8a8ff]' : 'border-white/12 bg-white/[0.03] text-white/55 hover:bg-white/10'}`}
-          >
-            {g.name}
-            {hasSlots(g.id) && <span className="ml-1 text-[#aef5c8]">◆</span>}
-          </button>
-        ))}
+      {/* weapon rack — pick ANY weapon to engineer its own components */}
+      <div className="rounded-lg border border-[#c8a8ff]/20 bg-[#c8a8ff]/[0.04] p-2">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-[7px] tracking-[0.2em] text-[#c8a8ff]/80 sm:text-[8px]">▤ SELECT WEAPON — engineer any gun</p>
+          <p className="text-[7px] text-white/50 sm:text-[8px]">
+            <span className="text-white/85">{gun.name}</span> · {gun.family}
+          </p>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {GUNS.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => pick(g.id)}
+              className={`whitespace-nowrap rounded border px-2.5 py-1.5 text-[7px] uppercase transition-colors sm:text-[8px] ${g.id === weaponId ? 'border-[#c8a8ff] bg-[#c8a8ff]/20 text-[#c8a8ff]' : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/10'}`}
+            >
+              {g.name}
+              {hasSlots(g.id) && <span className="ml-1 text-[#aef5c8]">◆</span>}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-2 lg:flex-row">
