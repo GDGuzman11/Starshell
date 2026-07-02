@@ -580,7 +580,7 @@ export function FpsGame() {
               <AvatarPanel />
             </div>
             <div className="absolute right-5 top-1/2 hidden -translate-y-1/2 xl:block">
-              <LoadoutPanel />
+              <LoadoutPanel guns={[lastLoadout.p1, lastLoadout.p2, lastLoadout.sa]} />
             </div>
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
             <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>

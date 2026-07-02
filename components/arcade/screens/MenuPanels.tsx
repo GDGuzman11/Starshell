@@ -10,7 +10,7 @@
  */
 import { useMemo, useState } from 'react';
 import { GunPreview } from './GunPreview';
-import { GUNS, gunById } from '../fps/weapons';
+import { gunById } from '../fps/weapons';
 import { categoriesForFamily } from '../fps/arsenal/categories';
 import { loadArsenal, equippedParts } from '../fps/arsenal/store';
 import { hasSlots } from '../fps/arsenal/partModel';
@@ -31,10 +31,11 @@ export function AvatarPanel() {
   );
 }
 
-export function LoadoutPanel() {
-  const [gunId, setGunId] = useState('ar');
+export function LoadoutPanel({ guns }: { guns: string[] }) {
+  const ids = Array.from(new Set(guns)); // the player's selected loadout weapons only
+  const [gunId, setGunId] = useState(ids[0] ?? 'ar01');
   const [save] = useState(() => loadArsenal()); // remounts with the menu → always fresh
-  const gun = gunById(gunId);
+  const gun = gunById(ids.includes(gunId) ? gunId : ids[0] ?? gunId);
   const cats = categoriesForFamily(gun.family);
   const equipped = useMemo(() => equippedParts(save, gunId, gun.family), [save, gunId, gun.family]);
   const catLabel = (id: string) => cats.find((c) => c.id === id)?.label ?? id;
@@ -43,13 +44,13 @@ export function LoadoutPanel() {
     <div className="w-56 rounded-lg border border-[#c8a8ff]/25 bg-black/50 p-3 font-pixel backdrop-blur-sm">
       <p className="text-[8px] tracking-[0.25em] text-[#c8a8ff]/80">LOADOUT PREVIEW</p>
       <select
-        value={gunId}
+        value={gun.id}
         onChange={(e) => setGunId(e.target.value)}
         className="mt-2 w-full rounded border border-white/15 bg-black/60 px-2 py-1 text-[8px] uppercase text-white/85 outline-none focus:border-[#c8a8ff]/60"
       >
-        {GUNS.map((g) => (
-          <option key={g.id} value={g.id} className="bg-black text-white">
-            {g.name}
+        {ids.map((id) => (
+          <option key={id} value={id} className="bg-black text-white">
+            {gunById(id).name}
           </option>
         ))}
       </select>
