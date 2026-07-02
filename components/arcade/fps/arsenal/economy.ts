@@ -30,3 +30,17 @@ export function priceFor(tier: Tier, mag: number): number {
 export function legendaryGate(price: number): PartGate {
   return { familiarity: 3, bosses: 2 + Math.round(price / 800), astro: price };
 }
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** AstroDiamond cost to permanently UNLOCK a locked weapon — derived from its power
+ *  (per-shot damage + splash), weighted by family. Not hardcoded per weapon. */
+export function unlockWeaponPrice(gun: { dmg: number; family: string; splash?: number }): number {
+  const mul = gun.family === 'pistol' ? 0.7 : gun.family === 'sniper' ? 1.2 : gun.family === 'launcher' ? 1.3 : 1;
+  return clamp(Math.round((gun.dmg * 4 + (gun.splash ?? 0) * 60) * mul), 150, 2000);
+}
+
+/** AstroDiamond cost to unlock a locked throwable — from its blast + a utility base. */
+export function unlockThrowPrice(t: { blast: { dmg: number } }): number {
+  return clamp(Math.round(t.blast.dmg * 1.5 + 200), 200, 800);
+}

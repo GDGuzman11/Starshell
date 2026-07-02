@@ -687,6 +687,8 @@ export function FpsGame() {
 
         {mode === 'loadout' && (
           <FpsLoadout
+            astro={astro}
+            onSpendAstro={spendAstro}
             onDeploy={(p1, p2, sa, th) => {
               const lo = { p1, p2, sa, th };
               setLastLoadout(lo);
