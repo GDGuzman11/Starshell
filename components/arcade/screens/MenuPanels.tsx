@@ -19,7 +19,7 @@ export function AvatarPanel() {
   return (
     <div className="w-52 rounded-lg border border-[#7fdfff]/20 bg-black/50 p-3 font-pixel backdrop-blur-sm">
       <p className="text-[8px] tracking-[0.25em] text-[#7fdfff]/80">PILOT</p>
-      <div className="mt-2 flex h-56 items-center justify-center rounded-md border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent">
+      <div className="mt-2 flex h-56 items-center justify-center rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
         {/* placeholder silhouette — avatar TBD */}
         <div className="flex flex-col items-center gap-2 opacity-60">
           <div className="h-10 w-10 rounded-full border border-[#7fdfff]/40 bg-[#7fdfff]/10" />
@@ -53,7 +53,7 @@ export function LoadoutPanel() {
           </option>
         ))}
       </select>
-      <div className="relative mt-2 h-40 overflow-hidden rounded-md border border-white/10 bg-white/[0.02]">
+      <div className="relative mt-2 h-40 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
         <GunPreview gunId={gunId} equipped={equipped} />
       </div>
       <p className="mt-2 text-[8px] text-white/85">{gun.name}</p>
