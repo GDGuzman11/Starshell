@@ -8,7 +8,7 @@
  * compressor. Profiles are migrated family-by-family; ids without one yet fall
  * back to the legacy `gun()` sound.
  */
-type WType = 'ballistic' | 'energy' | 'heavy' | 'beam' | 'electric' | 'gravity' | 'launcher';
+type WType = 'ballistic' | 'energy' | 'heavy' | 'beam' | 'electric' | 'gravity' | 'launcher' | 'barrel';
 interface WProfile {
   type: WType;
   vol: number;
@@ -21,9 +21,9 @@ interface WProfile {
   loop?: boolean; // sustained-fire weapon (Ripper / Lance Beam) — uses loop start/stop
 }
 const WEAPON_AUDIO: Record<string, WProfile> = {
-  // STANDARD ISSUE — iconic, punchy service-rifle crack + the rest of the issued arsenal.
-  ar01: { type: 'ballistic', vol: 0.9, pitch: 1.05, jitter: 0.06, len: 0.9, bass: 0.65, grit: 0.15 },
-  cb02: { type: 'ballistic', vol: 0.95, pitch: 0.92, jitter: 0.04, len: 1.2, bass: 0.7, grit: 0.12 },
+  // STANDARD ISSUE rifles — deep machine-gun report with a metallic barrel ring.
+  ar01: { type: 'barrel', vol: 0.92, pitch: 0.9, jitter: 0.05, len: 1.0, bass: 0.8, grit: 0.3 },
+  cb02: { type: 'barrel', vol: 0.98, pitch: 0.8, jitter: 0.04, len: 1.15, bass: 0.85, grit: 0.32 },
   vx04: { type: 'ballistic', vol: 0.6, pitch: 1.55, jitter: 0.14, len: 0.55, bass: 0.3, grit: 0.06 },
   er08: { type: 'energy', vol: 0.8, pitch: 1.3, jitter: 0.06, len: 0.8, bass: 0.35, grit: 0 },
   rt06: { type: 'launcher', vol: 1.0, pitch: 1.0, jitter: 0.05, len: 1.0, bass: 0.85, grit: 0.2 },
@@ -298,6 +298,22 @@ class Sfx {
     if (p.grit > 0.3) this.distNoise(0.05 * p.len, 0.28 * p.vol * p.grit, 2200 * pj);
     this.tone('square', 2400 * pj, 2000 * pj, 0.02, 0.05 * p.vol); // metallic ping
   }
+  /** Barrel: a DEEP, punchy machine-gun report with a metallic ringing tail — like a
+   *  rifle fired down a steel barrel. Low gritty muzzle crack (no whiney highs) + a
+   *  resonant ring that decays. Serves the Standard Issue rifles (Pulse / Ranger). */
+  private genBarrel(p: WProfile): void {
+    const pj = p.pitch * (1 + (Math.random() * 2 - 1) * p.jitter);
+    // deep concussive body
+    this.tone('sine', 140 * pj, 58 * pj, 0.11 * p.len, 0.6 * p.vol * (0.5 + 0.5 * p.bass));
+    // low, gritty muzzle crack (lowpass — no piercing highs)
+    this.distNoise(0.05 * p.len, 0.32 * p.vol * (0.4 + p.grit), 1300 * pj);
+    this.burst(0.09 * p.len, 0.3 * p.vol, 1700 * pj, 300 * pj, 'lowpass');
+    // mechanical bolt thunk
+    this.tone('square', 230 * pj, 110 * pj, 0.02, 0.11 * p.vol);
+    // METALLIC BARREL RING — near-constant resonant tones that ring out
+    this.tone('triangle', 700 * pj, 680 * pj, 0.2 * p.len, 0.12 * p.vol);
+    this.tone('triangle', 1380 * pj, 1350 * pj, 0.14 * p.len, 0.06 * p.vol);
+  }
   /** Electric: randomized crackle snaps + HP noise buzz + unstable square layer. */
   private genElectric(p: WProfile): void {
     const pj = p.pitch * (1 + (Math.random() * 2 - 1) * p.jitter);
@@ -369,6 +385,9 @@ class Sfx {
         break;
       case 'launcher':
         this.genLauncher(p);
+        break;
+      case 'barrel':
+        this.genBarrel(p);
         break;
       case 'gravity':
         this.genGravity(p);
