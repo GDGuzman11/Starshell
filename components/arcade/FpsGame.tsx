@@ -27,6 +27,7 @@ import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type U
 import { applyEngineering } from './fps/arsenal/parts';
 import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } from './fps/arsenal/store';
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
+import { emitProgressChanged } from './lib/progressEvent';
 import { armorPlayerBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { sfx } from './engine/audio';
@@ -502,6 +503,8 @@ export function FpsGame() {
       saveBest(run.level);
       setBest((b) => Math.max(b, run.level));
     }
+    // Persist this operation's arsenal/marine/astro/best to the account.
+    emitProgressChanged(true);
   }, [snap, mode, run.level, diff, squads, lastLoadout]);
 
   // Auto-dismiss the familiarity toast.
@@ -793,6 +796,7 @@ export function FpsGame() {
               } catch {
                 /* ignore */
               }
+              emitProgressChanged();
               setMode('menu');
             }}
             onDeploy={(p1, p2, sa, th) => {
@@ -803,6 +807,7 @@ export function FpsGame() {
               } catch {
                 /* ignore */
               }
+              emitProgressChanged();
               if (loadoutReturn === 'campaign') beginCampaign(lo);
               else setMode('shop');
             }}

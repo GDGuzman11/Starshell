@@ -15,6 +15,7 @@ import { partsForCategory, applyEngineering, TIERS, type EngPart, type Tier } fr
 import { MANUFACTURERS } from '../fps/arsenal/manufacturers';
 import { stageProgress } from '../fps/arsenal/familiarity';
 import { loadArsenal, saveArsenal, buyPart, equipPart, equippedParts, serviceFor, type ArsenalSave } from '../fps/arsenal/store';
+import { emitProgressChanged } from '../lib/progressEvent';
 import { hasSlots } from '../fps/arsenal/partModel';
 
 const TIER_LABEL: Record<Tier, string> = { military: 'MILITARY ISSUE', prototype: 'PROTOTYPE', legendary: 'LEGENDARY' };
@@ -74,6 +75,7 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
       saveArsenal(next);
       return next;
     });
+    emitProgressChanged();
   };
   const equip = (p: EngPart) => {
     if (!owned(p)) return;
@@ -82,6 +84,7 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
       saveArsenal(next);
       return next;
     });
+    emitProgressChanged();
   };
 
   return (

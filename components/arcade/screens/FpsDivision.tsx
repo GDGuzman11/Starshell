@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { MarinePreview } from './MarinePreview';
 import { DIVISIONS, type DivisionId } from '../fps/marine/divisions';
 import { loadMarine, saveMarine, setDivision, type MarineSave } from '../fps/marine/store';
+import { emitProgressChanged } from '../lib/progressEvent';
 
 const NO_PIECES: [] = [];
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
@@ -27,6 +28,7 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
       saveMarine(next);
       return next;
     });
+    emitProgressChanged();
   };
 
   return (

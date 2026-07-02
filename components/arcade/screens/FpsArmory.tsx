@@ -17,6 +17,7 @@ import { aggregateArmor } from '../fps/marine/stats';
 import { MANUFACTURERS } from '../fps/arsenal/manufacturers';
 import { FAMILIARITY_STAGES, stageProgress } from '../fps/arsenal/familiarity';
 import { loadMarine, saveMarine, buyArmor, equipArmor, equippedArmorPieces, pieceXp, type MarineSave } from '../fps/marine/store';
+import { emitProgressChanged } from '../lib/progressEvent';
 
 const TIER_LABEL: Record<ArmorTier, string> = { standard: 'STANDARD ISSUE', prototype: 'PROTOTYPE', legendary: 'LEGENDARY' };
 const TIER_COLOR: Record<ArmorTier, string> = { standard: '#9fb4ff', prototype: '#c8a8ff', legendary: '#ffd27a' };
@@ -68,6 +69,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
       saveMarine(next);
       return next;
     });
+    emitProgressChanged();
   };
   const equip = (p: ArmorPiece) => {
     if (!owned(p)) return;
@@ -76,6 +78,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
       saveMarine(next);
       return next;
     });
+    emitProgressChanged();
   };
 
   const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `RECRUIT · LVL ${save.marineLevel}`;
