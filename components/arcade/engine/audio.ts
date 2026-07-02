@@ -21,8 +21,17 @@ interface WProfile {
   loop?: boolean; // sustained-fire weapon (Ripper / Lance Beam) — uses loop start/stop
 }
 const WEAPON_AUDIO: Record<string, WProfile> = {
-  // STANDARD ISSUE — iconic, punchy service-rifle crack.
+  // STANDARD ISSUE — iconic, punchy service-rifle crack + the rest of the issued arsenal.
   ar01: { type: 'ballistic', vol: 0.9, pitch: 1.05, jitter: 0.06, len: 0.9, bass: 0.65, grit: 0.15 },
+  cb02: { type: 'ballistic', vol: 0.95, pitch: 0.92, jitter: 0.04, len: 1.2, bass: 0.7, grit: 0.12 },
+  vx04: { type: 'ballistic', vol: 0.6, pitch: 1.55, jitter: 0.14, len: 0.55, bass: 0.3, grit: 0.06 },
+  er08: { type: 'energy', vol: 0.8, pitch: 1.3, jitter: 0.06, len: 0.8, bass: 0.35, grit: 0 },
+  rt06: { type: 'launcher', vol: 1.0, pitch: 1.0, jitter: 0.05, len: 1.0, bass: 0.85, grit: 0.2 },
+  gc03: { type: 'launcher', vol: 0.9, pitch: 1.15, jitter: 0.06, len: 0.8, bass: 0.7, grit: 0.25 },
+  pm09: { type: 'launcher', vol: 1.0, pitch: 0.8, jitter: 0.05, len: 1.3, bass: 1.0, grit: 0.45, charge: 0.14 },
+  rc12: { type: 'energy', vol: 1.0, pitch: 0.75, jitter: 0.03, len: 1.2, bass: 1.0, grit: 0.55, charge: 0.1 },
+  sp01: { type: 'ballistic', vol: 0.82, pitch: 1.18, jitter: 0.05, len: 0.7, bass: 0.5, grit: 0.06 },
+  mp05: { type: 'ballistic', vol: 0.55, pitch: 1.65, jitter: 0.15, len: 0.5, bass: 0.25, grit: 0.05 },
   // ballistic — sharp crack + bolt + small bass punch
   carbine: { type: 'ballistic', vol: 0.9, pitch: 1.0, jitter: 0.06, len: 1.0, bass: 0.7, grit: 0.1 },
   smg: { type: 'ballistic', vol: 0.62, pitch: 1.5, jitter: 0.13, len: 0.6, bass: 0.3, grit: 0.05 },

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { ACCENT } from './parts';
 import { buildAssaultX, buildCarbine, buildPulseAR } from './rifles';
-import { buildAR01Pulse } from './standard';
+import { buildAR01Pulse, buildCB02Ranger, buildER08Ion, buildGC03Hammer, buildMP05Viper, buildPM09Meteor, buildRC12Thunder, buildRT06Bulldog, buildSP01Service, buildVX04Tempest } from './standard';
 import { buildNovaSMG, buildRipper, buildSiegeLMG } from './heavy';
 import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
@@ -32,6 +32,15 @@ type Builder = (tier: RenderTier) => THREE.Group;
 
 const GUN_BUILDERS: Record<string, Builder> = {
   ar01: buildAR01Pulse,
+  cb02: buildCB02Ranger,
+  vx04: buildVX04Tempest,
+  er08: buildER08Ion,
+  rt06: buildRT06Bulldog,
+  gc03: buildGC03Hammer,
+  pm09: buildPM09Meteor,
+  rc12: buildRC12Thunder,
+  sp01: buildSP01Service,
+  mp05: buildMP05Viper,
   ar: buildPulseAR,
   carbine: buildCarbine,
   assaultx: buildAssaultX,
@@ -85,6 +94,15 @@ const THROW_ACCENT: Record<string, number> = {
 /** Per-weapon ONE accent colour (drives the preview rim light + matches the model). */
 const GUN_ACCENT: Record<string, number> = {
   ar01: ACCENT.blue,
+  cb02: ACCENT.blue,
+  vx04: ACCENT.red,
+  er08: ACCENT.blue,
+  rt06: ACCENT.orange,
+  gc03: ACCENT.green,
+  pm09: ACCENT.blue,
+  rc12: ACCENT.blue,
+  sp01: ACCENT.green,
+  mp05: ACCENT.green,
   ar: ACCENT.blue,
   carbine: ACCENT.amber,
   assaultx: ACCENT.orange,
