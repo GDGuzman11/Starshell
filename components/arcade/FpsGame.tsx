@@ -36,7 +36,14 @@ const SQUAD_OPTIONS = [2, 4, 6, 8]; // → 10 / 20 / 30 / 40 soldiers
 const mapCountFor = (squads: number) => 8 + squads;
 const campaignDiff = (base: Difficulty, level: number): Difficulty =>
   TIERS[Math.min(2, TIERS.indexOf(base) + (level > 14 ? 2 : level > 7 ? 1 : 0))];
-const goldFor = (level: number, kills: number) => 50 + level * 12 + kills * 15;
+// Reward scaling: harder difficulty + more enemy squads pay out more of BOTH currencies.
+const diffMult = (d: Difficulty) => 1 + TIERS.indexOf(d) * 0.5; // normal ×1 · hard ×1.5 · nightmare ×2
+const squadMult = (squads: number) => 1 + (squads - 1) * 0.35; // 1→×1 · 2→×1.35 · 3→×1.7 · 4→×2.05
+// GOLD (per-run, spent on damage upgrades between levels): a base + per-level + per-kill.
+const goldFor = (level: number, kills: number, diff: Difficulty, squads: number) => Math.round((50 + level * 12 + kills * 15) * diffMult(diff) * squadMult(squads));
+// ASTRODIAMONDS (persistent premium wallet, kept across runs): rarer — a small base per
+// level + a bit per kill, scaled the same way. Earned every level (win OR loss).
+const astroFor = (level: number, kills: number, diff: Difficulty, squads: number) => Math.round((2 + level * 0.3 + kills * 0.5) * diffMult(diff) * squadMult(squads));
 
 function saveBest(level: number) {
   try {
@@ -80,6 +87,8 @@ export function FpsGame() {
   const gauntletRef = useRef(0);
   const [recovery, setRecovery] = useState<number | null>(null); // upcoming round shown during recovery
   const [best, setBest] = useState(0);
+  const [astro, setAstro] = useState(0); // Astrodiamonds — persistent premium wallet (across runs)
+  const [lastAstro, setLastAstro] = useState(0); // AD earned on the level just finished (for the end/shop card)
   const [campaignLen, setCampaignLen] = useState(20); // display only; real value read on mount (client)
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
@@ -122,6 +131,7 @@ export function FpsGame() {
     setIsTouch('ontouchstart' in window);
     try {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
+      setAstro(Number(localStorage.getItem('starshell.astro') || 0));
       const s = Number(localStorage.getItem('starshell.sens'));
       if (Number.isFinite(s) && s > 0) setSensitivityState(s);
       setCampaignLen(campaignTotalLevels()); // client-only (reads localStorage) → avoids SSR mismatch
@@ -369,9 +379,22 @@ export function FpsGame() {
       dmg: rs.dmg + snap.dmgDealt,
       endedAt: Date.now(),
     }));
+    // ASTRODIAMONDS accrue every level (win OR loss — you keep what you collected) and
+    // persist to the wallet immediately, scaled by difficulty + squad count.
+    const adEarned = astroFor(run.level, snap.kills, diff, squads);
+    setLastAstro(adEarned);
+    setAstro((a) => {
+      const n = a + adEarned;
+      try {
+        localStorage.setItem('starshell.astro', String(n));
+      } catch {
+        /* ignore */
+      }
+      return n;
+    });
     if (snap.status === 'won') {
       const total = campaignTotalLevels();
-      setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills) }));
+      setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills, diff, squads) }));
       if (run.level >= total) {
         // GAUNTLET: advance through the five enhanced bosses with a recovery window.
         if (gauntletRef.current > 0 && gauntletRef.current < GAUNTLET_BOSSES.length) {
@@ -389,7 +412,7 @@ export function FpsGame() {
       saveBest(run.level);
       setBest((b) => Math.max(b, run.level));
     }
-  }, [snap, mode, run.level]);
+  }, [snap, mode, run.level, diff, squads]);
 
   useEffect(() => {
     if (mode !== 'play') return;
@@ -452,7 +475,7 @@ export function FpsGame() {
 
         {mode === 'play' && snap && snap.status === 'playing' && (
           <>
-            <FpsHud snap={snap} level={run.level} gold={run.gold} isTouch={isTouch} />
+            <FpsHud snap={snap} level={run.level} gold={run.gold} astro={astro} isTouch={isTouch} />
             <button type="button" onClick={() => setMode('menu')} className="absolute right-3 top-3 z-50 font-pixel text-[8px] text-white/55 transition-colors hover:text-white">
               MENU
             </button>
@@ -502,6 +525,7 @@ export function FpsGame() {
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
             <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>
             {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
+            <p className="mt-1 font-pixel text-[7px] text-[#c8a8ff] sm:text-[9px]">◈ {astro} ASTRODIAMONDS</p>
 
             <p className="mt-5 font-pixel text-[7px] text-white/45 sm:text-[8px]">DIFFICULTY</p>
             <div className="mt-2 flex gap-2">
@@ -521,6 +545,7 @@ export function FpsGame() {
                 </button>
               ))}
             </div>
+            <p className="mt-2 font-pixel text-[6px] text-[#c8a8ff]/70 sm:text-[8px]">REWARDS ×{(diffMult(diff) * squadMult(squads)).toFixed(2)} · harder + more squads earn more ⛀ &amp; ◈</p>
 
             <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">
               LOOK SENSITIVITY · {sensitivity.toFixed(1)}×
@@ -642,6 +667,8 @@ export function FpsGame() {
             subtitle={`ALL ${run.level} LEVELS CLEARED`}
             level={run.level}
             gold={run.gold}
+            astro={astro}
+            earnedAstro={lastAstro}
             stats={runStats}
             onRestart={() => beginCampaign(lastLoadout)}
             onMenu={() => setMode('menu')}
@@ -655,6 +682,8 @@ export function FpsGame() {
             subtitle={`FELL ON LEVEL ${run.level}`}
             level={run.level}
             gold={run.gold}
+            astro={astro}
+            earnedAstro={lastAstro}
             stats={runStats}
             onRestart={() => beginCampaign(lastLoadout)}
             onMenu={() => setMode('menu')}
@@ -807,6 +836,8 @@ function RunStatsCard({
   subtitle,
   level,
   gold,
+  astro,
+  earnedAstro,
   stats,
   onRestart,
   onMenu,
@@ -816,6 +847,8 @@ function RunStatsCard({
   subtitle: string;
   level: number;
   gold: number;
+  astro: number;
+  earnedAstro: number;
   stats: { kills: number; shots: number; hits: number; dmg: number; startedAt: number; endedAt: number };
   onRestart: () => void;
   onMenu: () => void;
@@ -830,6 +863,7 @@ function RunStatsCard({
     ['ACCURACY', `${acc}%`],
     ['DAMAGE', stats.dmg.toLocaleString()],
     ['GOLD', `⛀ ${gold}`],
+    ['ASTRODIAMONDS', `◈ ${astro}${earnedAstro ? `  (+${earnedAstro})` : ''}`],
   ];
   return (
     <div className="gdg-cine absolute inset-0 z-50 flex items-center justify-center bg-black/80 px-4 text-center font-pixel [animation:gdg-fade-in_0.5s_ease-out]">

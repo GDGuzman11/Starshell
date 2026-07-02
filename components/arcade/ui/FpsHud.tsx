@@ -8,7 +8,7 @@ const SHOW_2D_GUN = false;
 
 /** Combat HUD: crosshair / scope, hitmarker, muzzle flash, hurt vignette,
  *  health, the active weapon + ammo, weapon slots, and a gun view-model. */
-export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; level: number; gold: number; isTouch: boolean }) {
+export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapshot; level: number; gold: number; astro: number; isTouch: boolean }) {
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const flash = now - snap.fireAt < 70;
   const hit = now - snap.hitAt < 180;
@@ -122,13 +122,15 @@ export function FpsHud({ snap, level, gold, isTouch }: { snap: FpsSnapshot; leve
         </div>
       )}
 
-      {/* wave · enemies · gold (glass objective pill) */}
+      {/* wave · enemies · gold · astrodiamonds (glass objective pill) */}
       <div className="absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] backdrop-blur-sm sm:text-[10px]">
         <span className="text-[#7fdfff]">WAVE {level}</span>
         <span className="text-white/25"> · </span>
         <span className="text-[#ff8a96]">{snap.enemiesLeft} LEFT</span>
         <span className="text-white/25"> · </span>
         <span className="text-[#ffd27a]">⛀ {gold}</span>
+        <span className="text-white/25"> · </span>
+        <span className="text-[#c8a8ff]">◈ {astro}</span>
       </div>
 
       {/* boss bars + status (name · phase · state · brood count) */}
