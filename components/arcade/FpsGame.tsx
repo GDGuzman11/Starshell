@@ -81,7 +81,7 @@ export function FpsGame() {
   const [isTouch, setIsTouch] = useState(false);
   const [portrait, setPortrait] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
-  const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar', p2: 'rail', sa: 'sidearm', th: 'frag' });
+  const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar01', p2: 'rt06', sa: 'sp01', th: 'frag' }); // Standard Issue recruit kit
   const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   // Cumulative run stats (across all levels of one campaign) for the match-end card.
@@ -687,6 +687,9 @@ export function FpsGame() {
 
         {mode === 'loadout' && (
           <FpsLoadout
+            astro={astro}
+            best={best}
+            onSpendAstro={spendAstro}
             onDeploy={(p1, p2, sa, th) => {
               const lo = { p1, p2, sa, th };
               setLastLoadout(lo);

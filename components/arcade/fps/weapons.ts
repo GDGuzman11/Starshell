@@ -129,6 +129,12 @@ export function throwById(id: string): ThrowDef {
   return THROWABLES.find((t) => t.id === id) ?? THROWABLES[0];
 }
 
-/** Default loadout (used if you skip the loadout screen). */
-export const DEFAULT_LOADOUT = ['ar', 'rail', 'sidearm'];
+/** Default loadout (used if you skip the loadout screen) — the Standard Issue recruit kit. */
+export const DEFAULT_LOADOUT = ['ar01', 'rt06', 'sp01'];
 export const DEFAULT_THROWABLE = 'frag';
+
+/** STANDARD ISSUE — the weapons every Marine starts with, free from level 1. Every OTHER
+ *  gun is LOCKED and bought permanently with AstroDiamonds (after reaching level 5). */
+export const RECRUIT_WEAPONS = new Set(['ar01', 'cb02', 'vx04', 'er08', 'rt06', 'gc03', 'pm09', 'rc12', 'sp01', 'mp05']);
+/** Campaign level a player must have reached before locked guns can be purchased. */
+export const UNLOCK_GATE_LEVEL = 5;

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { GUNS, PRIMARIES, SECONDARIES, SIDEARMS, THROWABLES, type GunDef, type ThrowKind } from '../fps/weapons';
+import { GUNS, PRIMARIES, SECONDARIES, SIDEARMS, THROWABLES, gunById, UNLOCK_GATE_LEVEL, type GunDef, type ThrowKind } from '../fps/weapons';
 import { GunPreview } from './GunPreview';
+import { loadArsenal, saveArsenal, isWeaponUnlocked, unlockWeapon, type ArsenalSave } from '../fps/arsenal/store';
+import { unlockWeaponPrice } from '../fps/arsenal/economy';
 
 // Normalization bounds for the stat bars (computed once over the whole arsenal).
 const DMG_MAX = Math.max(...GUNS.map((g) => g.dmg));
@@ -25,42 +27,66 @@ const THROW_SUB: Record<ThrowKind, string> = {
   plasma: 'huge burst',
 };
 
-/** Pre-deploy loadout: 2 primaries + 1 sidearm + 1 throwable, from the pool.
- *  A shared 3D preview shows whichever gun you last tapped (default PRIMARY 1). */
+/** Pre-deploy loadout. Standard Issue guns are free; every other gun is LOCKED and bought
+ *  with AstroDiamonds once you've reached level 5. A shared 3D preview shows the last tap. */
 export function FpsLoadout({
+  astro,
+  best,
+  onSpendAstro,
   onDeploy,
   onBack,
 }: {
+  astro: number;
+  best: number;
+  onSpendAstro: (n: number) => void;
   onDeploy: (p1: string, p2: string, sidearm: string, thrown: string) => void;
   onBack: () => void;
 }) {
-  const [p1, setP1] = useState('ar');
-  const [p2, setP2] = useState('rail');
-  const [sa, setSa] = useState('sidearm');
+  const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
+  const [p1, setP1] = useState('ar01');
+  const [p2, setP2] = useState('rt06');
+  const [sa, setSa] = useState('sp01');
   const [th, setTh] = useState('frag');
-  const [focus, setFocus] = useState('ar'); // gun shown in the preview
+  const [focus, setFocus] = useState('ar01');
 
-  const pick = (set: (id: string) => void) => (id: string) => {
-    set(id);
-    setFocus(id);
-  };
   const fg = GUNS.find((g) => g.id === focus);
   const ft = !fg ? THROWABLES.find((t) => t.id === focus) : undefined;
+  const gateOpen = best >= UNLOCK_GATE_LEVEL;
+
+  // Select a gun; if it's locked, unlock it first (needs level 5 + enough AstroDiamonds).
+  const tryPick = (set: (id: string) => void) => (id: string) => {
+    setFocus(id);
+    if (isWeaponUnlocked(save, id)) {
+      set(id);
+      return;
+    }
+    if (!gateOpen) return; // still locked behind level 5
+    const price = unlockWeaponPrice(gunById(id));
+    if (astro < price) return; // can't afford
+    onSpendAstro(price);
+    setSave((s) => {
+      const n = unlockWeapon(s, id);
+      saveArsenal(n);
+      return n;
+    });
+    set(id);
+  };
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-black/85 px-3 py-2 sm:px-5 sm:py-3">
       <div className="flex items-center justify-between">
         <p className="font-pixel text-[10px] text-[#7fdfff] sm:text-[13px]">LOADOUT</p>
-        <button type="button" onClick={onBack} className="font-pixel text-[8px] text-white/45 hover:text-white sm:text-[9px]">
-          ◂ BACK
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="font-pixel text-[8px] text-[#c8a8ff] sm:text-[10px]">◈ {astro}</span>
+          <button type="button" onClick={onBack} className="font-pixel text-[8px] text-white/45 hover:text-white sm:text-[9px]">
+            ◂ BACK
+          </button>
+        </div>
       </div>
 
-      {/* two columns: big preview on the left, full selection list on the right */}
       <div className="mt-2 flex min-h-0 flex-1 gap-3">
-        {/* left: large 3D preview (fills the height) + stat bars */}
         <div className="flex w-[42%] shrink-0 flex-col sm:w-[44%]">
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-white/[0.06] to-transparent">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
             <GunPreview gunId={focus} />
             <div className="pointer-events-none absolute bottom-1 left-2">
               <p className="font-pixel text-[9px] text-white sm:text-[12px]">{fg?.name ?? ft?.name}</p>
@@ -84,11 +110,10 @@ export function FpsLoadout({
           </div>
         </div>
 
-        {/* right: the full selection list (own full-height space → no squish) */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
-          <Picker label="PRIMARY" items={PRIMARIES} value={p1} focus={focus} onPick={pick(setP1)} />
-          <Picker label="SECONDARY" items={SECONDARIES} value={p2} focus={focus} onPick={pick(setP2)} />
-          <Picker label="SIDEARM" items={SIDEARMS} value={sa} focus={focus} onPick={pick(setSa)} />
+          <Picker label="PRIMARY" items={PRIMARIES} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="HEAVY" items={SECONDARIES} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="SIDEARM" items={SIDEARMS} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
           <div>
             <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -123,29 +148,32 @@ function StatBar({ label, pct, value, color }: { label: string; pct: number; val
   );
 }
 
-function Picker({ label, items, value, focus, onPick }: { label: string; items: GunDef[]; value: string; focus: string; onPick: (id: string) => void }) {
+function Picker({ label, items, value, focus, onPick, save, astro, gateOpen }: { label: string; items: GunDef[]; value: string; focus: string; onPick: (id: string) => void; save: ArsenalSave; astro: number; gateOpen: boolean }) {
   return (
     <div>
       <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">{label}</p>
       <div className="mt-1 flex flex-wrap gap-1.5">
-        {items.map((g) => (
-          <Chip key={g.id} label={g.name} sub={`${g.family} · ${g.dmg}`} on={value === g.id} ring={focus === g.id} color="#7fdfff" onClick={() => onPick(g.id)} />
-        ))}
+        {items.map((g) => {
+          const unlocked = isWeaponUnlocked(save, g.id);
+          const price = unlockWeaponPrice(g);
+          const sub = unlocked ? `${g.family} · ${g.dmg}` : !gateOpen ? `🔒 LVL ${UNLOCK_GATE_LEVEL}+` : `🔒 ◈${price}`;
+          return <Chip key={g.id} label={g.name} sub={sub} on={value === g.id} ring={focus === g.id} locked={!unlocked} afford={astro >= price && gateOpen} color="#7fdfff" onClick={() => onPick(g.id)} />;
+        })}
       </div>
     </div>
   );
 }
 
-function Chip({ label, sub, on, ring, color, onClick }: { label: string; sub: string; on: boolean; ring?: boolean; color: string; onClick: () => void }) {
+function Chip({ label, sub, on, ring, locked, afford, color, onClick }: { label: string; sub: string; on: boolean; ring?: boolean; locked?: boolean; afford?: boolean; color: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-start rounded border px-2 py-1 text-left transition-colors ${on ? 'bg-white/10' : 'border-white/10 bg-white/[0.02] opacity-70 hover:opacity-100'} ${ring && !on ? 'ring-1 ring-white/30' : ''}`}
-      style={on ? { borderColor: color } : undefined}
+      className={`flex flex-col items-start rounded border px-2 py-1 text-left transition-colors ${on ? 'bg-white/10' : 'border-white/10 bg-white/[0.02] opacity-70 hover:opacity-100'} ${ring && !on ? 'ring-1 ring-white/30' : ''} ${locked ? 'border-dashed' : ''}`}
+      style={on ? { borderColor: color } : locked ? { borderColor: afford ? 'rgba(255,210,122,0.35)' : 'rgba(255,90,110,0.3)' } : undefined}
     >
-      <span className="font-pixel text-[7px] leading-tight text-white sm:text-[8px]">{label}</span>
-      <span className="font-pixel text-[5px] uppercase text-white/40 sm:text-[6px]">{sub}</span>
+      <span className={`font-pixel text-[7px] leading-tight sm:text-[8px] ${locked ? 'text-white/55' : 'text-white'}`}>{label}</span>
+      <span className={`font-pixel text-[5px] uppercase sm:text-[6px] ${locked ? (afford ? 'text-[#ffd27a]/80' : 'text-[#ff9aa6]/80') : 'text-white/40'}`}>{sub}</span>
     </button>
   );
 }

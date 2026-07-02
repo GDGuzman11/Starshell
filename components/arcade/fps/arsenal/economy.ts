@@ -30,3 +30,12 @@ export function priceFor(tier: Tier, mag: number): number {
 export function legendaryGate(price: number): PartGate {
   return { familiarity: 3, bosses: 2 + Math.round(price / 800), astro: price };
 }
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** AstroDiamond cost to permanently UNLOCK a locked gun — derived from its power, and
+ *  deliberately HIGHER than component prices (guns are the big, grindy investment). */
+export function unlockWeaponPrice(gun: { dmg: number; family: string; splash?: number }): number {
+  const mul = gun.family === 'pistol' ? 0.7 : gun.family === 'sniper' ? 1.3 : gun.family === 'launcher' ? 1.4 : 1;
+  return clamp(Math.round((800 + gun.dmg * 6 + (gun.splash ?? 0) * 120) * mul), 1200, 6000);
+}

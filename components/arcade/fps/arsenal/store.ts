@@ -6,7 +6,7 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import type { Family } from '../weapons';
+import { RECRUIT_WEAPONS, type Family } from '../weapons';
 import { generateParts, type EngPart } from './parts';
 import { xpForOperation } from './familiarity';
 
@@ -32,13 +32,14 @@ export interface ArsenalSave {
   partXp: Record<string, number>; // partId → familiarity XP
   service: Record<string, ServiceRecord>; // weaponId → record
   bosses: number; // lifetime bosses defeated (Legendary gate signal)
+  unlockedWeapons: string[]; // NON-recruit guns bought with AstroDiamonds (permanent)
 }
 
 export function blankRecord(): ServiceRecord {
   return { kills: 0, headshots: 0, bossKills: 0, operations: 0, shots: 0, hits: 0, bestStreak: 0, astroInvested: 0, partsInstalled: 0, xp: 0 };
 }
 function blank(): ArsenalSave {
-  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0 };
+  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0, unlockedWeapons: [] };
 }
 
 export function loadArsenal(): ArsenalSave {
@@ -52,6 +53,7 @@ export function loadArsenal(): ArsenalSave {
       partXp: raw.partXp && typeof raw.partXp === 'object' ? raw.partXp : b.partXp,
       service: raw.service && typeof raw.service === 'object' ? raw.service : b.service,
       bosses: Number.isFinite(raw.bosses) ? raw.bosses : b.bosses,
+      unlockedWeapons: Array.isArray(raw.unlockedWeapons) ? raw.unlockedWeapons.filter((x: unknown) => typeof x === 'string') : b.unlockedWeapons,
     };
   } catch {
     return blank();
@@ -96,6 +98,16 @@ export function equipPart(s: ArsenalSave, p: EngPart): ArsenalSave {
   const map = { ...(s.equipped[p.weaponId] ?? {}) };
   map[p.category] = p.id;
   return { ...s, equipped: { ...s.equipped, [p.weaponId]: map } };
+}
+
+/** Standard Issue guns are always usable; every other gun must be unlocked with AD. */
+export function isWeaponUnlocked(s: ArsenalSave, id: string): boolean {
+  return RECRUIT_WEAPONS.has(id) || s.unlockedWeapons.includes(id);
+}
+/** Permanently unlock a gun (caller deducts the AstroDiamonds). */
+export function unlockWeapon(s: ArsenalSave, id: string): ArsenalSave {
+  if (isWeaponUnlocked(s, id)) return s;
+  return { ...s, unlockedWeapons: [...s.unlockedWeapons, id] };
 }
 
 /** Record a completed operation: every weapon that DEPLOYED (and each of its equipped
