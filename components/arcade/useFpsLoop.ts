@@ -23,6 +23,9 @@ import { SpatialGrid } from './fps/level/grid';
 import { buildNavGraph, type NavGraph } from './fps/level/nav';
 import { ProjectileSystem } from './fps/projectiles';
 import { TelegraphSystem } from './fps/telegraph';
+import { buildMarine } from './fps/marine/model';
+import { loadMarine, equippedArmorPieces } from './fps/marine/store';
+import { disposeModel } from './fps/models';
 
 const RW = 480;
 const RH = 270;
@@ -128,6 +131,7 @@ export function useFpsLoop(
   const lookDY = useRef(0);
   const fireHeld = useRef(false);
   const crouchHeld = useRef(false); // hold C (desktop) / toggle button (touch)
+  const povThird = useRef(false); // third-person camera (V / POV button)
   const zoomLevel = useRef(0); // 0 = hip, 1 = zoom, 2 = deep zoom (right-click cycles)
   const sens = useRef(1); // look-sensitivity multiplier (user-adjustable)
   const aimAssistOn = useRef(true); // touch aim assist (settings)
@@ -173,6 +177,10 @@ export function useFpsLoop(
   }, []);
   const setCrouch = useCallback((v: boolean) => {
     crouchHeld.current = v;
+  }, []);
+  const togglePov = useCallback((): boolean => {
+    povThird.current = !povThird.current;
+    return povThird.current;
   }, []);
   const setInvertY = useCallback((v: boolean) => {
     invertY.current = v;
@@ -271,6 +279,7 @@ export function useFpsLoop(
 
     let world: World | null = null;
     let builtFor: Level3D | null = null;
+    let playerBody: THREE.Group | null = null; // third-person Marine (armor + division)
     // Spatial grid over the current level's boxes — narrows collision/LoS queries
     // to local candidates. Rebuilt with the world; identical results, fewer tests.
     let grid: SpatialGrid | null = null;
@@ -368,8 +377,15 @@ export function useFpsLoop(
 
     const buildFor = (g: FpsGameState) => {
       disposeExtras();
+      if (playerBody) { world?.scene.remove(playerBody); disposeModel(playerBody); playerBody = null; }
       world?.dispose();
       world = buildWorld(g.level, tier);
+      // Third-person player avatar — the permanent Marine wearing its engineered armor
+      // + Combat Division. Hidden until the player switches to the third-person view.
+      const ms = loadMarine();
+      playerBody = buildMarine(equippedArmorPieces(ms), tier, ms.division);
+      playerBody.visible = false;
+      world.scene.add(playerBody);
       // (Re)build the spatial grid for this level's boxes.
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
@@ -517,6 +533,7 @@ export function useFpsLoop(
       if (k === 'f') grappleReq.current = true;
       if (k === 'g') throwReq.current = true;
       if (k === 'c' || k === 'control') crouchHeld.current = true;
+      if (k === 'v') povThird.current = !povThird.current;
       if (k === '1' || k === '2' || k === '3') switchReq.current = Number(k) - 1;
       if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' || k.startsWith('arrow')) {
         if (k.startsWith('arrow') || k === ' ') e.preventDefault();
@@ -1663,15 +1680,45 @@ export function useFpsLoop(
         // Recoil recovery — snappy settle so the kick reads per shot, then gone.
         recoilKick -= recoilKick * Math.min(1, dt * 7);
         if (recoilKick < 0.0002) recoilKick = 0;
-        camera.position.set(p.x, p.y + EYE - (crouchHeld.current && p.onGround ? 0.55 : 0), p.z);
+        const gNow = gameRef.current;
+        const eyeY = p.y + EYE - (crouchHeld.current && p.onGround ? 0.55 : 0);
+        const third = povThird.current;
+        if (third) {
+          // Camera pulls back along the view axis (reticle stays centred so aiming is
+          // unchanged), pulling in if a wall would clip it. Show the Marine body.
+          const cy = Math.cos(p.pitch);
+          const dx = -cy * Math.sin(p.yaw);
+          const dyv = Math.sin(p.pitch);
+          const dz = -cy * Math.cos(p.yaw);
+          const from: Vec3 = [p.x, eyeY, p.z];
+          let dist = 3.2;
+          const camAt = (d: number): Vec3 => [p.x - dx * d, eyeY - dyv * d + 0.35, p.z - dz * d];
+          if (gNow && world && segBlocked(from, camAt(dist), gNow.level, grid ?? undefined)) {
+            dist = 0.8;
+            for (let d = 2.8; d >= 0.8; d -= 0.4) {
+              if (!segBlocked(from, camAt(d), gNow.level, grid ?? undefined)) { dist = d; break; }
+            }
+          }
+          const c = camAt(dist);
+          camera.position.set(c[0], c[1], c[2]);
+          if (playerBody) {
+            playerBody.visible = true;
+            playerBody.position.set(p.x, p.y, p.z);
+            playerBody.rotation.y = p.yaw + Math.PI; // model faces +Z; player forward is −Z at yaw 0
+            playerBody.scale.y = crouchHeld.current && p.onGround ? 0.72 : 1;
+          }
+        } else {
+          camera.position.set(p.x, eyeY, p.z);
+          if (playerBody) playerBody.visible = false;
+        }
         camera.rotation.y = p.yaw;
         camera.rotation.x = p.pitch + recoilKick;
         if (world) {
           if (composer) composer.composer.render(dt);
           else renderer.render(world.scene, camera);
           // 3D viewmodel overlay — pixelated (same buffer), depth-cleared so it
-          // never clips world geometry. Hidden under the sniper scope overlay.
-          if (viewmodel && zoomLevel.current === 0) viewmodel.render(renderer);
+          // never clips world geometry. Hidden under the scope overlay + in third-person.
+          if (viewmodel && zoomLevel.current === 0 && !third) viewmodel.render(renderer);
         }
 
         // Dynamic resolution: nudge the internal buffer to hold ~55-60 fps.
@@ -1775,6 +1822,7 @@ export function useFpsLoop(
       window.visualViewport?.removeEventListener('resize', onViewport);
       document.removeEventListener('visibilitychange', onVisible);
       if (activeLoop) sfx.playWeaponLoopStop(activeLoop);
+      if (playerBody) { world?.scene.remove(playerBody); disposeModel(playerBody); playerBody = null; }
       world?.dispose();
       ballGeo.dispose();
       projectiles.dispose();
@@ -1785,5 +1833,5 @@ export function useFpsLoop(
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, togglePov, throwGrenade, jump, reload, grapple };
 }
