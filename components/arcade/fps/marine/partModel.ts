@@ -18,6 +18,7 @@ import { buildHelmet } from './helmets';
 import { buildChest } from './chests';
 import { buildShoulders } from './shoulders';
 import { buildBackpack } from './backpacks';
+import { buildBoot } from './boots';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -89,9 +90,8 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'boot': {
-      g.add(box(0.2 * b, 0.14 * b, 0.24 * b, body, 0, 0, 0.02)); // boot
-      g.add(box(0.22 * b, 0.06, 0.34 * b, dark, 0, -0.06 * b, 0.06)); // sole + toe
-      if (trim) glowStrip(0.03, 0.03, 0.1, 0.09 * b, 0, 0);
+      // Art-directed per-division boot geometry (Armor Overhaul, slice 5).
+      g.add(buildBoot(spec, rt));
       break;
     }
     case 'backpack': {
