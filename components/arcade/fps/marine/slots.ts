@@ -21,7 +21,7 @@ export type BodyPart = 'head' | 'torso' | 'armL' | 'armR' | 'legL' | 'legR';
 
 /** Geometry family the piece renderer switches on (see partModel.ts). */
 export type ArmorFamily =
-  | 'helmet' | 'visor' | 'plate' | 'pauldron' | 'limb' | 'cap'
+  | 'helmet' | 'visor' | 'chest' | 'plate' | 'pauldron' | 'limb' | 'cap'
   | 'glove' | 'boot' | 'backpack' | 'core' | 'comms' | 'insignia' | 'coating';
 
 export interface ArmorSlot {
@@ -48,7 +48,7 @@ export const ARMOR_SLOTS: ArmorSlot[] = [
   { id: 'helmet', label: 'Helmet', parts: ['head'], anchor: [0, 0.1, 0], family: 'helmet', primary: 'armor', group: 'plating' },
   { id: 'visor', label: 'Visor', parts: ['head'], anchor: [0, 0.08, 0.15], family: 'visor', primary: 'recovery', group: 'plating' },
   { id: 'neck', label: 'Neck Guard', parts: ['torso'], anchor: [0, 0.52, 0.02], family: 'plate', primary: 'armor', group: 'plating' },
-  { id: 'chest', label: 'Chest Plate', parts: ['torso'], anchor: [0, 0.3, 0.16], family: 'plate', primary: 'armor', group: 'plating' },
+  { id: 'chest', label: 'Chest Plate', parts: ['torso'], anchor: [0, 0.3, 0.16], family: 'chest', primary: 'armor', group: 'plating' },
   { id: 'back', label: 'Back Plate', parts: ['torso'], anchor: [0, 0.32, -0.16], family: 'plate', primary: 'armor', group: 'plating' },
   { id: 'shoulders', label: 'Shoulders', parts: ['torso'], anchor: [0, 0.48, 0], family: 'pauldron', primary: 'armor', group: 'plating' },
   { id: 'upperArms', label: 'Upper Arms', parts: ['armL', 'armR'], anchor: [0, -0.2, 0], family: 'limb', primary: 'armor', group: 'plating' },

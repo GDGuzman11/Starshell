@@ -75,6 +75,7 @@ export function divisionBase(id: string | null | undefined, tier: RenderTier): H
 const FAM: Record<ArmorFamily, { parts: BodyPart[]; anchor: [number, number, number] }> = {
   helmet: { parts: ['head'], anchor: [0, 0.1, 0] },
   visor: { parts: ['head'], anchor: [0, 0.08, 0.15] },
+  chest: { parts: ['torso'], anchor: [0, 0.3, 0.16] },
   plate: { parts: ['torso'], anchor: [0, 0.3, 0.16] },
   pauldron: { parts: ['torso'], anchor: [0, 0.48, 0] },
   limb: { parts: ['armL', 'armR'], anchor: [0, -0.4, 0] },
@@ -105,7 +106,7 @@ const ROLES: Record<DivisionId, string[]> = {
 const CATS: Record<DivisionId, CatDef[]> = {
   vanguard: [
     { key: 'helmet', label: 'Helmet', family: 'helmet', primary: 'armor', noun: 'Helm' },
-    { key: 'chest', label: 'Chest Plate', family: 'plate', primary: 'armor', noun: 'Cuirass' },
+    { key: 'chest', label: 'Chest Plate', family: 'chest', primary: 'armor', noun: 'Cuirass' },
     { key: 'shoulders', label: 'Shoulders', family: 'pauldron', primary: 'armor', noun: 'Pauldrons' },
     { key: 'gloves', label: 'Gloves', family: 'glove', primary: 'mobility', noun: 'Gauntlets' },
     { key: 'boots', label: 'Boots', family: 'boot', primary: 'armor', noun: 'Sabatons' },
@@ -119,7 +120,7 @@ const CATS: Record<DivisionId, CatDef[]> = {
     { key: 'helmet', label: 'Recon Helmet', family: 'helmet', primary: 'mobility', noun: 'Helm' },
     { key: 'visor', label: 'Tactical Visor', family: 'visor', primary: 'recovery', noun: 'Visor' },
     { key: 'scanner', label: 'Scanner Array', family: 'comms', primary: 'recovery', noun: 'Array', group: 'systems', anchor: [-0.1, 0.22, -0.05] },
-    { key: 'chest', label: 'Lightweight Chest Plate', family: 'plate', primary: 'mobility', noun: 'Plate' },
+    { key: 'chest', label: 'Lightweight Chest Plate', family: 'chest', primary: 'mobility', noun: 'Plate' },
     { key: 'sensorpack', label: 'Sensor Backpack', family: 'backpack', primary: 'recovery', noun: 'Pack', group: 'systems' },
     { key: 'drone', label: 'Drone Module', family: 'core', primary: 'shield', noun: 'Drone', group: 'systems', anchor: [0, 0.05, -0.24] },
     { key: 'boots', label: 'Mobility Boots', family: 'boot', primary: 'mobility', noun: 'Boots' },
@@ -129,7 +130,7 @@ const CATS: Record<DivisionId, CatDef[]> = {
   ],
   warden: [
     { key: 'helmet', label: 'Fortress Helmet', family: 'helmet', primary: 'armor', noun: 'Helm' },
-    { key: 'chest', label: 'Heavy Chest Plate', family: 'plate', primary: 'armor', noun: 'Cuirass' },
+    { key: 'chest', label: 'Heavy Chest Plate', family: 'chest', primary: 'armor', noun: 'Cuirass' },
     { key: 'emitter', label: 'Shield Emitter', family: 'core', primary: 'shield', noun: 'Emitter', group: 'systems', anchor: [0, 0.42, 0.16] },
     { key: 'shoulders', label: 'Reinforced Shoulders', family: 'pauldron', primary: 'armor', noun: 'Pauldrons' },
     { key: 'backpack', label: 'Defensive Backpack', family: 'backpack', primary: 'armor', noun: 'Pack', group: 'systems' },
@@ -142,7 +143,7 @@ const CATS: Record<DivisionId, CatDef[]> = {
   phantom: [
     { key: 'helmet', label: 'Precision Helmet', family: 'helmet', primary: 'mobility', noun: 'Helm' },
     { key: 'visor', label: 'Long Range Visor', family: 'visor', primary: 'recovery', noun: 'Visor' },
-    { key: 'chest', label: 'Sniper Chest Plate', family: 'plate', primary: 'mobility', noun: 'Plate' },
+    { key: 'chest', label: 'Sniper Chest Plate', family: 'chest', primary: 'mobility', noun: 'Plate' },
     { key: 'shoulders', label: 'Stability Shoulders', family: 'pauldron', primary: 'recovery', noun: 'Pauldrons' },
     { key: 'gloves', label: 'Precision Gloves', family: 'glove', primary: 'mobility', noun: 'Gauntlets' },
     { key: 'boots', label: 'Marksman Boots', family: 'boot', primary: 'mobility', noun: 'Boots' },
@@ -153,7 +154,7 @@ const CATS: Record<DivisionId, CatDef[]> = {
   ],
   lifeline: [
     { key: 'helmet', label: 'Medic Helmet', family: 'helmet', primary: 'recovery', noun: 'Helm' },
-    { key: 'chest', label: 'Medical Chest Plate', family: 'plate', primary: 'recovery', noun: 'Plate' },
+    { key: 'chest', label: 'Medical Chest Plate', family: 'chest', primary: 'recovery', noun: 'Plate' },
     { key: 'nanopack', label: 'Nano Backpack', family: 'backpack', primary: 'recovery', noun: 'Pack', group: 'systems' },
     { key: 'gloves', label: 'Repair Gloves', family: 'glove', primary: 'recovery', noun: 'Gauntlets' },
     { key: 'boots', label: 'Support Boots', family: 'boot', primary: 'mobility', noun: 'Boots' },

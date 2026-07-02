@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { accent, box, coneZ, cylY, cylZ, metal } from '../models/parts';
 import { buildHelmet } from './helmets';
+import { buildChest } from './chests';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -44,6 +45,11 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
     case 'helmet': {
       // Art-directed per-division helmet geometry (Armor Overhaul, slice 1).
       g.add(buildHelmet(spec, rt));
+      break;
+    }
+    case 'chest': {
+      // Art-directed per-division chest geometry (Armor Overhaul, slice 2).
+      g.add(buildChest(spec, rt));
       break;
     }
     case 'visor': {
