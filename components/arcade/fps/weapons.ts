@@ -21,18 +21,21 @@ export interface GunDef {
   adsFov: number;
   color: number; // tracer colour
   splash?: number; // explosive AoE radius (launchers); 0/undefined = hitscan single-target
+  burst?: number; // fires an N-round burst per trigger pull (CB-02 RANGER)
+  heat?: boolean; // energy weapon: no reload — builds heat + overheats instead (ER-08 ION)
+  charge?: number; // seconds to hold before the shot releases (RC-12 THUNDER / PM-09 METEOR)
 }
 
 export const GUNS: GunDef[] = [
   // STANDARD ISSUE — the iconic arsenal every Marine is issued (built alongside the rest).
   { id: 'ar01', name: 'AR-01 PULSE', family: 'rifle', dmg: 34, rate: 0.12, mag: 32, reserve: 192, reload: 1.7, auto: true, scoped: false, hipFov: 78, adsFov: 57, color: 0x8fbaff },
-  { id: 'cb02', name: 'CB-02 RANGER', family: 'rifle', dmg: 62, rate: 0.28, mag: 20, reserve: 120, reload: 1.6, auto: false, scoped: false, hipFov: 78, adsFov: 48, color: 0x9fd0ff },
+  { id: 'cb02', name: 'CB-02 RANGER', family: 'rifle', dmg: 62, rate: 0.34, mag: 21, reserve: 126, reload: 1.6, auto: false, scoped: false, hipFov: 78, adsFov: 48, color: 0x9fd0ff, burst: 3 },
   { id: 'vx04', name: 'VX-04 TEMPEST', family: 'mg', dmg: 20, rate: 0.065, mag: 45, reserve: 315, reload: 1.5, auto: true, scoped: false, hipFov: 82, adsFov: 68, color: 0xffb0d0 },
-  { id: 'er08', name: 'ER-08 ION', family: 'laser', dmg: 22, rate: 0.09, mag: 60, reserve: 360, reload: 2.0, auto: true, scoped: false, hipFov: 78, adsFov: 58, color: 0x7fdfff },
+  { id: 'er08', name: 'ER-08 ION', family: 'laser', dmg: 22, rate: 0.09, mag: 60, reserve: 0, reload: 2.0, auto: true, scoped: false, hipFov: 78, adsFov: 58, color: 0x7fdfff, heat: true },
   { id: 'rt06', name: 'RT-06 BULLDOG', family: 'launcher', dmg: 190, rate: 1.2, mag: 4, reserve: 16, reload: 2.6, auto: false, scoped: false, hipFov: 78, adsFov: 62, color: 0xff8a3a, splash: 6 },
   { id: 'gc03', name: 'GC-03 HAMMER', family: 'launcher', dmg: 130, rate: 0.7, mag: 6, reserve: 30, reload: 2.3, auto: false, scoped: false, hipFov: 78, adsFov: 62, color: 0xbfe14a, splash: 4.5 },
-  { id: 'pm09', name: 'PM-09 METEOR', family: 'launcher', dmg: 250, rate: 1.6, mag: 3, reserve: 12, reload: 2.8, auto: false, scoped: false, hipFov: 78, adsFov: 60, color: 0x7fdfff, splash: 7 },
-  { id: 'rc12', name: 'RC-12 THUNDER', family: 'sniper', dmg: 340, rate: 1.0, mag: 5, reserve: 30, reload: 2.6, auto: false, scoped: true, hipFov: 78, adsFov: 24, color: 0x9ec8ff },
+  { id: 'pm09', name: 'PM-09 METEOR', family: 'launcher', dmg: 250, rate: 1.6, mag: 3, reserve: 12, reload: 2.8, auto: false, scoped: false, hipFov: 78, adsFov: 60, color: 0x7fdfff, splash: 7, charge: 0.85 },
+  { id: 'rc12', name: 'RC-12 THUNDER', family: 'sniper', dmg: 340, rate: 1.0, mag: 5, reserve: 30, reload: 2.6, auto: false, scoped: true, hipFov: 78, adsFov: 24, color: 0x9ec8ff, charge: 0.7 },
   { id: 'sp01', name: 'SP-01 SERVICE', family: 'pistol', dmg: 40, rate: 0.22, mag: 15, reserve: 90, reload: 1.1, auto: false, scoped: false, hipFov: 78, adsFov: 60, color: 0xaef5c8 },
   { id: 'mp05', name: 'MP-05 VIPER', family: 'pistol', dmg: 18, rate: 0.08, mag: 24, reserve: 168, reload: 1.3, auto: true, scoped: false, hipFov: 80, adsFov: 64, color: 0xc8f5d0 },
   // rifles (PRIMARY: +10 dmg pass)

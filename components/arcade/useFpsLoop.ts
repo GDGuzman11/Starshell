@@ -42,6 +42,9 @@ const SPREAD: Record<string, number> = { rifle: 0.026, mg: 0.044, laser: 0.016, 
 // is the cue that reads through the scope — snipers & launchers (the slow, heavy
 // secondaries) kick hard so each shot/cycle is obvious; autos stay snappy.
 const RECOIL: Record<string, number> = { rifle: 0.016, mg: 0.011, laser: 0.009, pistol: 0.03, launcher: 0.1, sniper: 0.085 };
+const BURST_GAP = 0.07; // intra-burst round spacing (CB-02)
+const HEAT_SHOTS = 24; // energy shots to overheat (ER-08); vents ~2 s when idle
+const OVERHEAT_LOCK = 1.9; // overheat cooldown lockout seconds
 // How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),
 // everything else gets a single ADS zoom. Sidearms (pistols) included = 1.
 const maxZoomFor = (gun: GunDef) => (gun.scoped ? 3 : 1);
@@ -85,6 +88,9 @@ export interface FpsSnapshot {
   reloading: boolean;
   ads: boolean;
   scoped: boolean;
+  heat?: number; // energy heat 0..1 (heat weapons only)
+  overheated?: boolean; // energy weapon locked out
+  charge?: number; // charge progress 0..1 (charge weapons only)
   slots: { name: string; active: boolean }[];
   throwName: string;
   throwCount: number;
@@ -130,6 +136,13 @@ export function useFpsLoop(
   const jumpReq = useRef(false);
   const grappleReq = useRef(false);
   const prevFire = useRef(false);
+  // Fire-mode transient state (reset on weapon switch): burst rounds left, charge held,
+  // energy heat (0..1) + overheat lockout seconds.
+  const burstLeft = useRef(0);
+  const chargeT = useRef(0);
+  const heat = useRef(0);
+  const overheat = useRef(0);
+  const prevGunId = useRef('');
   const switchReq = useRef<number | 'next' | 'prev' | null>(null);
 
   const setMoveAxis = useCallback((strafe: number, fwd: number) => {
@@ -677,6 +690,13 @@ export function useFpsLoop(
             sfx.swap();
           }
           const gun = g.guns[g.active];
+          if (prevGunId.current !== gun.id) {
+            prevGunId.current = gun.id;
+            burstLeft.current = 0;
+            chargeT.current = 0;
+            heat.current = 0;
+            overheat.current = 0;
+          }
 
           g.ads = zoomLevel.current > 0;
           const wantFov =
@@ -765,7 +785,7 @@ export function useFpsLoop(
           }
           if (reloadReq.current) {
             reloadReq.current = false;
-            if (g.reloading <= 0 && g.mags[g.active] < gun.mag && g.reserves[g.active] > 0) {
+            if (!gun.heat && g.reloading <= 0 && g.mags[g.active] < gun.mag && g.reserves[g.active] > 0) {
               g.reloading = gun.reload;
               viewmodel?.reload(gun.reload);
               sfx.playReload(gun.id);
@@ -821,9 +841,43 @@ export function useFpsLoop(
             activeLoop = null;
           }
 
-          if (wantShot && g.fireCd <= 0 && g.reloading <= 0 && g.mags[g.active] > 0) {
-            g.fireCd = gun.rate;
-            g.mags[g.active]--;
+          // FIRE MODES. Ammo source: energy weapons gate on heat/overheat, everything else
+          // on the magazine. CHARGE weapons build charge while held and release at full;
+          // BURST weapons fire an N-round burst per pull; the rest fire per the trigger.
+          const canAmmo = gun.heat ? overheat.current <= 0 && heat.current < 1 : g.mags[g.active] > 0;
+          let doFire = false;
+          if (gun.charge) {
+            if (fireInput && !locked && g.fireCd <= 0 && g.reloading <= 0 && canAmmo) {
+              chargeT.current += dt;
+              if (chargeT.current >= gun.charge) {
+                doFire = true;
+                chargeT.current = 0;
+              }
+            } else if (!fireInput) {
+              chargeT.current = 0;
+            }
+          } else {
+            doFire = (wantShot || burstLeft.current > 0) && g.fireCd <= 0 && g.reloading <= 0 && canAmmo;
+            if (doFire && gun.burst && burstLeft.current === 0) burstLeft.current = gun.burst;
+          }
+          // Energy weapons vent heat + drain the overheat lockout when not firing.
+          if (gun.heat) {
+            if (overheat.current > 0) overheat.current -= dt;
+            if (!doFire) heat.current = Math.max(0, heat.current - dt / 2);
+          }
+          if (doFire) {
+            if (gun.heat) {
+              heat.current = Math.min(1, heat.current + 1 / HEAT_SHOTS);
+              if (heat.current >= 1) overheat.current = OVERHEAT_LOCK;
+            } else {
+              g.mags[g.active]--;
+            }
+            if (gun.burst) {
+              burstLeft.current = Math.max(0, burstLeft.current - 1);
+              g.fireCd = burstLeft.current > 0 ? BURST_GAP : gun.rate;
+            } else {
+              g.fireCd = gun.rate;
+            }
             g.shotsFired++;
             snap.fireAt = now;
             viewmodel?.fire();
@@ -1627,6 +1681,9 @@ export function useFpsLoop(
           snap.reloading = g.reloading > 0;
           snap.ads = g.ads;
           snap.scoped = gun.scoped;
+          snap.heat = gun.heat ? heat.current : undefined;
+          snap.overheated = gun.heat ? overheat.current > 0 : undefined;
+          snap.charge = gun.charge ? Math.min(1, chargeT.current / gun.charge) : undefined;
           snap.slots = g.guns.map((gg, i) => ({ name: gg.name, active: i === g.active }));
           snap.throwName = g.throwable.name;
           snap.throwCount = g.throwCount;

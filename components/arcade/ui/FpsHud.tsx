@@ -191,10 +191,22 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
         </div>
         {snap.reloading ? (
           <div className="text-[9px] text-[#7fdfff] sm:text-[12px]">RELOADING…</div>
+        ) : snap.heat != null ? (
+          <div className={`text-[9px] sm:text-[11px] ${isTouch ? 'flex flex-col items-center' : 'flex flex-col items-end'}`}>
+            <span className={snap.overheated ? 'text-[#ff5d6e]' : 'text-[#7fdfff]'}>{snap.overheated ? 'OVERHEAT' : 'ENERGY'}</span>
+            <div className="mt-0.5 h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full" style={{ width: `${Math.round(snap.heat * 100)}%`, backgroundColor: snap.overheated ? '#ff5d6e' : snap.heat > 0.7 ? '#ffd27a' : '#7fdfff' }} />
+            </div>
+          </div>
         ) : (
           <div className="text-[13px] sm:text-[17px]">
             <span className={snap.mag <= 3 ? 'text-[#ff5d6e]' : 'text-white'}>{snap.mag}</span>
             <span className="text-white/40"> / {snap.reserve}</span>
+            {snap.charge != null && snap.charge > 0 && (
+              <div className={`mt-0.5 h-1 w-20 overflow-hidden rounded-full bg-white/10 ${isTouch ? 'mx-auto' : 'ml-auto'}`}>
+                <div className="h-full rounded-full bg-[#9ec8ff]" style={{ width: `${Math.round(snap.charge * 100)}%` }} />
+              </div>
+            )}
           </div>
         )}
         <div className={`mt-1 flex gap-1 ${isTouch ? 'justify-center' : 'justify-end'}`}>
