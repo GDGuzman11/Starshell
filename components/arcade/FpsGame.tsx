@@ -221,11 +221,16 @@ export function FpsGame() {
     }
   }, [sensitivity, setSensitivity]);
 
-  // Track real fullscreen state (covers the OS/escape exit too).
+  // Track real fullscreen state (covers the OS/escape exit too; standard + webkit).
   useEffect(() => {
-    const onFs = () => setFullscreen(document.fullscreenElement != null);
+    const doc = document as Document & { webkitFullscreenElement?: Element };
+    const onFs = () => setFullscreen((doc.fullscreenElement ?? doc.webkitFullscreenElement) != null);
     document.addEventListener('fullscreenchange', onFs);
-    return () => document.removeEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFs);
+      document.removeEventListener('webkitfullscreenchange', onFs);
+    };
   }, []);
 
   // Pseudo-fullscreen (iOS fallback): lock page scroll while the CSS overlay is
@@ -245,11 +250,16 @@ export function FpsGame() {
   }, [pseudoFs]);
 
   const toggleFullscreen = useCallback(() => {
-    const el = wrapRef.current;
+    const el = wrapRef.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> | void }) | null;
     if (!el) return;
-    // Already in some fullscreen → leave it.
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.();
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element;
+      webkitExitFullscreen?: () => void;
+      webkitFullscreenEnabled?: boolean;
+    };
+    // Already in some fullscreen → leave it (standard or webkit-prefixed).
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen)?.call(doc);
       setPseudoFs(false);
       return;
     }
@@ -257,16 +267,19 @@ export function FpsGame() {
       setPseudoFs(false);
       return;
     }
-    // Prefer the real API; on iOS Safari (no element fullscreen) or a rejection,
+    // Prefer the real API — many mobile browsers (Android/Samsung) expose ONLY the
+    // webkit-prefixed form. iOS Safari (iPhone) has no element fullscreen at all →
     // fall back to the CSS pseudo-fullscreen overlay.
-    const canReal = document.fullscreenEnabled && typeof el.requestFullscreen === 'function';
-    if (canReal) {
-      el.requestFullscreen()
-        .then(() => {
-          // Best-effort landscape lock on phones; ignore where unsupported.
-          (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.('landscape').catch(() => {});
-        })
-        .catch(() => setPseudoFs(true));
+    const req = el.requestFullscreen ?? el.webkitRequestFullscreen;
+    const enabled = doc.fullscreenEnabled || doc.webkitFullscreenEnabled;
+    if (req && enabled) {
+      try {
+        const r = req.call(el);
+        (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.('landscape').catch(() => {});
+        if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => setPseudoFs(true));
+      } catch {
+        setPseudoFs(true);
+      }
     } else {
       setPseudoFs(true);
     }

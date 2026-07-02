@@ -289,8 +289,9 @@ export function useFpsLoop(
     let world: World | null = null;
     let builtFor: Level3D | null = null;
     let playerBody: THREE.Group | null = null; // third-person Marine (armor + division)
-    // Cover state — pinned to a wall, leaning out to peek. tx/tz = the wall tangent.
-    let cover = { active: false, ax: 0, az: 0, tx: 0, tz: 0, prevPov: false };
+    // Cover state — pinned to a wall, leaning out to peek. tx/tz = the wall tangent,
+    // yaw = the locked down-range facing (blind fire sprays around the corner, no aim).
+    let cover = { active: false, ax: 0, az: 0, tx: 0, tz: 0, yaw: 0, prevPov: false };
     // Spatial grid over the current level's boxes — narrows collision/LoS queries
     // to local candidates. Rebuilt with the world; identical results, fewer tests.
     let grid: SpatialGrid | null = null;
@@ -778,7 +779,7 @@ export function useFpsLoop(
                 const nx = -best.dx / nl; // away-from-wall normal
                 const nz = -best.dz / nl;
                 p.yaw = Math.atan2(-nx, -nz); // face away from the wall
-                cover = { active: true, ax: p.x, az: p.z, tx: nz, tz: -nx, prevPov: povThird.current };
+                cover = { active: true, ax: p.x, az: p.z, tx: nz, tz: -nx, yaw: p.yaw, prevPov: povThird.current };
                 povThird.current = true;
               }
             }
@@ -788,6 +789,8 @@ export function useFpsLoop(
             peek = keys.current.has('a') ? -1 : keys.current.has('d') ? 1 : peekTouch.current;
             fwd = 0; // movement locked while in cover; A/D + peek buttons lean instead
             strafe = 0;
+            p.yaw = cover.yaw; // pinned to the wall: no free aiming
+            p.pitch = 0;
             if (jumpReq.current || keys.current.has(' ')) { cover.active = false; povThird.current = cover.prevPov; }
           }
 
@@ -984,8 +987,17 @@ export function useFpsLoop(
             // ray, so un-zoomed fire visibly scatters around the crosshair.
             const zf = zoomLevel.current >= 3 ? 0.04 : zoomLevel.current === 2 ? 0.12 : zoomLevel.current === 1 ? 0.24 : 1;
             const spr = (SPREAD[gun.family] ?? 0.02) * zf;
-            const syaw = p.yaw + (Math.random() - Math.random()) * spr;
-            const spitch = p.pitch + (Math.random() - Math.random()) * spr;
+            // BLIND FIRE from cover: pinned to the wall, the Marine sticks the gun around
+            // the corner and sprays in the lean direction — no aiming, wide random scatter.
+            let syaw: number;
+            let spitch: number;
+            if (cover.active) {
+              syaw = cover.yaw + peek * 0.45 + (Math.random() - Math.random()) * 0.4;
+              spitch = (Math.random() - Math.random()) * 0.14;
+            } else {
+              syaw = p.yaw + (Math.random() - Math.random()) * spr;
+              spitch = p.pitch + (Math.random() - Math.random()) * spr;
+            }
             const scp = Math.cos(spitch);
             const sfx2 = -scp * Math.sin(syaw);
             const sfy2 = Math.sin(spitch);
