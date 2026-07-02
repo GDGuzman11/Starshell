@@ -9,6 +9,7 @@ import { FpsLoadout } from './screens/FpsLoadout';
 import { OrientationGate } from './mobile/OrientationGate';
 import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
+import { FpsArsenal } from './screens/FpsArsenal';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
 import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
@@ -21,7 +22,7 @@ import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { THEME_LIST } from './fps/kit/themes';
 
-type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor';
+type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const ARMOR_COST = 100;
@@ -89,6 +90,17 @@ export function FpsGame() {
   const [best, setBest] = useState(0);
   const [astro, setAstro] = useState(0); // Astrodiamonds — persistent premium wallet (across runs)
   const [lastAstro, setLastAstro] = useState(0); // AD earned on the level just finished (for the end/shop card)
+  const spendAstro = useCallback((n: number) => {
+    setAstro((a) => {
+      const v = Math.max(0, a - n);
+      try {
+        localStorage.setItem('starshell.astro', String(v));
+      } catch {
+        /* ignore */
+      }
+      return v;
+    });
+  }, []);
   const [campaignLen, setCampaignLen] = useState(20); // display only; real value read on mount (client)
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
@@ -564,6 +576,9 @@ export function FpsGame() {
             <button type="button" onClick={() => { if (fullBleed && !fsActive) toggleFullscreen(); setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
               Loadout ▸
             </button>
+            <button type="button" onClick={() => setMode('arsenal')} className="mt-3 min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
+              ◈ Arsenal
+            </button>
             <button type="button" onClick={() => setShowSettings(true)} className="mt-3 min-h-[36px] font-pixel text-[8px] uppercase text-white/50 transition-colors hover:text-white sm:text-[9px]">
               ⚙ Settings
             </button>
@@ -659,6 +674,8 @@ export function FpsGame() {
         )}
 
         {mode === 'editor' && <LevelEditor onPlay={playLayout} onBack={() => setMode('menu')} />}
+
+        {mode === 'arsenal' && <FpsArsenal astro={astro} onSpend={spendAstro} onBack={() => setMode('menu')} />}
 
         {mode === 'complete' && (
           <RunStatsCard

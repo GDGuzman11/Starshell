@@ -24,11 +24,13 @@ export function buildPulseAR(tier: RenderTier): THREE.Group {
   const chamber = box(0.07, 0.07, 0.16, glow, 0, 0.02, 0.06); // integrated blue energy chamber
   chamber.name = 'glow';
   const barrel = cylZ(0.028, 0.32, dark, 0, 0.01, -0.3); // short barrel
+  barrel.name = 'base:barrel'; // engineering barrel slot hides this
   const vent = ventSlats(3, 0.045, 0.09, 0.02, dark, 0.07, 0.04, 0.02); // small side vents
   const mag = box(0.07, 0.17, 0.1, dark, 0, -0.15, 0.08); // medium magazine
   mag.name = 'mag';
   const grp = grip(0.06, 0.14, 0.07, dark, 0, -0.13, 0.18);
   const sight = box(0.02, 0.03, 0.12, glow, 0, 0.09, 0.04);
+  sight.name = 'base:optic'; // engineering optic slot hides this
   return model([receiver, chamber, barrel, vent, mag, grp, sight, muzzleAt(-0.46, 0.01)]);
 }
 

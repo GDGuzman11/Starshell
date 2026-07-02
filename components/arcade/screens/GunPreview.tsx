@@ -10,8 +10,10 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { accentOf, buildModel, disposeModel } from '../fps/models';
+import { buildEngineeredGun } from '../fps/arsenal/partModel';
+import type { EngPart } from '../fps/arsenal/parts';
 
-export function GunPreview({ gunId }: { gunId: string }) {
+export function GunPreview({ gunId, equipped, previewPart }: { gunId: string; equipped?: EngPart[]; previewPart?: EngPart | null }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -100,7 +102,16 @@ export function GunPreview({ gunId }: { gunId: string }) {
       pivot.remove(modelRef.current);
       disposeModel(modelRef.current);
     }
-    const m = buildModel(gunId, 'desktop');
+    // Engineering mode: build the gun with equipped parts overlaid; a hovered
+    // `previewPart` replaces the equipped part in its own category (live before-buy).
+    let m: THREE.Group;
+    if (equipped || previewPart) {
+      const list = (equipped ?? []).filter((p) => !previewPart || p.category !== previewPart.category);
+      if (previewPart) list.push(previewPart);
+      m = buildEngineeredGun(gunId, 'desktop', list);
+    } else {
+      m = buildModel(gunId, 'desktop');
+    }
 
     // Centre the model at the pivot origin so it spins in place, then frame it.
     const bbox = new THREE.Box3().setFromObject(m);
@@ -128,7 +139,7 @@ export function GunPreview({ gunId }: { gunId: string }) {
     });
     spinRef.current = spins;
     glowRef.current = glows;
-  }, [gunId]);
+  }, [gunId, equipped, previewPart]);
 
   return <div ref={mountRef} className="h-full w-full" aria-hidden />;
 }
