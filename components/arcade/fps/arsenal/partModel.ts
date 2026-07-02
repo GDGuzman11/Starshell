@@ -79,6 +79,110 @@ function genericMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
   return g;
 }
 
+// ── bespoke generators for the energy / launcher / support slots ──────────────────
+function emitterMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.4 + s.emissive);
+  const r = 0.05 * s.girth;
+  g.add(cylZ(r, 0.1 * s.len, body, 0, 0, -0.05));
+  g.add(cylZ(r * 0.6, 0.13 * s.len, glow, 0, 0, -0.08)); // glowing bore
+  g.add(cylZ(r * 1.2, 0.02, glow, 0, 0, -0.11)); // emitter ring
+  const n = Math.max(3, s.segs);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    g.add(box(0.014, 0.014, 0.09 * s.len, body, Math.cos(a) * r * 1.15, Math.sin(a) * r * 1.15, -0.06)); // focusing prongs
+  }
+  return g;
+}
+function coreMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.5 + s.emissive);
+  g.add(box(0.06 * s.girth, 0.09, 0.13 * s.len, body, 0, 0, 0)); // energy cell block
+  g.add(box(0.02, 0.07, 0.11 * s.len, glow, 0.035 * s.girth, 0, 0)); // glowing window
+  g.add(box(0.02, 0.07, 0.11 * s.len, glow, -0.035 * s.girth, 0, 0));
+  for (let i = 0; i < s.segs; i++) g.add(cylZ(0.016, 0.06, body, 0, 0.055, 0.04 - i * 0.04)); // top conduits
+  return g;
+}
+function coolingMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.2);
+  const n = Math.max(3, s.segs + s.vents);
+  for (let i = 0; i < n; i++) g.add(box(0.1 * s.girth, 0.06, 0.012, body, 0, 0.02, -0.03 + i * 0.02)); // fin stack
+  if (s.emissive > 0.3) g.add(box(0.02, 0.05, 0.012 * n, glow, 0.05 * s.girth, 0.02, -0.01));
+  return g;
+}
+function targetingMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.6);
+  g.add(box(0.05 * s.girth, 0.04, 0.1 * s.len, body, 0, 0, 0)); // sensor module
+  g.add(cylZ(0.022 * s.girth, 0.03, glow, 0, 0, -0.055 * s.len)); // lens
+  g.add(box(0.03, 0.012, 0.03, body, 0, 0.026, 0.01)); // top nub
+  return g;
+}
+function reactorMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.4 + s.emissive);
+  g.add(box(0.09 * s.girth, 0.1, 0.15 * s.len, body, 0, 0, 0)); // rear battery
+  g.add(box(0.02, 0.07, 0.11 * s.len, glow, 0.048 * s.girth, 0, 0)); // glow strip
+  for (let i = 0; i < 2; i++) g.add(cylZ(0.02, 0.09, body, -0.03 + i * 0.06, 0.06, 0)); // top coils
+  return g;
+}
+function warheadMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const glow = accent(s.accent, tier, 1.6);
+  const r = 0.05 * s.girth;
+  g.add(cylZ(r, 0.1 * s.len, body, 0, 0, 0));
+  g.add(coneZ(0, r, 0.1 * s.len, s.emissive > 0.3 ? glow : body, 0, 0, -0.1 * s.len)); // nose cone
+  for (let i = 0; i < 3; i++) g.add(cylZ(r * 1.06, 0.014, body, 0, 0, 0.03 - i * 0.03)); // bands
+  return g;
+}
+function stabilizerMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  for (const sgn of [-1, 1]) {
+    const f = box(0.02, 0.02, 0.11 * s.len, body, sgn * 0.04, 0, 0);
+    f.rotation.y = sgn * 0.3;
+    g.add(f);
+  }
+  g.add(box(0.06 * s.girth, 0.02, 0.05, body, 0, 0, 0.02)); // mount
+  if (s.emissive > 0.3) g.add(box(0.012, 0.012, 0.08, accent(s.accent, tier, 1.4), 0, 0.02, 0));
+  return g;
+}
+function boltMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  g.add(box(0.045 * s.girth, 0.05, 0.09 * s.len, body, 0, 0, 0)); // bolt block
+  g.add(box(0.06, 0.02, 0.025, body, 0.04, 0.02, 0)); // charging handle
+  if (s.emissive > 0.3) g.add(box(0.02, 0.02, 0.02, accent(s.accent, tier, 1.5), 0, 0.03, 0));
+  return g;
+}
+function stabilityMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  for (const sgn of [-1, 1]) {
+    const leg = box(0.015, 0.12 * s.len, 0.015, body, sgn * 0.03, -0.06 * s.len, 0);
+    leg.rotation.z = sgn * 0.45;
+    g.add(leg);
+  }
+  g.add(box(0.05 * s.girth, 0.02, 0.05, body, 0, 0, 0)); // mount
+  return g;
+}
+function gripMesh(s: PartModelSpec, tier: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const body = metal(s.body, tier);
+  const grp = box(0.035 * s.girth, 0.11 * s.len, 0.045, body, 0, -0.055 * s.len, 0);
+  grp.rotation.x = 0.22;
+  g.add(grp);
+  if (s.emissive > 0.3) g.add(box(0.01, 0.06, 0.01, accent(s.accent, tier, 1.4), 0.02, -0.045, 0));
+  return g;
+}
+
 /** Build a single part's primitive geometry (local space; caller positions it). */
 export function buildPartMesh(spec: PartModelSpec, tier: RenderTier): THREE.Group {
   switch (spec.slot) {
@@ -99,6 +203,26 @@ export function buildPartMesh(spec: PartModelSpec, tier: RenderTier): THREE.Grou
     case 'rear':
     case 'stock':
       return stockMesh(spec, tier);
+    case 'emitter':
+      return emitterMesh(spec, tier);
+    case 'core':
+      return coreMesh(spec, tier);
+    case 'cooling':
+      return coolingMesh(spec, tier);
+    case 'targeting':
+      return targetingMesh(spec, tier);
+    case 'reactor':
+      return reactorMesh(spec, tier);
+    case 'warhead':
+      return warheadMesh(spec, tier);
+    case 'stabilizer':
+      return stabilizerMesh(spec, tier);
+    case 'bolt':
+      return boltMesh(spec, tier);
+    case 'stability':
+      return stabilityMesh(spec, tier);
+    case 'grip':
+      return gripMesh(spec, tier);
     default:
       return genericMesh(spec, tier);
   }
