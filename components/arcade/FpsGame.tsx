@@ -29,6 +29,7 @@ import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } 
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
 import { armorPlayerBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
+import { sfx } from './engine/audio';
 import { THEME_LIST } from './fps/kit/themes';
 
 type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal' | 'armory' | 'division' | 'premium';
@@ -117,7 +118,7 @@ export function FpsGame() {
   const [pseudoFs, setPseudoFs] = useState(false); // CSS fallback (iOS Safari)
   const fsActive = fullscreen || pseudoFs;
   const [showSettings, setShowSettings] = useState(false);
-  const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1 });
+  const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85 });
   const [dev, setDev] = useState(false); // dev tools (npm run dev only)
   const [god, setGodState] = useState(false); // dev god-mode (invincible)
   const godRef = useRef(false);
@@ -147,7 +148,10 @@ export function FpsGame() {
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
+  const [crouched, setCrouched] = useState(false);
+  const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
+  const MAX_RESTARTS = 5;
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -185,6 +189,7 @@ export function FpsGame() {
   useEffect(() => {
     setAimAssist(cfg.aimAssist);
     setInvertY(cfg.invertY);
+    sfx.setMasterVolume(cfg.masterVol);
     try {
       localStorage.setItem('starshell.cfg', JSON.stringify(cfg));
     } catch {
@@ -348,6 +353,7 @@ export function FpsGame() {
       gauntletRef.current = 0;
       sandboxRef.current = false;
       setRecovery(null);
+      setRestarts(0); // fresh campaign → reset the per-level restart budget
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
@@ -532,9 +538,20 @@ export function FpsGame() {
         <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none [image-rendering:pixelated]" />
 
         {fullBleed && mode === 'menu' && (
-          <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
-            ◂ EXIT
-          </Link>
+          <>
+            <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
+              ◂ EXIT
+            </Link>
+            {/* Video-style maximize button (phones): toggles true fullscreen. */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
+              className="absolute right-3 top-3 z-[60] flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-black/40 font-pixel text-[13px] text-white/70 backdrop-blur-sm transition-colors hover:text-white"
+            >
+              {fsActive ? '⤡' : '⛶'}
+            </button>
+          </>
         )}
 
         {mode === 'play' && snap && snap.status === 'playing' && (
@@ -546,9 +563,24 @@ export function FpsGame() {
             {isTouch && (
               <>
                 <FpsControls onMove={(s, f) => setMoveAxis(s, f)} onLook={(dx, dy) => addLook(dx, dy)} leftHanded={cfg.leftHanded} opacity={cfg.joyOpacity} />
+                {/* Manual FIRE — hold to shoot (a reliable fallback when auto-fire won't
+                    engage, e.g. sniping). Sits on the movement side, clear of the aim thumb. */}
+                <button
+                  type="button"
+                  aria-label="Fire"
+                  onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setFire(true); }}
+                  onPointerUp={() => setFire(false)}
+                  onPointerCancel={() => setFire(false)}
+                  onPointerLeave={() => setFire(false)}
+                  className={`pointer-events-auto absolute bottom-24 z-40 flex items-center justify-center rounded-full border border-[#ff5d6e]/50 bg-[#ff5d6e]/15 font-pixel text-[9px] text-[#ff5d6e] backdrop-blur-sm active:bg-[#ff5d6e]/35 ${cfg.leftHanded ? 'right-4' : 'left-4'}`}
+                  style={{ width: 78 * cfg.btnScale, height: 78 * cfg.btnScale }}
+                >
+                  FIRE
+                </button>
                 {/* Big action buttons, opposite the joystick, clear of the aim region. */}
                 <div className={`pointer-events-none absolute bottom-4 z-40 flex flex-col gap-2 ${cfg.leftHanded ? 'left-3 items-start' : 'right-3 items-end'}`}>
                   <div className="flex gap-2">
+                    <TouchBtn onTap={() => { const n = !crouched; setCrouched(n); setCrouch(n); }} label={crouched ? 'STAND' : 'CROUCH'} color="#aef5c8" scale={cfg.btnScale} />
                     <TouchBtn onTap={reload} label="RELOAD" color="#7fdfff" scale={cfg.btnScale} />
                     <TouchBtn onTap={() => cycleWeapon(1)} label="WPN ▸" color="#ffffff" scale={cfg.btnScale} />
                   </div>
@@ -572,7 +604,7 @@ export function FpsGame() {
             )}
             {!isTouch && (
               <p className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 font-pixel text-[6px] text-white/35">
-                CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE (AIM A ROOFTOP RING) · LADDERS/ZIPS WALK IN
+                CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · C CROUCH · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE (AIM A ROOFTOP RING) · LADDERS/ZIPS WALK IN
               </p>
             )}
           </>
@@ -755,7 +787,7 @@ export function FpsGame() {
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
-            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
+            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
             onExit={() => setMode('menu')}
           />
         )}
@@ -805,6 +837,8 @@ export function FpsGame() {
             astro={astro}
             earnedAstro={lastAstro}
             stats={runStats}
+            restartsLeft={MAX_RESTARTS - restarts}
+            onRestartLevel={() => { setRestarts((n) => n + 1); startLevel(run.level, lastLoadout, run.maxHp, run.upgrades); }}
             onRestart={() => beginCampaign(lastLoadout)}
             onMenu={() => setMode('menu')}
           />
@@ -826,6 +860,7 @@ export function FpsGame() {
               </button>
             </div>
             <div className="space-y-3">
+              <Slider label="Master Volume" value={cfg.masterVol} min={0} max={1} step={0.05} onChange={(v) => setCfg((c) => ({ ...c, masterVol: v }))} />
               <Toggle label="Invert Look Y" on={cfg.invertY} onToggle={() => setCfg((c) => ({ ...c, invertY: !c.invertY }))} />
               {isTouch && (
                 <>
@@ -960,6 +995,8 @@ function RunStatsCard({
   earnedAstro,
   stats,
   onRestart,
+  onRestartLevel,
+  restartsLeft,
   onMenu,
 }: {
   title: string;
@@ -971,6 +1008,8 @@ function RunStatsCard({
   earnedAstro: number;
   stats: { kills: number; shots: number; hits: number; dmg: number; startedAt: number; endedAt: number };
   onRestart: () => void;
+  onRestartLevel?: () => void;
+  restartsLeft?: number;
   onMenu: () => void;
 }) {
   const secs = stats.startedAt && stats.endedAt ? Math.max(0, Math.round((stats.endedAt - stats.startedAt) / 1000)) : 0;
@@ -1004,7 +1043,12 @@ function RunStatsCard({
             </div>
           ))}
         </div>
-        <div className="mt-5 flex justify-center gap-2">
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {onRestartLevel && (restartsLeft ?? 0) > 0 && (
+            <button type="button" onClick={onRestartLevel} className="min-h-[44px] rounded-md border border-[#ffd27a]/50 bg-[#ffd27a]/15 px-4 font-pixel text-[9px] uppercase text-[#ffd27a] hover:bg-[#ffd27a]/25 sm:text-[11px]">
+              Restart Level ({restartsLeft} left)
+            </button>
+          )}
           <button type="button" onClick={onRestart} className="min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-4 font-pixel text-[9px] uppercase text-[#aef5c8] hover:bg-[#aef5c8]/20 sm:text-[11px]">
             Restart Run
           </button>

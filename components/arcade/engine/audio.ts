@@ -65,6 +65,7 @@ class Sfx {
   // Master bus: every voice routes gain → compressor → destination so many
   // overlapping sounds (rapid fire, explosions) stay punchy without clipping.
   private master: GainNode | null = null;
+  private masterVol = 0.85; // user-adjustable master volume (0..1)
   // Reusable 1 s white-noise buffer — sampled per shot instead of allocating a
   // fresh buffer each time (no GC churn at 20 shots/s).
   private whiteBuf: AudioBuffer | null = null;
@@ -80,7 +81,7 @@ class Sfx {
       this.ctx = new AC();
       // Master chain.
       const master = this.ctx.createGain();
-      master.gain.value = 0.85;
+      master.gain.value = this.masterVol;
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -12;
       comp.knee.value = 26;
@@ -102,6 +103,12 @@ class Sfx {
   /** Output node every voice connects to (the master bus). */
   private out(): AudioNode {
     return this.master ?? this.ctx!.destination;
+  }
+
+  /** Set master volume (0..1); applies live and persists for the next ensure(). */
+  setMasterVolume(v: number): void {
+    this.masterVol = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = this.masterVol;
   }
 
   /** A looping source over the shared white-noise buffer, started at a random

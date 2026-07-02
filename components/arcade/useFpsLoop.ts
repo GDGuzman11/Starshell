@@ -127,6 +127,7 @@ export function useFpsLoop(
   const lookDX = useRef(0);
   const lookDY = useRef(0);
   const fireHeld = useRef(false);
+  const crouchHeld = useRef(false); // hold C (desktop) / toggle button (touch)
   const zoomLevel = useRef(0); // 0 = hip, 1 = zoom, 2 = deep zoom (right-click cycles)
   const sens = useRef(1); // look-sensitivity multiplier (user-adjustable)
   const aimAssistOn = useRef(true); // touch aim assist (settings)
@@ -166,6 +167,12 @@ export function useFpsLoop(
   }, []);
   const setAimAssist = useCallback((v: boolean) => {
     aimAssistOn.current = v;
+  }, []);
+  const setFire = useCallback((v: boolean) => {
+    fireHeld.current = v; // touch manual fire (a fallback when auto-fire won't engage)
+  }, []);
+  const setCrouch = useCallback((v: boolean) => {
+    crouchHeld.current = v;
   }, []);
   const setInvertY = useCallback((v: boolean) => {
     invertY.current = v;
@@ -509,13 +516,18 @@ export function useFpsLoop(
       if (k === 'r') reloadReq.current = true;
       if (k === 'f') grappleReq.current = true;
       if (k === 'g') throwReq.current = true;
+      if (k === 'c' || k === 'control') crouchHeld.current = true;
       if (k === '1' || k === '2' || k === '3') switchReq.current = Number(k) - 1;
       if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' || k.startsWith('arrow')) {
         if (k.startsWith('arrow') || k === ' ') e.preventDefault();
         keys.current.add(k);
       }
     };
-    const onKeyUp = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      keys.current.delete(k);
+      if (k === 'c' || k === 'control') crouchHeld.current = false;
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
@@ -714,7 +726,9 @@ export function useFpsLoop(
 
           const jumpNow = keys.current.has(' ') || jumpReq.current;
           jumpReq.current = false;
-          stepPlayer(p, g.level, { fwd, strafe, jump: jumpNow }, dt, grid ?? undefined);
+          const crouching = crouchHeld.current && p.onGround;
+          stepPlayer(p, g.level, { fwd, strafe, jump: jumpNow, crouch: crouching }, dt, grid ?? undefined);
+          const eyeH = EYE - (crouching ? 0.55 : 0); // crouch lowers the camera/shot origin
           const pvx = (p.x - prevPos.x) / Math.max(dt, 0.001);
           const pvz = (p.z - prevPos.z) / Math.max(dt, 0.001);
           prevPos.x = p.x;
@@ -724,7 +738,7 @@ export function useFpsLoop(
           const fx = -cp * Math.sin(p.yaw);
           const fy = Math.sin(p.pitch);
           const fz = -cp * Math.cos(p.yaw);
-          const eye: Vec3 = [p.x, p.y + EYE, p.z];
+          const eye: Vec3 = [p.x, p.y + eyeH, p.z];
           const dir: Vec3 = [fx, fy, fz];
 
           // GRAPPLE: aim at a rooftop grapple point that's NEAR (≤ range) and
@@ -1439,7 +1453,7 @@ export function useFpsLoop(
             const group = squadGroups[s];
             if (!group || !group.length) continue;
             const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
-            for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + EYE - 0.1, p.z], tr.color);
+            for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + eyeH - 0.1, p.z], tr.color);
             if (world && res.bossShots.length) {
               for (const bs of res.bossShots) {
                 projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
@@ -1649,7 +1663,7 @@ export function useFpsLoop(
         // Recoil recovery — snappy settle so the kick reads per shot, then gone.
         recoilKick -= recoilKick * Math.min(1, dt * 7);
         if (recoilKick < 0.0002) recoilKick = 0;
-        camera.position.set(p.x, p.y + EYE, p.z);
+        camera.position.set(p.x, p.y + EYE - (crouchHeld.current && p.onGround ? 0.55 : 0), p.z);
         camera.rotation.y = p.yaw;
         camera.rotation.x = p.pitch + recoilKick;
         if (world) {
@@ -1771,5 +1785,5 @@ export function useFpsLoop(
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, throwGrenade, jump, reload, grapple };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple };
 }

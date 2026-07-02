@@ -90,6 +90,7 @@ export interface MoveInput {
   fwd: number;
   strafe: number;
   jump: boolean;
+  crouch?: boolean; // slower move + lower stance
 }
 
 export function makePlayer3(spawn: { x: number; z: number; yaw: number }): Player3 {
@@ -202,7 +203,7 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
     wx /= wl;
     wz /= wl;
   }
-  const spd = MOVE * (p.speedMul ?? 1);
+  const spd = MOVE * (p.speedMul ?? 1) * (input.crouch ? 0.55 : 1);
   let vx = wx * spd;
   let vz = wz * spd;
 
