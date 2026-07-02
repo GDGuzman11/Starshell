@@ -1,0 +1,98 @@
+/**
+ * Arsenal PERSISTENCE + Service Records. Everything the player engineers is PERMANENT
+ * (owned parts, equipped configuration, per-weapon service record, familiarity XP) and
+ * survives across runs in localStorage (`starshell.arsenal`) — the spec's core promise
+ * that nothing purchased is ever lost. Gold/customize stay per-run and are untouched.
+ *
+ * Imported ONLY by the /arcade chunk.
+ */
+import type { Family } from '../weapons';
+import { generateParts, type EngPart } from './parts';
+
+const KEY = 'starshell.arsenal';
+
+/** Everything a weapon permanently remembers (shown in the Arsenal). */
+export interface ServiceRecord {
+  kills: number;
+  headshots: number;
+  bossKills: number;
+  operations: number;
+  shots: number;
+  hits: number;
+  bestStreak: number;
+  astroInvested: number;
+  partsInstalled: number;
+  xp: number; // weapon familiarity XP
+}
+
+export interface ArsenalSave {
+  owned: string[]; // owned part ids
+  equipped: Record<string, Partial<Record<string, string>>>; // weaponId → categoryId → partId
+  partXp: Record<string, number>; // partId → familiarity XP
+  service: Record<string, ServiceRecord>; // weaponId → record
+  bosses: number; // lifetime bosses defeated (Legendary gate signal)
+}
+
+export function blankRecord(): ServiceRecord {
+  return { kills: 0, headshots: 0, bossKills: 0, operations: 0, shots: 0, hits: 0, bestStreak: 0, astroInvested: 0, partsInstalled: 0, xp: 0 };
+}
+function blank(): ArsenalSave {
+  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0 };
+}
+
+export function loadArsenal(): ArsenalSave {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (!raw || typeof raw !== 'object') return blank();
+    const b = blank();
+    return {
+      owned: Array.isArray(raw.owned) ? raw.owned.filter((x: unknown) => typeof x === 'string') : b.owned,
+      equipped: raw.equipped && typeof raw.equipped === 'object' ? raw.equipped : b.equipped,
+      partXp: raw.partXp && typeof raw.partXp === 'object' ? raw.partXp : b.partXp,
+      service: raw.service && typeof raw.service === 'object' ? raw.service : b.service,
+      bosses: Number.isFinite(raw.bosses) ? raw.bosses : b.bosses,
+    };
+  } catch {
+    return blank();
+  }
+}
+
+export function saveArsenal(s: ArsenalSave): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(s));
+  } catch {
+    /* ignore (quota / private mode) */
+  }
+}
+
+export function serviceFor(s: ArsenalSave, weaponId: string): ServiceRecord {
+  return s.service[weaponId] ?? blankRecord();
+}
+
+/** The EngParts currently equipped on a weapon (resolves the saved ids to parts). */
+export function equippedParts(s: ArsenalSave, weaponId: string, family: Family): EngPart[] {
+  const map = s.equipped[weaponId];
+  if (!map) return [];
+  const all = generateParts(weaponId, family);
+  const ids = new Set(Object.values(map).filter(Boolean) as string[]);
+  return all.filter((p) => ids.has(p.id));
+}
+
+/** Buy + own a part (records the AstroDiamond investment on the weapon). Returns a new
+ *  save; the caller is responsible for deducting the AstroDiamonds from the wallet. */
+export function buyPart(s: ArsenalSave, p: EngPart): ArsenalSave {
+  if (s.owned.includes(p.id)) return s;
+  const rec = serviceFor(s, p.weaponId);
+  return {
+    ...s,
+    owned: [...s.owned, p.id],
+    service: { ...s.service, [p.weaponId]: { ...rec, astroInvested: rec.astroInvested + p.price, partsInstalled: rec.partsInstalled + 1 } },
+  };
+}
+
+/** Equip an owned part into its category slot (one part per category). */
+export function equipPart(s: ArsenalSave, p: EngPart): ArsenalSave {
+  const map = { ...(s.equipped[p.weaponId] ?? {}) };
+  map[p.category] = p.id;
+  return { ...s, equipped: { ...s.equipped, [p.weaponId]: map } };
+}
