@@ -23,9 +23,6 @@ import { SpatialGrid } from './fps/level/grid';
 import { buildNavGraph, type NavGraph } from './fps/level/nav';
 import { ProjectileSystem } from './fps/projectiles';
 import { TelegraphSystem } from './fps/telegraph';
-import { buildMarine } from './fps/marine/model';
-import { loadMarine, equippedArmorPieces } from './fps/marine/store';
-import { disposeModel } from './fps/models';
 
 const RW = 480;
 const RH = 270;
@@ -111,7 +108,6 @@ export interface FpsSnapshot {
   stunAt: number; // player caught in a stun/concussion blast (screen distortion)
   fogAt: number; // Kraken void fog cast (vision-obscuring overlay)
   grappleReady: boolean; // a rooftop grapple point is aimable right now
-  inCover: boolean; // pinned to a wall in cover (peek left/right to lean out)
   radar: { x: number; z: number; boss: boolean; kind?: 'ammo' | 'shield' | 'health' }[]; // enemies + pickups, player-relative
 }
 
@@ -131,10 +127,7 @@ export function useFpsLoop(
   const lookDX = useRef(0);
   const lookDY = useRef(0);
   const fireHeld = useRef(false);
-  const crouchHeld = useRef(false); // hold C (desktop) / toggle button (touch)
-  const povThird = useRef(false); // third-person camera (V / POV button)
-  const coverReq = useRef(false); // enter/exit cover toggle (Q / COVER button)
-  const peekTouch = useRef(0); // mobile peek lean (-1 left, 0, 1 right)
+  const crouchHeld = useRef(false); // crouch toggle (C key / touch button)
   const zoomLevel = useRef(0); // 0 = hip, 1 = zoom, 2 = deep zoom (right-click cycles)
   const sens = useRef(1); // look-sensitivity multiplier (user-adjustable)
   const aimAssistOn = useRef(true); // touch aim assist (settings)
@@ -180,16 +173,6 @@ export function useFpsLoop(
   }, []);
   const setCrouch = useCallback((v: boolean) => {
     crouchHeld.current = v;
-  }, []);
-  const togglePov = useCallback((): boolean => {
-    povThird.current = !povThird.current;
-    return povThird.current;
-  }, []);
-  const toggleCover = useCallback(() => {
-    coverReq.current = true; // resolved in the frame (needs the level to find a wall)
-  }, []);
-  const setPeek = useCallback((d: number) => {
-    peekTouch.current = d;
   }, []);
   const setInvertY = useCallback((v: boolean) => {
     invertY.current = v;
@@ -288,10 +271,6 @@ export function useFpsLoop(
 
     let world: World | null = null;
     let builtFor: Level3D | null = null;
-    let playerBody: THREE.Group | null = null; // third-person Marine (armor + division)
-    // Cover state — pinned to a wall, leaning out to peek. tx/tz = the wall tangent,
-    // yaw = the locked down-range facing (blind fire sprays around the corner, no aim).
-    let cover = { active: false, ax: 0, az: 0, tx: 0, tz: 0, yaw: 0, prevPov: false };
     // Spatial grid over the current level's boxes — narrows collision/LoS queries
     // to local candidates. Rebuilt with the world; identical results, fewer tests.
     let grid: SpatialGrid | null = null;
@@ -331,7 +310,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, inCover: false, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -389,15 +368,8 @@ export function useFpsLoop(
 
     const buildFor = (g: FpsGameState) => {
       disposeExtras();
-      if (playerBody) { world?.scene.remove(playerBody); disposeModel(playerBody); playerBody = null; }
       world?.dispose();
       world = buildWorld(g.level, tier);
-      // Third-person player avatar — the permanent Marine wearing its engineered armor
-      // + Combat Division. Hidden until the player switches to the third-person view.
-      const ms = loadMarine();
-      playerBody = buildMarine(equippedArmorPieces(ms), tier, ms.division);
-      playerBody.visible = false;
-      world.scene.add(playerBody);
       // (Re)build the spatial grid for this level's boxes.
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
@@ -544,20 +516,14 @@ export function useFpsLoop(
       if (k === 'r') reloadReq.current = true;
       if (k === 'f') grappleReq.current = true;
       if (k === 'g') throwReq.current = true;
-      if (k === 'c' || k === 'control') crouchHeld.current = true;
-      if (k === 'v') povThird.current = !povThird.current;
-      if (k === 'q') coverReq.current = true;
+      if ((k === 'c' || k === 'control') && !e.repeat) crouchHeld.current = !crouchHeld.current; // toggle
       if (k === '1' || k === '2' || k === '3') switchReq.current = Number(k) - 1;
       if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === ' ' || k.startsWith('arrow')) {
         if (k.startsWith('arrow') || k === ' ') e.preventDefault();
         keys.current.add(k);
       }
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      keys.current.delete(k);
-      if (k === 'c' || k === 'control') crouchHeld.current = false;
-    };
+    const onKeyUp = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
@@ -754,57 +720,10 @@ export function useFpsLoop(
             camera.updateProjectionMatrix();
           }
 
-          // ── COVER: enter/exit + wall snap ──────────────────────────────────
-          if (coverReq.current) {
-            coverReq.current = false;
-            if (cover.active) {
-              cover.active = false;
-              povThird.current = cover.prevPov;
-            } else {
-              const hy = p.y + 1.0; // torso height for wall probing
-              let best: { dx: number; dz: number; d: number } | null = null;
-              for (let a = 0; a < 16; a++) {
-                const ang = (a / 16) * Math.PI * 2;
-                const dx = Math.cos(ang);
-                const dz = Math.sin(ang);
-                for (let d = 0.5; d <= 1.5; d += 0.25) {
-                  if (segBlocked([p.x, hy, p.z], [p.x + dx * d, hy, p.z + dz * d], g.level, grid ?? undefined)) {
-                    if (!best || d < best.d) best = { dx, dz, d };
-                    break;
-                  }
-                }
-              }
-              if (best) {
-                const nl = Math.hypot(best.dx, best.dz) || 1;
-                const nx = -best.dx / nl; // away-from-wall normal
-                const nz = -best.dz / nl;
-                p.yaw = Math.atan2(-nx, -nz); // face away from the wall
-                cover = { active: true, ax: p.x, az: p.z, tx: nz, tz: -nx, yaw: p.yaw, prevPov: povThird.current };
-                povThird.current = true;
-              }
-            }
-          }
-          let peek = 0;
-          if (cover.active) {
-            peek = keys.current.has('a') ? -1 : keys.current.has('d') ? 1 : peekTouch.current;
-            fwd = 0; // movement locked while in cover; A/D + peek buttons lean instead
-            strafe = 0;
-            p.yaw = cover.yaw; // pinned to the wall: no free aiming
-            p.pitch = 0;
-            if (jumpReq.current || keys.current.has(' ')) { cover.active = false; povThird.current = cover.prevPov; }
-          }
-
           const jumpNow = keys.current.has(' ') || jumpReq.current;
           jumpReq.current = false;
           const crouching = crouchHeld.current && p.onGround;
           stepPlayer(p, g.level, { fwd, strafe, jump: jumpNow, crouch: crouching }, dt, grid ?? undefined);
-          if (cover.active) {
-            // Lean out along the wall tangent to peek (and shoot) around cover.
-            const off = peek * 0.85;
-            const k = Math.min(1, dt * 12);
-            p.x += (cover.ax + cover.tx * off - p.x) * k;
-            p.z += (cover.az + cover.tz * off - p.z) * k;
-          }
           const eyeH = EYE - (crouching ? 0.55 : 0); // crouch lowers the camera/shot origin
           const pvx = (p.x - prevPos.x) / Math.max(dt, 0.001);
           const pvz = (p.z - prevPos.z) / Math.max(dt, 0.001);
@@ -987,17 +906,8 @@ export function useFpsLoop(
             // ray, so un-zoomed fire visibly scatters around the crosshair.
             const zf = zoomLevel.current >= 3 ? 0.04 : zoomLevel.current === 2 ? 0.12 : zoomLevel.current === 1 ? 0.24 : 1;
             const spr = (SPREAD[gun.family] ?? 0.02) * zf;
-            // BLIND FIRE from cover: pinned to the wall, the Marine sticks the gun around
-            // the corner and sprays in the lean direction — no aiming, wide random scatter.
-            let syaw: number;
-            let spitch: number;
-            if (cover.active) {
-              syaw = cover.yaw + peek * 0.45 + (Math.random() - Math.random()) * 0.4;
-              spitch = (Math.random() - Math.random()) * 0.14;
-            } else {
-              syaw = p.yaw + (Math.random() - Math.random()) * spr;
-              spitch = p.pitch + (Math.random() - Math.random()) * spr;
-            }
+            const syaw = p.yaw + (Math.random() - Math.random()) * spr;
+            const spitch = p.pitch + (Math.random() - Math.random()) * spr;
             const scp = Math.cos(spitch);
             const sfx2 = -scp * Math.sin(syaw);
             const sfy2 = Math.sin(spitch);
@@ -1749,45 +1659,15 @@ export function useFpsLoop(
         // Recoil recovery — snappy settle so the kick reads per shot, then gone.
         recoilKick -= recoilKick * Math.min(1, dt * 7);
         if (recoilKick < 0.0002) recoilKick = 0;
-        const gNow = gameRef.current;
-        const eyeY = p.y + EYE - (crouchHeld.current && p.onGround ? 0.55 : 0);
-        const third = povThird.current;
-        if (third) {
-          // Camera pulls back along the view axis (reticle stays centred so aiming is
-          // unchanged), pulling in if a wall would clip it. Show the Marine body.
-          const cy = Math.cos(p.pitch);
-          const dx = -cy * Math.sin(p.yaw);
-          const dyv = Math.sin(p.pitch);
-          const dz = -cy * Math.cos(p.yaw);
-          const from: Vec3 = [p.x, eyeY, p.z];
-          let dist = 3.2;
-          const camAt = (d: number): Vec3 => [p.x - dx * d, eyeY - dyv * d + 0.35, p.z - dz * d];
-          if (gNow && world && segBlocked(from, camAt(dist), gNow.level, grid ?? undefined)) {
-            dist = 0.8;
-            for (let d = 2.8; d >= 0.8; d -= 0.4) {
-              if (!segBlocked(from, camAt(d), gNow.level, grid ?? undefined)) { dist = d; break; }
-            }
-          }
-          const c = camAt(dist);
-          camera.position.set(c[0], c[1], c[2]);
-          if (playerBody) {
-            playerBody.visible = true;
-            playerBody.position.set(p.x, p.y, p.z);
-            playerBody.rotation.y = p.yaw + Math.PI; // model faces +Z; player forward is −Z at yaw 0
-            playerBody.scale.y = crouchHeld.current && p.onGround ? 0.72 : 1;
-          }
-        } else {
-          camera.position.set(p.x, eyeY, p.z);
-          if (playerBody) playerBody.visible = false;
-        }
+        camera.position.set(p.x, p.y + EYE - (crouchHeld.current && p.onGround ? 0.55 : 0), p.z);
         camera.rotation.y = p.yaw;
         camera.rotation.x = p.pitch + recoilKick;
         if (world) {
           if (composer) composer.composer.render(dt);
           else renderer.render(world.scene, camera);
           // 3D viewmodel overlay — pixelated (same buffer), depth-cleared so it
-          // never clips world geometry. Hidden under the scope overlay + in third-person.
-          if (viewmodel && zoomLevel.current === 0 && !third) viewmodel.render(renderer);
+          // never clips world geometry. Hidden under the sniper scope overlay.
+          if (viewmodel && zoomLevel.current === 0) viewmodel.render(renderer);
         }
 
         // Dynamic resolution: nudge the internal buffer to hold ~55-60 fps.
@@ -1860,7 +1740,6 @@ export function useFpsLoop(
           snap.enemiesLeft = aliveLeft;
           snap.radar = radar;
           snap.status = g.status;
-          snap.inCover = cover.active;
           snap.kills = g.kills;
           snap.shotsFired = g.shotsFired;
           snap.shotsHit = g.shotsHit;
@@ -1892,7 +1771,6 @@ export function useFpsLoop(
       window.visualViewport?.removeEventListener('resize', onViewport);
       document.removeEventListener('visibilitychange', onVisible);
       if (activeLoop) sfx.playWeaponLoopStop(activeLoop);
-      if (playerBody) { world?.scene.remove(playerBody); disposeModel(playerBody); playerBody = null; }
       world?.dispose();
       ballGeo.dispose();
       projectiles.dispose();
@@ -1903,5 +1781,5 @@ export function useFpsLoop(
     };
   }, [canvasRef, gameRef, active, onSnapshot]);
 
-  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, togglePov, toggleCover, setPeek, throwGrenade, jump, reload, grapple };
+  return { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple };
 }
