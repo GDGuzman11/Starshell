@@ -299,19 +299,34 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
     }
   }
 
+  const prevY = p.y; // feet BEFORE the vertical move (for the swept landing test)
   p.y += p.vy * dt;
   p.onGround = false;
   const yboxes = near();
-  for (let i = 0; i < yboxes.length; i++) {
-    const b = yboxes[i];
-    if (!overlapXZ(p, b) || !overlapY(p, b)) continue;
-    if (p.vy <= 0) {
-      // landing on top of a box
-      p.y = b.y + b.sy / 2;
+  if (p.vy <= 0) {
+    // LANDING — pick the HIGHEST floor the feet are resting on or SWEPT through this
+    // frame (never a lower box, never one above a step). Fixes falling through floors
+    // near stairs (overlapping boxes) and fast-fall tunnelling off towers.
+    let best = -Infinity;
+    for (let i = 0; i < yboxes.length; i++) {
+      const b = yboxes[i];
+      if (!overlapXZ(p, b)) continue;
+      const top = b.y + b.sy / 2;
+      const bot = b.y - b.sy / 2;
+      const resting = p.y < top && p.y + H > bot; // body still overlaps the slab
+      const crossed = prevY >= top - 1e-3 && p.y < top; // swept down through the top
+      if ((resting || crossed) && top <= prevY + STEP_UP + 1e-3 && top > best) best = top;
+    }
+    if (best > -Infinity) {
+      p.y = best;
       p.vy = 0;
       p.onGround = true;
-    } else {
-      // bonk a ceiling
+    }
+  } else {
+    // CEILING — bonk the lowest box the head pushed into.
+    for (let i = 0; i < yboxes.length; i++) {
+      const b = yboxes[i];
+      if (!overlapXZ(p, b) || !overlapY(p, b)) continue;
       p.y = b.y - b.sy / 2 - H;
       p.vy = 0;
     }

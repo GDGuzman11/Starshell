@@ -192,18 +192,10 @@ function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
   for (let f = 1; f < floors; f++) {
     boxes.push({ x: cx, y: f * FLOOR_H - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
   }
-  // One ladder per floor transition, staggered across the open front face so the
-  // run is a switchback: climb one, walk to the next, climb again.
-  const span = bw * 0.6;
-  for (let f = 0; f < floors - 1; f++) {
-    const frac = floors - 1 <= 1 ? 0.5 : f / (floors - 2);
-    const lx = cx - span / 2 + frac * span;
-    ladders.push({ x: lx, z: cz - half - 0.35, y0: f * FLOOR_H, y1: (f + 1) * FLOOR_H + 0.5, sx: 0.9, sz: 0.5, exX: 0, exZ: 1 });
-  }
-  // roof rails (3 sides, open front −z)
-  boxes.push({ x: cx - half, y: roof + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
-  boxes.push({ x: cx + half, y: roof + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
-  boxes.push({ x: cx, y: roof + 0.4, z: cz + half, sx: bw, sy: 0.8, sz: 0.2, tex: 2 });
+  // ONE continuous ladder up the open front face — ground straight to the top deck
+  // (no switchback / no cut segments).
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: roof + 0.5, sx: 0.9, sz: 0.5, exX: 0, exZ: 1 });
+  // Top deck is OPEN — no rails (removed per design).
 }
 
 /** 2-floor walled perch: ground walls + open upper deck, external ladder. */
@@ -215,10 +207,7 @@ function tower2(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
   columns(boxes, cx, cz, half, top);
   shell(boxes, cx, cz, half, bw, 0);
   boxes.push({ x: cx, y: F2 - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
-  // perch rails on 3 sides (open front −z)
-  boxes.push({ x: cx - half, y: F2 + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
-  boxes.push({ x: cx + half, y: F2 + 0.4, z: cz, sx: 0.2, sy: 0.8, sz: bw, tex: 2 });
-  boxes.push({ x: cx, y: F2 + 0.4, z: cz + half, sx: bw, sy: 0.8, sz: 0.2, tex: 2 });
+  // Open deck — no rails (removed per design).
   ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: F2 + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
 }
 
@@ -229,7 +218,7 @@ function platform(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: n
   const slab = 0.3;
   columns(boxes, cx, cz, half, H + 0.5);
   boxes.push({ x: cx, y: H - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
-  boxes.push({ x: cx, y: H + 0.4, z: cz + half, sx: bw, sy: 0.8, sz: 0.2, tex: 2 });
+  // Open platform — no rail (removed per design).
   ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: H + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
 }
 
@@ -429,9 +418,15 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     if (isTall) towerN(boxes, ladders, pos.x, pos.z, bw, TOWER_FLOORS);
     else tower2(boxes, ladders, pos.x, pos.z, bw);
     if (isTall) towers3.push({ x: pos.x, z: pos.z, half: bw / 2 });
-    // Rooftop grapple points on the edges (visible from the ground). Tall tower
-    // roof = (floors-1)*FLOOR_H, 2-floor perch = 3.
-    grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, (isTall ? (TOWER_FLOORS - 1) * FLOOR_H : 3) + 0.05));
+    // Rooftop grapple targets. Towers taller than 2 floors get TWO points — the two
+    // front (arena-facing) corners of the top deck; the 2-floor perch keeps one edge.
+    if (isTall) {
+      const roofY = (TOWER_FLOORS - 1) * FLOOR_H + 0.05;
+      const inset = 1.0;
+      for (const sx of [-1, 1]) grapplePoints.push({ x: pos.x + sx * (bw / 2 - inset), y: roofY, z: pos.z - (bw / 2 - inset) });
+    } else {
+      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, 3.05));
+    }
   }
   // Then smaller structures fill the gaps (platforms + bunkers).
   const fillers = Math.round(size / 6);

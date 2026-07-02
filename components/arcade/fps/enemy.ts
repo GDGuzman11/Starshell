@@ -39,6 +39,7 @@ export interface Enemy {
   barUntil: number; // show a health bar until this timestamp (set on hit)
   boss: BossKind | null;
   track: number; // seconds of continuous line-of-sight (accuracy zeroes in)
+  retreatT?: number; // melee hit-and-run: seconds left backing off after a strike
   muzzle: number; // seconds left on the firing pose / muzzle flash
   // Throwable-applied status (timers, seconds). Decremented by the game loop.
   stunT: number; // frozen: no move, no fire
@@ -201,6 +202,8 @@ const WEAPONS: Record<WeaponKind, { rate: number; dmg: number; accMod: number; c
   mg: { rate: 0.16, dmg: 4, accMod: 0.5, color: 0xff5d6e },
   laser: { rate: 1.2, dmg: 13, accMod: 1.1, color: 0x7fdfff },
 };
+// Effective firing range per weapon — bots hold fire (and keep closing) past this.
+const WEAPON_RANGE: Record<WeaponKind, number> = { rifle: 30, mg: 22, laser: 34 };
 const WEAPON_KEYS: WeaponKind[] = ['rifle', 'mg', 'laser'];
 
 // Per-class combat params: standoff range, flank angle (rad), orbit strafe, speed
@@ -871,28 +874,45 @@ export function updateEnemies(
     if (combatLock) return; // start-of-match: hold all enemy fire until the countdown ends
     if (e.fireCd > 0) return;
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
-    // BERSERKER: melee claws — strikes only point-blank, no LoS needed (it charges).
+    // BERSERKER: melee claws — lunges to just outside arm's reach, strikes, then
+    // peels back off (hit-and-run) instead of standing on top of you.
     if (e.cls === 'berserker') {
-      if (dist > 3.5) return;
-      e.fireCd = 0.6;
+      if (dist > 3.2) return;
+      e.fireCd = 0.7;
       e.muzzle = 0.12;
+      e.retreatT = 0.9; // back off after the swing
       tracers.push({ from: [e.x, e.y + 1, e.z], to: peye, color: 0xff3344 });
       damage += 16;
       return;
     }
     if (!canSee) return;
-    const W = e.cls === 'marksman' ? (dist > 12 ? SNIPER_W : WEAPONS.rifle) : WEAPONS[e.weapon];
+    const isSniper = e.cls === 'marksman' && dist > 12;
+    const W = isSniper ? SNIPER_W : e.cls === 'marksman' ? WEAPONS.rifle : WEAPONS[e.weapon];
+    // RANGE GATE: assault weapons never fire past their effective band — they hold
+    // fire and keep closing until in range (the marksman's long gun is exempt).
+    const eff = WEAPON_RANGE[e.weapon];
+    if (!isSniper && dist > eff) { e.fireCd = 0.4; return; }
     e.fireCd = W.rate;
     e.muzzle = 0.12; // show the firing pose + muzzle flash briefly
     tracers.push({ from: [e.x, e.y + EYE_H, e.z], to: peye, color: W.color });
-    const evade = Math.min(0.7, pspeed * 0.14);
-    // Accuracy falls off steeply with range (the marksman is the exception far out).
-    const distFactor = e.cls === 'marksman' && dist > 12 ? 1 : Math.max(0.1, 1 - Math.max(0, dist - 6) / 26);
-    // Zero-in: the longer they've held LoS on you, the better their aim. Peeking
-    // is safe; lingering in the open gets punished.
-    const trackRamp = 0.45 + 0.55 * Math.min(1, e.track / 1.4);
-    const buff = now < (squad.buffUntil ?? 0) ? 1.35 : 1; // Warlord Command Beacon
-    if (Math.random() < P.acc * W.accMod * distFactor * (1 - evade) * trackRamp * buff) damage += W.dmg;
+    // Realistic-but-challenging accuracy, keyed to the player's MOVEMENT + DISTANCE.
+    const moving = pspeed > 1.6;
+    let acc: number;
+    if (isSniper) {
+      // Sniper: 70% while you move, 90% when you stop; creeps up as you close in.
+      const close = Math.max(0, Math.min(1, (45 - dist) / (45 - 12)));
+      acc = (moving ? 0.7 : 0.9) + close * 0.08;
+    } else {
+      // Assault/ranged: ~60% in-range baseline, worse moving, sharper up close.
+      const close = Math.max(0, Math.min(1, (eff - dist) / eff));
+      acc = 0.6 * (moving ? 0.75 : 1) + close * 0.25;
+      if (e.weapon === 'mg') acc *= 0.7; // MG suppresses, it doesn't snipe
+    }
+    const diffMul = 0.85 + P.acc * 0.5; // normal ~0.97 · hard ~1.03 · nightmare ~1.10
+    const zero = 0.9 + 0.1 * Math.min(1, e.track / 1.4); // small zero-in on held LoS
+    const buff = now < (squad.buffUntil ?? 0) ? 1.12 : 1; // Warlord Command Beacon (toned down)
+    const cap = isSniper ? 0.95 : e.weapon === 'mg' ? 0.6 : 0.85; // never near-perfect
+    if (Math.random() < Math.min(cap, acc * diffMul * zero * buff)) damage += W.dmg;
   };
 
   // Boss phase manager: wake dormant reinforcements as the boss loses health,
@@ -1665,8 +1685,12 @@ export function updateEnemies(
       // in from the side, suppressors hold far back, skirmishers harass.
       const baseAng = Math.atan2(e.z - tgt.z, e.x - tgt.x); // target→bot bearing
       const ang = baseAng + role.angle * e.side;
-      const standX = tgt.x + Math.cos(ang) * role.range;
-      const standZ = tgt.z + Math.sin(ang) * role.range;
+      // Hit-and-run: while retreating after a melee strike, hold a much wider standoff
+      // so the bot peels away, then closes back in for the next swing.
+      if (e.retreatT) e.retreatT = Math.max(0, e.retreatT - dt);
+      const standRange = (e.retreatT ?? 0) > 0 ? role.range + 8 : role.range;
+      const standX = tgt.x + Math.cos(ang) * standRange;
+      const standZ = tgt.z + Math.sin(ang) * standRange;
       let wx = standX - e.x;
       let wz = standZ - e.z;
       const md = Math.hypot(wx, wz);
@@ -1737,6 +1761,27 @@ export function updateEnemies(
         moveEnemy(e, lvl, nf.wx, nf.wz, hsp, dt, R, grid);
       } else {
         moveEnemy(e, lvl, gx2 - e.x, gz2 - e.z, hsp, dt, R, grid);
+      }
+    }
+  }
+  // STANDOFF RING — no living enemy ends up standing on the player. Bugs, chargers and
+  // dash attackers get shoved back to just outside a visible gap (so they stay in your
+  // sights and you never have to grenade your own feet). Boss size widens its ring.
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.health <= 0 || e.dormant) continue;
+    const sep = e.boss ? BOSSES[e.boss].radius + 1.3 : 1.9;
+    const dx = e.x - player.x;
+    const dz = e.z - player.z;
+    const d = Math.hypot(dx, dz);
+    if (d < sep) {
+      const ux = d > 1e-3 ? dx / d : 1;
+      const uz = d > 1e-3 ? dz / d : 0;
+      const nx = player.x + ux * sep;
+      const nz = player.z + uz * sep;
+      if (!blocked(lvl, nx, nz, R, grid)) {
+        e.x = nx;
+        e.z = nz;
       }
     }
   }

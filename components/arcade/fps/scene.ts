@@ -18,6 +18,29 @@ export interface World {
   hideBox: (b: Box) => void; // collapse a destroyed structure's instance
 }
 
+/** "⟰ GRAPPLE" notification label — a canvas texture for the rooftop billboards. */
+function grappleLabelTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 80;
+  const ctx = c.getContext('2d')!;
+  ctx.clearRect(0, 0, 256, 80);
+  ctx.fillStyle = 'rgba(10,12,20,0.72)';
+  ctx.fillRect(10, 20, 236, 40);
+  ctx.strokeStyle = 'rgba(255,210,122,0.95)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(10, 20, 236, 40);
+  ctx.fillStyle = '#ffd27a';
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('⟰ GRAPPLE', 128, 41);
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
 function tex(canvas: HTMLCanvasElement, repeat = 1): THREE.Texture {
   const t = new THREE.CanvasTexture(canvas);
   t.magFilter = THREE.NearestFilter;
@@ -172,17 +195,17 @@ export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World 
     disposables.push(geo);
   }
 
-  // Grapple points — a floating glowing ring marker above each rooftop target.
+  // Grapple points — a floating "⟰ GRAPPLE" NOTIFICATION label (billboard) above each
+  // rooftop target (replaces the old floating ring halo). Always faces the camera.
   if (level.grapplePoints && level.grapplePoints.length) {
-    const grMat = new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
-    disposables.push(grMat);
+    const grTex = grappleLabelTexture();
+    const grMat = new THREE.SpriteMaterial({ map: grTex, transparent: true, depthWrite: false });
+    disposables.push(grTex, grMat);
     for (const gp of level.grapplePoints) {
-      const gGeo = new THREE.TorusGeometry(0.7, 0.12, 8, 20);
-      const m = new THREE.Mesh(gGeo, grMat);
-      m.position.set(gp.x, gp.y + 1.7, gp.z);
-      m.rotation.x = Math.PI / 2; // lie flat (ring you drop into)
-      scene.add(m);
-      disposables.push(gGeo);
+      const s = new THREE.Sprite(grMat);
+      s.position.set(gp.x, gp.y + 2.0, gp.z);
+      s.scale.set(3.0, 0.94, 1);
+      scene.add(s);
     }
   }
 
