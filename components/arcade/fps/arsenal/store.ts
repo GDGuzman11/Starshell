@@ -8,6 +8,7 @@
  */
 import type { Family } from '../weapons';
 import { generateParts, type EngPart } from './parts';
+import { xpForOperation } from './familiarity';
 
 const KEY = 'starshell.arsenal';
 
@@ -95,4 +96,33 @@ export function equipPart(s: ArsenalSave, p: EngPart): ArsenalSave {
   const map = { ...(s.equipped[p.weaponId] ?? {}) };
   map[p.category] = p.id;
   return { ...s, equipped: { ...s.equipped, [p.weaponId]: map } };
+}
+
+/** Record a completed operation: every weapon that DEPLOYED (and each of its equipped
+ *  parts) gains familiarity XP + service stats; a cleared boss level bumps lifetime
+ *  bosses (the Legendary gate). Returns the new save + the XP each weapon earned. */
+export function recordOperation(
+  s: ArsenalSave,
+  guns: { id: string; family: Family }[],
+  o: { kills: number; shots: number; hits: number; won: boolean; bossWin: boolean },
+): { save: ArsenalSave; xp: number } {
+  const acc = o.shots > 0 ? o.hits / o.shots : 0;
+  const xp = xpForOperation({ kills: o.kills, accuracy: acc, won: o.won });
+  const service = { ...s.service };
+  const partXp = { ...s.partXp };
+  const seen = new Set<string>();
+  for (const g of guns) {
+    if (seen.has(g.id)) continue;
+    seen.add(g.id);
+    const rec = { ...serviceFor(s, g.id) };
+    rec.xp += xp;
+    rec.kills += o.kills;
+    rec.operations += 1;
+    rec.shots += o.shots;
+    rec.hits += o.hits;
+    if (o.bossWin) rec.bossKills += 1;
+    service[g.id] = rec;
+    for (const p of equippedParts(s, g.id, g.family)) partXp[p.id] = (partXp[p.id] ?? 0) + xp;
+  }
+  return { save: { ...s, service, partXp, bosses: s.bosses + (o.bossWin ? 1 : 0) }, xp };
 }

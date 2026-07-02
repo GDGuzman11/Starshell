@@ -20,6 +20,9 @@ import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
+import { applyEngineering } from './fps/arsenal/parts';
+import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } from './fps/arsenal/store';
+import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { THEME_LIST } from './fps/kit/themes';
 
 type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal';
@@ -90,6 +93,7 @@ export function FpsGame() {
   const [best, setBest] = useState(0);
   const [astro, setAstro] = useState(0); // Astrodiamonds — persistent premium wallet (across runs)
   const [lastAstro, setLastAstro] = useState(0); // AD earned on the level just finished (for the end/shop card)
+  const [famNote, setFamNote] = useState<string | null>(null); // transient "Familiarity Increased" toast
   const spendAstro = useCallback((n: number) => {
     setAstro((a) => {
       const v = Math.max(0, a - n);
@@ -263,7 +267,15 @@ export function FpsGame() {
       // dev toggles (rotation sample / war-torn city); otherwise the campaign resolver.
       const lvl = presetLevel ?? (forcedBoss ? buildBossArena(forcedBoss, mapCount, seed) : layoutTestRef.current ? buildFromLayout(makeSampleLayout(devThemeRef.current || 'wartorn')) : kitRef.current ? makeModularArena(mapCount, seed) : resolveLevel(level, mapCount, seed));
       if (!presetLevel && devThemeRef.current) lvl.theme = devThemeRef.current; // dev theme override (preset carries its own)
-      const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => applyUpgrades(g, ups[g.id]));
+      // Deploy stats = base → per-run GOLD upgrades → PERMANENT engineering parts +
+      // the weapon's small familiarity milestone bonus.
+      const arsenal = loadArsenal();
+      const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => {
+        const withGold = applyUpgrades(g, ups[g.id]);
+        const parts = equippedParts(arsenal, g.id, g.family);
+        const famDmg = milestoneBonus(serviceFor(arsenal, g.id).xp).dmg;
+        return applyEngineering(withGold, parts, famDmg);
+      });
       const thrown = throwById(lo.th);
       const player = makePlayer3(lvl.spawn);
       player.health = maxHp;
@@ -404,6 +416,18 @@ export function FpsGame() {
       }
       return n;
     });
+    // ARSENAL: every deployed weapon (+ its equipped parts) earns permanent familiarity;
+    // a cleared boss level bumps lifetime bosses (the Legendary gate).
+    {
+      const won = snap.status === 'won';
+      const lg = [lastLoadout.p1, lastLoadout.p2, lastLoadout.sa].map((id) => ({ id, family: gunById(id).family }));
+      const { save: nextArsenal, xp } = recordOperation(loadArsenal(), lg, { kills: snap.kills, shots: snap.shotsFired, hits: snap.shotsHit, won, bossWin: won && isBossLevel(run.level) });
+      saveArsenal(nextArsenal);
+      if (xp > 0) {
+        const p1 = gunById(lastLoadout.p1);
+        setFamNote(`${p1.name} · FAMILIARITY ${stageFor(serviceFor(nextArsenal, p1.id).xp).toUpperCase()} (+${xp})`);
+      }
+    }
     if (snap.status === 'won') {
       const total = campaignTotalLevels();
       setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills, diff, squads) }));
@@ -424,7 +448,14 @@ export function FpsGame() {
       saveBest(run.level);
       setBest((b) => Math.max(b, run.level));
     }
-  }, [snap, mode, run.level, diff, squads]);
+  }, [snap, mode, run.level, diff, squads, lastLoadout]);
+
+  // Auto-dismiss the familiarity toast.
+  useEffect(() => {
+    if (!famNote) return;
+    const t = setTimeout(() => setFamNote(null), 4000);
+    return () => clearTimeout(t);
+  }, [famNote]);
 
   useEffect(() => {
     if (mode !== 'play') return;
@@ -530,6 +561,14 @@ export function FpsGame() {
 
         {mode === 'play' && recovery != null && (
           <RecoveryOverlay key={recovery} round={recovery} onDone={() => { setRecovery(null); startLevel(campaignTotalLevels(), lastLoadout, run.maxHp, run.upgrades); }} />
+        )}
+
+        {/* Weapon-familiarity notification — small, transient (auto-dismiss). */}
+        {famNote && (
+          <div className="pointer-events-none absolute left-1/2 top-14 z-[60] -translate-x-1/2 rounded-full border border-[#c8a8ff]/40 bg-black/70 px-4 py-1.5 text-center font-pixel backdrop-blur-sm [animation:gdg-fade-in_0.4s_ease-out]">
+            <p className="text-[7px] tracking-[0.25em] text-[#c8a8ff]/80 sm:text-[8px]">WEAPON FAMILIARITY INCREASED</p>
+            <p className="mt-0.5 text-[8px] text-white/85 sm:text-[10px]">{famNote}</p>
+          </div>
         )}
 
         {mode === 'menu' && (
