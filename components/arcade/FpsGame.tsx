@@ -117,6 +117,9 @@ export function FpsGame() {
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
   const [pseudoFs, setPseudoFs] = useState(false); // CSS fallback (iOS Safari)
   const fsActive = fullscreen || pseudoFs;
+  const [isStandalone, setIsStandalone] = useState(false); // launched from the iOS Home Screen
+  const [iosNoFs, setIosNoFs] = useState(false); // iPhone Safari: no web-fullscreen API at all
+  const [iosHint, setIosHint] = useState(false); // show the "Add to Home Screen" instructions
   const [showSettings, setShowSettings] = useState(false);
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85 });
   const [dev, setDev] = useState(false); // dev tools (npm run dev only)
@@ -220,6 +223,17 @@ export function FpsGame() {
       /* ignore */
     }
   }, [sensitivity, setSensitivity]);
+
+  // Detect iOS Safari (no web-fullscreen) + Home-Screen standalone, once on mount.
+  useEffect(() => {
+    const nav = navigator as Navigator & { standalone?: boolean };
+    const standalone = nav.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches === true;
+    const isIOS = /ip(hone|od|ad)/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const doc = document as Document & { webkitFullscreenEnabled?: boolean };
+    const realFs = document.fullscreenEnabled || doc.webkitFullscreenEnabled;
+    setIsStandalone(standalone);
+    setIosNoFs(isIOS && !standalone && !realFs);
+  }, []);
 
   // Track real fullscreen state (covers the OS/escape exit too; standard + webkit).
   useEffect(() => {
@@ -556,15 +570,19 @@ export function FpsGame() {
             <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
               ◂ EXIT
             </Link>
-            {/* Video-style maximize button (phones): toggles true fullscreen. */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
-              className="absolute right-3 top-3 z-[60] flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-black/40 font-pixel text-[13px] text-white/70 backdrop-blur-sm transition-colors hover:text-white"
-            >
-              {fsActive ? '⤡' : '⛶'}
-            </button>
+            {/* Video-style maximize button (phones). Real fullscreen where the browser
+                supports it (Android); iPhone has no web-fullscreen API → show the
+                Add-to-Home-Screen path. Hidden when already launched standalone. */}
+            {!isStandalone && (
+              <button
+                type="button"
+                onClick={() => { if (iosNoFs) setIosHint(true); else toggleFullscreen(); }}
+                aria-label={fsActive ? 'Exit fullscreen' : 'Enter fullscreen'}
+                className="absolute right-3 top-3 z-[60] flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-black/40 font-pixel text-[13px] text-white/70 backdrop-blur-sm transition-colors hover:text-white"
+              >
+                {fsActive ? '⤡' : '⛶'}
+              </button>
+            )}
           </>
         )}
 
@@ -895,6 +913,30 @@ export function FpsGame() {
       </CRTFrame>
 
       <OrientationGate show={fullBleed && portrait} />
+
+      {iosHint && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/85 px-4 backdrop-blur-md"
+          style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          onClick={() => setIosHint(false)}
+        >
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0a0c14]/95 p-5 font-pixel" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[12px] text-[#7fdfff]">FULLSCREEN ON IPHONE</p>
+            <p className="mt-3 text-[9px] leading-relaxed text-white/70">
+              iOS blocks true fullscreen for web games in Safari. For a no-bars, edge-to-edge experience, install Starshell to your Home Screen:
+            </p>
+            <ol className="mt-3 space-y-1.5 text-[9px] leading-relaxed text-white/80">
+              <li>1 · Tap the <span className="text-[#7fdfff]">Share</span> button in Safari (the □ with an ↑).</li>
+              <li>2 · Choose <span className="text-[#7fdfff]">Add to Home Screen</span>.</li>
+              <li>3 · Open <span className="text-[#aef5c8]">STARSHELL</span> from your Home Screen — it launches fullscreen.</li>
+            </ol>
+            <p className="mt-3 text-[7px] leading-relaxed text-white/40">Until then the game already fills the screen edge-to-edge; only Safari&apos;s bars remain.</p>
+            <button type="button" onClick={() => setIosHint(false)} className="mt-4 min-h-[40px] w-full rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 text-[10px] uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20">
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {showSettings && (
         <div
