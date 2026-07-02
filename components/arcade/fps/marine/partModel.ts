@@ -20,6 +20,9 @@ import { buildShoulders } from './shoulders';
 import { buildBackpack } from './backpacks';
 import { buildBoot } from './boots';
 import { buildLimb } from './limbs';
+import { buildGlove } from './gloves';
+import { buildCore } from './cores';
+import { buildVisor } from './visors';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -57,8 +60,7 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'visor': {
-      glowStrip(0.24 * b, 0.06 * b, 0.02, 0, 0, 0.02);
-      g.add(box(0.26 * b, 0.02, 0.03, dark, 0, 0.05 * b, 0.02)); // upper frame
+      g.add(buildVisor(spec, rt)); // per-division visor (Armor Overhaul, slice 7c)
       break;
     }
     case 'plate': {
@@ -84,9 +86,7 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'glove': {
-      g.add(box(0.16 * b, 0.14 * b, 0.18 * b, body, 0, 0, 0.02)); // gauntlet
-      g.add(box(0.14 * b, 0.06, 0.1, dark, 0, -0.06 * b, 0.1)); // knuckle
-      if (trim) glowStrip(0.03, 0.03, 0.03, 0.06 * b, 0.02, 0.08);
+      g.add(buildGlove(spec, rt)); // per-division gauntlet (Armor Overhaul, slice 7a)
       break;
     }
     case 'boot': {
@@ -100,9 +100,7 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       break;
     }
     case 'core': {
-      g.add(box(0.16 * b, 0.16 * b, 0.08, dark, 0, 0, 0)); // housing
-      glowStrip(0.09 * b, 0.09 * b, 0.05, 0, 0, 0.04); // reactor face
-      addSpinner(0, 0.06, 0.07 * b);
+      g.add(buildCore(spec, rt)); // per-division module (Armor Overhaul, slice 7b)
       break;
     }
     case 'comms': {
