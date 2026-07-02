@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { ACCENT } from './parts';
 import { buildAssaultX, buildCarbine, buildPulseAR } from './rifles';
+import { buildAR01Pulse } from './standard';
 import { buildNovaSMG, buildRipper, buildSiegeLMG } from './heavy';
 import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
@@ -30,6 +31,7 @@ import {
 type Builder = (tier: RenderTier) => THREE.Group;
 
 const GUN_BUILDERS: Record<string, Builder> = {
+  ar01: buildAR01Pulse,
   ar: buildPulseAR,
   carbine: buildCarbine,
   assaultx: buildAssaultX,
@@ -82,6 +84,7 @@ const THROW_ACCENT: Record<string, number> = {
 
 /** Per-weapon ONE accent colour (drives the preview rim light + matches the model). */
 const GUN_ACCENT: Record<string, number> = {
+  ar01: ACCENT.blue,
   ar: ACCENT.blue,
   carbine: ACCENT.amber,
   assaultx: ACCENT.orange,

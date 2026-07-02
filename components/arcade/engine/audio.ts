@@ -21,6 +21,8 @@ interface WProfile {
   loop?: boolean; // sustained-fire weapon (Ripper / Lance Beam) — uses loop start/stop
 }
 const WEAPON_AUDIO: Record<string, WProfile> = {
+  // STANDARD ISSUE — iconic, punchy service-rifle crack.
+  ar01: { type: 'ballistic', vol: 0.9, pitch: 1.05, jitter: 0.06, len: 0.9, bass: 0.65, grit: 0.15 },
   // ballistic — sharp crack + bolt + small bass punch
   carbine: { type: 'ballistic', vol: 0.9, pitch: 1.0, jitter: 0.06, len: 1.0, bass: 0.7, grit: 0.1 },
   smg: { type: 'ballistic', vol: 0.62, pitch: 1.5, jitter: 0.13, len: 0.6, bass: 0.3, grit: 0.05 },

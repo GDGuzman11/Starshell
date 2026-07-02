@@ -119,6 +119,14 @@ const SLOT_ANCHORS: Record<string, Partial<Record<SlotKind, Anchor>>> = {
     optic: { pos: [0, 0.1, 0.02], hide: 'base:optic' },
     rear: { pos: [0, -0.01, 0.22] },
   },
+  // AR-01 "PULSE" (Standard Issue) — built with visible attachment points from the start.
+  ar01: {
+    barrel: { pos: [0, 0.02, -0.22], hide: 'base:barrel' },
+    receiver: { pos: [0, 0.02, 0.04] },
+    magazine: { pos: [0, -0.11, 0.06], hide: 'mag' },
+    optic: { pos: [0, 0.19, 0.03], hide: 'base:optic' },
+    rear: { pos: [0, -0.01, 0.38], hide: 'base:stock' },
+  },
 };
 
 /** True if a weapon has been slot-refactored (its parts visibly attach). */

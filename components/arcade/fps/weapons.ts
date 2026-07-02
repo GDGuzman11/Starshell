@@ -24,6 +24,8 @@ export interface GunDef {
 }
 
 export const GUNS: GunDef[] = [
+  // STANDARD ISSUE — the iconic arsenal every Marine is issued (built alongside the rest).
+  { id: 'ar01', name: 'AR-01 PULSE', family: 'rifle', dmg: 34, rate: 0.12, mag: 32, reserve: 192, reload: 1.7, auto: true, scoped: false, hipFov: 78, adsFov: 57, color: 0x8fbaff },
   // rifles (PRIMARY: +10 dmg pass)
   { id: 'ar', name: 'PULSE AR', family: 'rifle', dmg: 36, rate: 0.11, mag: 30, reserve: 180, reload: 1.6, auto: true, scoped: false, hipFov: 78, adsFov: 58, color: 0xffe9a8 },
   { id: 'carbine', name: 'CARBINE', family: 'rifle', dmg: 56, rate: 0.22, mag: 20, reserve: 140, reload: 1.5, auto: false, scoped: false, hipFov: 78, adsFov: 55, color: 0xffd27a },
