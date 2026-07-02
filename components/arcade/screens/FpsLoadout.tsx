@@ -33,22 +33,26 @@ const THROW_SUB: Record<ThrowKind, string> = {
 export function FpsLoadout({
   astro,
   best,
+  initial,
   onSpendAstro,
+  onConfirm,
   onDeploy,
   onBack,
 }: {
   astro: number;
   best: number;
+  initial: { p1: string; p2: string; sa: string; th: string };
   onSpendAstro: (n: number) => void;
+  onConfirm: (p1: string, p2: string, sidearm: string, thrown: string) => void;
   onDeploy: (p1: string, p2: string, sidearm: string, thrown: string) => void;
   onBack: () => void;
 }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
-  const [p1, setP1] = useState('ar01');
-  const [p2, setP2] = useState('rt06');
-  const [sa, setSa] = useState('sp01');
-  const [th, setTh] = useState('frag');
-  const [focus, setFocus] = useState('ar01');
+  const [p1, setP1] = useState(initial.p1);
+  const [p2, setP2] = useState(initial.p2);
+  const [sa, setSa] = useState(initial.sa);
+  const [th, setTh] = useState(initial.th);
+  const [focus, setFocus] = useState(initial.p1);
 
   const fg = GUNS.find((g) => g.id === focus);
   const ft = !fg ? THROWABLES.find((t) => t.id === focus) : undefined;
@@ -130,13 +134,22 @@ export function FpsLoadout({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => onDeploy(p1, p2, sa, th)}
-        className="mt-2 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]"
-      >
-        Deploy ▸
-      </button>
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          onClick={() => onConfirm(p1, p2, sa, th)}
+          className="min-h-[44px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[10px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8a8ff] sm:text-[12px]"
+        >
+          ✓ Confirm
+        </button>
+        <button
+          type="button"
+          onClick={() => onDeploy(p1, p2, sa, th)}
+          className="min-h-[44px] flex-1 rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]"
+        >
+          Deploy ▸
+        </button>
+      </div>
     </div>
   );
 }

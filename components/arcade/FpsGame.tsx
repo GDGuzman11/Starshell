@@ -150,6 +150,11 @@ export function FpsGame() {
     try {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       setAstro(Number(localStorage.getItem('starshell.astro') || 0));
+      const savedLo = localStorage.getItem('starshell.loadout');
+      if (savedLo) {
+        const lo = JSON.parse(savedLo);
+        if (lo && typeof lo.p1 === 'string' && typeof lo.p2 === 'string' && typeof lo.sa === 'string' && typeof lo.th === 'string') setLastLoadout(lo);
+      }
       const s = Number(localStorage.getItem('starshell.sens'));
       if (Number.isFinite(s) && s > 0) setSensitivityState(s);
       setCampaignLen(campaignTotalLevels()); // client-only (reads localStorage) → avoids SSR mismatch
@@ -695,10 +700,26 @@ export function FpsGame() {
           <FpsLoadout
             astro={astro}
             best={best}
+            initial={lastLoadout}
             onSpendAstro={spendAstro}
+            onConfirm={(p1, p2, sa, th) => {
+              const lo = { p1, p2, sa, th };
+              setLastLoadout(lo);
+              try {
+                localStorage.setItem('starshell.loadout', JSON.stringify(lo));
+              } catch {
+                /* ignore */
+              }
+              setMode('menu');
+            }}
             onDeploy={(p1, p2, sa, th) => {
               const lo = { p1, p2, sa, th };
               setLastLoadout(lo);
+              try {
+                localStorage.setItem('starshell.loadout', JSON.stringify(lo));
+              } catch {
+                /* ignore */
+              }
               if (loadoutReturn === 'campaign') beginCampaign(lo);
               else setMode('shop');
             }}
