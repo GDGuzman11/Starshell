@@ -118,9 +118,3 @@ export function throwById(id: string): ThrowDef {
 /** Default loadout (used if you skip the loadout screen). */
 export const DEFAULT_LOADOUT = ['ar', 'rail', 'sidearm'];
 export const DEFAULT_THROWABLE = 'frag';
-
-/** RECRUIT-ISSUE gear — the starting loadout every Marine is issued, free from level 1.
- *  Everything NOT in these sets starts LOCKED and is unlocked permanently with
- *  AstroDiamonds. Includes the four new recruit weapons (added in later phases). */
-export const RECRUIT_WEAPONS = new Set(['ar', 'burstcarbine', 'smg', 'pulse', 'rocket', 'grenadecannon', 'plasmamortar', 'rail', 'sidearm', 'burstpistol']);
-export const RECRUIT_THROWABLES = new Set(['frag', 'smoke', 'flash', 'shock', 'cryo', 'decoy']);

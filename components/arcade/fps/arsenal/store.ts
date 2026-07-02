@@ -6,7 +6,7 @@
  *
  * Imported ONLY by the /arcade chunk.
  */
-import { RECRUIT_WEAPONS, RECRUIT_THROWABLES, type Family } from '../weapons';
+import type { Family } from '../weapons';
 import { generateParts, type EngPart } from './parts';
 import { xpForOperation } from './familiarity';
 
@@ -32,15 +32,13 @@ export interface ArsenalSave {
   partXp: Record<string, number>; // partId → familiarity XP
   service: Record<string, ServiceRecord>; // weaponId → record
   bosses: number; // lifetime bosses defeated (Legendary gate signal)
-  unlockedWeapons: string[]; // NON-recruit weapons the player has bought with AstroDiamonds
-  unlockedThrowables: string[]; // NON-recruit throwables unlocked
 }
 
 export function blankRecord(): ServiceRecord {
   return { kills: 0, headshots: 0, bossKills: 0, operations: 0, shots: 0, hits: 0, bestStreak: 0, astroInvested: 0, partsInstalled: 0, xp: 0 };
 }
 function blank(): ArsenalSave {
-  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0, unlockedWeapons: [], unlockedThrowables: [] };
+  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0 };
 }
 
 export function loadArsenal(): ArsenalSave {
@@ -54,8 +52,6 @@ export function loadArsenal(): ArsenalSave {
       partXp: raw.partXp && typeof raw.partXp === 'object' ? raw.partXp : b.partXp,
       service: raw.service && typeof raw.service === 'object' ? raw.service : b.service,
       bosses: Number.isFinite(raw.bosses) ? raw.bosses : b.bosses,
-      unlockedWeapons: Array.isArray(raw.unlockedWeapons) ? raw.unlockedWeapons.filter((x: unknown) => typeof x === 'string') : b.unlockedWeapons,
-      unlockedThrowables: Array.isArray(raw.unlockedThrowables) ? raw.unlockedThrowables.filter((x: unknown) => typeof x === 'string') : b.unlockedThrowables,
     };
   } catch {
     return blank();
@@ -100,23 +96,6 @@ export function equipPart(s: ArsenalSave, p: EngPart): ArsenalSave {
   const map = { ...(s.equipped[p.weaponId] ?? {}) };
   map[p.category] = p.id;
   return { ...s, equipped: { ...s.equipped, [p.weaponId]: map } };
-}
-
-/** Recruit gear is always usable; everything else must be unlocked with AstroDiamonds. */
-export function isWeaponUnlocked(s: ArsenalSave, id: string): boolean {
-  return RECRUIT_WEAPONS.has(id) || s.unlockedWeapons.includes(id);
-}
-export function isThrowUnlocked(s: ArsenalSave, id: string): boolean {
-  return RECRUIT_THROWABLES.has(id) || s.unlockedThrowables.includes(id);
-}
-/** Permanently unlock a weapon / throwable (caller deducts the AstroDiamonds). */
-export function unlockWeapon(s: ArsenalSave, id: string): ArsenalSave {
-  if (isWeaponUnlocked(s, id)) return s;
-  return { ...s, unlockedWeapons: [...s.unlockedWeapons, id] };
-}
-export function unlockThrowable(s: ArsenalSave, id: string): ArsenalSave {
-  if (isThrowUnlocked(s, id)) return s;
-  return { ...s, unlockedThrowables: [...s.unlockedThrowables, id] };
 }
 
 /** Record a completed operation: every weapon that DEPLOYED (and each of its equipped
