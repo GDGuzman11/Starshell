@@ -31,18 +31,23 @@ export function bossArena(spec: BossArenaSpec, seed: number): LevelLayout {
   const r = rng(seed ^ 0x0805);
   const half = spec.size / 2;
   const reach = Math.max(3, Math.floor((half - 10) / CELL));
-  const spawnGz = Math.round((half * 0.82) / CELL);
+  // The boss spawns at enemySpawn (generate.ts default +half*0.86); the player at -half*0.86.
+  const spawnGz = Math.round((half * 0.86) / CELL);
+  // Keep a clear zone (2 cells ≈ 32 m) around BOTH spawns so nothing traps the boss/player.
+  const CLEAR = 2;
+  const clear = (gx: number, gz: number) => Math.hypot(gx, gz - spawnGz) <= CLEAR || Math.hypot(gx, gz + spawnGz) <= CLEAR;
   const occupied = new Set<string>();
-  const placements: Placement[] = [...(spec.placements ?? [])];
+  // Drop any bespoke placement that would land on a spawn — the actual "stuck in a
+  // building" fix (buildings previously ignored the spawn zone entirely).
+  const placements: Placement[] = (spec.placements ?? []).filter((p) => !clear(p.gx, p.gz));
   for (const p of placements) occupied.add(key(p.gx, p.gz));
-  const nearSpawn = (gx: number, gz: number) => Math.abs(gx) <= 1 && Math.abs(Math.abs(gz) - spawnGz) <= 1;
   const scatter = (module: PropKind, count: number) => {
     let placed = 0;
     let guard = 0;
     while (placed < count && guard++ < count * 60) {
       const gx = Math.round((r() * 2 - 1) * reach);
       const gz = Math.round((r() * 2 - 1) * reach);
-      if (occupied.has(key(gx, gz)) || nearSpawn(gx, gz)) continue;
+      if (occupied.has(key(gx, gz)) || clear(gx, gz)) continue;
       placements.push({ module, gx, gz, rot: 0 });
       occupied.add(key(gx, gz));
       placed++;

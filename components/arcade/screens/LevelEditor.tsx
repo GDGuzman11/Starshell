@@ -16,12 +16,13 @@ import { BUILDING_KINDS, CELL, LAYOUT_VERSION, PROP_KINDS, ROTATIONS, blankLayou
 import { THEME_LIST } from '../fps/kit/themes';
 import { makeBattlefieldLayout } from '../fps/kit/generate';
 import { loadCampaign, saveCampaign, validateLayout } from '../fps/kit/storage';
+import { BOSS_EVERY, bossKindFor } from '../fps/kit/levels';
+import { BOSSES } from '../fps/enemy';
 
 const CANVAS = 440;
 const RESUPPLY_KINDS: ModuleKind[] = ['station', 'ammocrate', 'shieldcrate', 'healthcrate'];
-// Regular bosses cycle at every 5th campaign level; the campaign ends on a GAUNTLET.
-const BOSS_CYCLE = ['XENOMORPH', 'WARLORD', 'KRAKEN'];
-const bossNameAt = (level: number) => BOSS_CYCLE[(((Math.floor(level / 5) - 1) % 3) + 3) % 3];
+// Regular bosses cycle at every BOSS_EVERY-th campaign level; the campaign ends on a GAUNTLET.
+const bossNameAt = (level: number) => BOSSES[bossKindFor(level)].name;
 
 /** The campaign as displayed: authored levels interleaved with the boss slots (a boss
  *  every 5th level) and a final GAUNTLET capstone. Returns items in play order. */
@@ -31,7 +32,7 @@ function buildBelt(count: number): BeltItem[] {
   let ai = 0;
   let L = 1;
   while (ai < count) {
-    if (L % 5 === 0) belt.push({ type: 'boss', name: bossNameAt(L), level: L });
+    if (L % BOSS_EVERY === 0) belt.push({ type: 'boss', name: bossNameAt(L), level: L });
     else belt.push({ type: 'level', idx: ai++, level: L });
     L++;
   }
@@ -376,6 +377,20 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
     setDirty(true); // a fresh battlefield is a change to be saved
     flash('BATTLEFIELD GENERATED');
   };
+  // Fill EVERY normal level slot with a fresh random battlefield in one click (varied
+  // theme + size per level). Boss slots are computed, not stored, so they're untouched.
+  const GEN_SIZES = [176, 192, 200, 208, 224];
+  const generateAll = () => {
+    const next = campaign.map((): CampaignSlot => {
+      const th = THEME_LIST[(Math.random() * THEME_LIST.length) | 0].id;
+      const sz = GEN_SIZES[(Math.random() * GEN_SIZES.length) | 0];
+      return { authored: true, layout: makeBattlefieldLayout(th, sz, (Math.random() * 1e9) | 0) };
+    });
+    commit(next);
+    loadInto(next[activeIdx].layout); // reflect the active slot on the canvas
+    setDirty(false);
+    flash(`GENERATED ${next.length} LEVELS`);
+  };
   // COMPLETE export: EVERY level (authored or not), round-trippable via IMPORT and
   // bake-able for players. Downloads one JSON file + copies it to the clipboard.
   const doExportCampaign = () => {
@@ -453,9 +468,12 @@ export function LevelEditor({ onPlay, onBack }: { onPlay: (layout: LevelLayout) 
         <div className="absolute inset-0 z-50 flex flex-col gap-3 overflow-auto bg-[#05070c]/98 p-4 font-pixel backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <p className="text-[11px] tracking-[0.2em] text-[#aef5c8]">CAMPAIGN · {campaign.length} LEVELS</p>
-            <button type="button" onClick={() => setShowCampaign(false)} className="rounded border border-white/20 px-3 py-1.5 text-[9px] uppercase text-white/70 hover:bg-white/10">✕ CLOSE</button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={generateAll} className="rounded border border-[#ffd27a]/50 px-3 py-1.5 text-[9px] uppercase text-[#ffd27a] hover:bg-[#ffd27a]/10">🎲 GENERATE ALL</button>
+              <button type="button" onClick={() => setShowCampaign(false)} className="rounded border border-white/20 px-3 py-1.5 text-[9px] uppercase text-white/70 hover:bg-white/10">✕ CLOSE</button>
+            </div>
           </div>
-          <p className="text-[7px] leading-relaxed text-white/40">Drag level cards to reorder. Bosses are fixed at every 5th slot (not editable). EDIT opens a level on the grid; DUP clones it; empty cards fall back to a procedural arena in-game.</p>
+          <p className="text-[7px] leading-relaxed text-white/40">Drag level cards to reorder. GENERATE ALL fills every normal level with a fresh random map (bosses are fixed at every {BOSS_EVERY}th slot, not editable). EDIT opens a level on the grid; DUP clones it; empty cards fall back to a procedural arena in-game.</p>
           <div className="flex flex-wrap gap-3">
             {buildBelt(campaign.length).map((item) =>
               item.type === 'boss' ? (

@@ -28,6 +28,9 @@ import type { BossKind } from '../enemy';
  */
 export const CAMPAIGN: Record<number, LevelLayout> = {};
 
+/** A regular boss fight sits at every Nth campaign level (plus the final gauntlet). */
+export const BOSS_EVERY = 15;
+
 /** Regular bosses cycle in this order (by boss ordinal). New civilizations are appended
  *  as they ship, so deeper runs face more variety. */
 export const GAUNTLET_ORDER: BossKind[] = ['xeno', 'warrior', 'octopus', 'archon', 'behemoth', 'specter', 'leviathan', 'monolith', 'oblivion', 'colossus', 'chimera', 'oracle', 'infestor'];
@@ -68,26 +71,26 @@ export function authoredCount(): number {
 
 /** Non-boss ordinal of a campaign level (counting only non-boss slots ≤ level). */
 export function authoredOrdinal(level: number): number {
-  return level - Math.floor(level / 5);
+  return level - Math.floor(level / BOSS_EVERY);
 }
 
 /** Total campaign levels = the last authored level + a final gauntlet capstone. */
 export function campaignTotalLevels(): number {
   const n = Math.max(1, authoredCount());
-  return n + Math.floor((n - 1) / 4) + 1;
+  return n + Math.floor((n - 1) / (BOSS_EVERY - 1)) + 1;
 }
 
-/** A boss level = every 5th level, plus the final gauntlet (which may not be a 5th). */
+/** A boss level = every BOSS_EVERY-th level, plus the final gauntlet (may not be an Nth). */
 export function isBossLevel(level: number, total = campaignTotalLevels()): boolean {
-  return level % 5 === 0 || level === total;
+  return level % BOSS_EVERY === 0 || level === total;
 }
 export function isGauntletLevel(level: number, total = campaignTotalLevels()): boolean {
   return level === total;
 }
-/** The (regular) boss kind for a 5th-level boss — cycles through GAUNTLET_ORDER. */
+/** The (regular) boss kind for a boss-slot level — cycles through GAUNTLET_ORDER. */
 export function bossKindFor(level: number): BossKind {
   const n = GAUNTLET_ORDER.length;
-  return GAUNTLET_ORDER[(((Math.floor(level / 5) - 1) % n) + n) % n];
+  return GAUNTLET_ORDER[(((Math.floor(level / BOSS_EVERY) - 1) % n) + n) % n];
 }
 
 /** Resolve a campaign level to a playable Level3D. Boss/gauntlet + empty slots use the

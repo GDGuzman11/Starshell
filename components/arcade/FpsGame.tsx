@@ -16,7 +16,7 @@ import { resolveLevel, buildBossArena, campaignTotalLevels, isBossLevel, isGaunt
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
+import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { THEME_LIST } from './fps/kit/themes';
@@ -25,7 +25,8 @@ type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'e
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const ARMOR_COST = 100;
-const GAUNTLET_BOSSES: BossKind[] = ['xeno', 'warrior', 'octopus']; // final gauntlet round order
+// Final gauntlet: the 5 TOUGHEST bosses (by HP), one per round, ordered hardest-last.
+const GAUNTLET_BOSSES: BossKind[] = ['leviathan', 'monolith', 'infestor', 'behemoth', 'colossus'];
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
 // Player picks a squad count at the menu; it holds for every non-boss level (the
 // map is huge). Each squad is a 5-man fireteam → soldiers = squads × SQUAD_SIZE.
@@ -372,8 +373,8 @@ export function FpsGame() {
       const total = campaignTotalLevels();
       setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills) }));
       if (run.level >= total) {
-        // GAUNTLET: advance through the three enhanced bosses with a recovery window.
-        if (gauntletRef.current > 0 && gauntletRef.current < 3) {
+        // GAUNTLET: advance through the five enhanced bosses with a recovery window.
+        if (gauntletRef.current > 0 && gauntletRef.current < GAUNTLET_BOSSES.length) {
           gauntletRef.current += 1;
           setRecovery(gauntletRef.current); // overlay handles the heal + next-round start
         } else {
@@ -493,7 +494,7 @@ export function FpsGame() {
         {mode === 'play' && intro && <MatchIntro key={intro.level} level={intro.level} boss={intro.boss} onDone={() => setIntro(null)} />}
 
         {mode === 'play' && recovery != null && (
-          <RecoveryOverlay key={recovery} round={recovery} onDone={() => { setRecovery(null); startLevel(20, lastLoadout, run.maxHp, run.upgrades); }} />
+          <RecoveryOverlay key={recovery} round={recovery} onDone={() => { setRecovery(null); startLevel(campaignTotalLevels(), lastLoadout, run.maxHp, run.upgrades); }} />
         )}
 
         {mode === 'menu' && (
@@ -748,10 +749,11 @@ function RecoveryOverlay({ round, onDone }: { round: number; onDone: () => void 
     }, 1000);
     return () => clearInterval(iv);
   }, []);
-  const boss = ['XENOMORPH', 'WARLORD', 'KRAKEN'][round - 1] ?? '';
+  const kind = GAUNTLET_BOSSES[round - 1];
+  const boss = kind ? BOSSES[kind].name : '';
   return (
     <div className="gdg-cine absolute inset-0 z-[55] flex flex-col items-center justify-center bg-black/85 px-4 text-center font-pixel [animation:gdg-fade-in_0.4s_ease-out]">
-      <p className="text-[10px] tracking-[0.3em] text-[#ffd27a] sm:text-[13px]">GAUNTLET · ROUND {round} / 3</p>
+      <p className="text-[10px] tracking-[0.3em] text-[#ffd27a] sm:text-[13px]">GAUNTLET · ROUND {round} / {GAUNTLET_BOSSES.length}</p>
       <p className="mt-2 text-[14px] text-[#ff5d6e] sm:text-[20px] [animation:gdg-rise-in_0.5s_ease-out]">ENHANCED {boss} INBOUND</p>
       <p className="mt-1 text-[7px] tracking-[0.25em] text-[#aef5c8]/80 sm:text-[9px]">RECOVER · SHIELDS RESTORED</p>
       <p key={n} className="mt-5 text-[40px] leading-none text-white sm:text-[56px] [animation:gdg-count-pop_0.9s_ease-out]">
