@@ -1,0 +1,130 @@
+/**
+ * ARMOR PIECE GEOMETRY — turns a parametric ArmorModelSpec into visible primitive
+ * geometry (the armor twin of the Arsenal's `partModel.ts`). Every piece is built
+ * from boxes / cylinders / cones only (zero assets), modelled centred at the origin
+ * so `model.ts` can drop it onto a named body-part group at the slot's anchor.
+ *
+ * Chunky, broad, late-90s-action-figure silhouettes per the spec. Emissive trim is
+ * tagged `glow` and moving parts `spin` so MarinePreview animates them (same
+ * convention GunPreview uses). Higher tiers get more plates + brighter trim + a
+ * moving element, so the visible evolution reads at a glance.
+ *
+ * Imported ONLY by the /arcade chunk.
+ */
+import * as THREE from 'three';
+import type { RenderTier } from '../materials';
+import { accent, box, coneZ, cylY, cylZ, metal } from '../models/parts';
+import type { ArmorModelSpec } from './parts';
+
+/** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
+ *  single side; model.ts clones it onto both limb groups. */
+export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Group {
+  const g = new THREE.Group();
+  const b = spec.bulk;
+  const body = metal(spec.body, rt);
+  const dark = metal(0x1c1f24, rt);
+  const glow = accent(spec.accent, rt, 1.3 + spec.emissive);
+  const trim = spec.emissive > 0.25;
+
+  const glowStrip = (w: number, h: number, d: number, x: number, y: number, z: number) => {
+    const m = box(w, h, d, glow, x, y, z);
+    m.name = 'glow';
+    g.add(m);
+  };
+  // A small rotating element (prototype/legendary) so evolution reads as motion.
+  const addSpinner = (y: number, z: number, r: number) => {
+    if (!spec.animated) return;
+    const ring = cylZ(r, 0.02, glow, 0, y, z, 8);
+    ring.name = 'spin';
+    g.add(ring);
+  };
+
+  switch (spec.family) {
+    case 'helmet': {
+      g.add(box(0.27 * b, 0.2 * b, 0.29 * b, body, 0, 0.02, 0)); // shell
+      g.add(box(0.29 * b, 0.05, 0.08, dark, 0, 0.09 * b, 0.12 * b)); // brow ridge
+      if (spec.spikes > 1) g.add(box(0.04, 0.16 * b, 0.14, dark, 0, 0.16 * b, -0.02)); // crest
+      if (trim) glowStrip(0.05, 0.03, 0.05, 0.1 * b, 0.06 * b, -0.1 * b); // side light
+      break;
+    }
+    case 'visor': {
+      glowStrip(0.24 * b, 0.06 * b, 0.02, 0, 0, 0.02);
+      g.add(box(0.26 * b, 0.02, 0.03, dark, 0, 0.05 * b, 0.02)); // upper frame
+      break;
+    }
+    case 'plate': {
+      g.add(box(0.44 * b, 0.3 * b, 0.06, body, 0, 0, 0)); // main plate
+      for (let i = 0; i < spec.plates; i++) g.add(box(0.4 * b - i * 0.05, 0.04, 0.03, dark, 0, 0.09 * b - i * 0.08, 0.04)); // ribs
+      if (trim) glowStrip(0.06, 0.14 * b, 0.02, 0, 0, 0.05);
+      addSpinner(-0.08 * b, 0.06, 0.03 * b);
+      break;
+    }
+    case 'pauldron': {
+      for (const s of [-1, 1]) {
+        const x = s * 0.3;
+        g.add(box(0.2 * b, 0.16 * b, 0.28 * b, body, x, 0, 0)); // shoulder cap
+        g.add(box(0.22 * b, 0.05, 0.26 * b, dark, x, 0.09 * b, 0)); // ridge
+        if (spec.spikes > 1) {
+          const sp = coneZ(0.001, 0.06 * b, 0.16 * b, dark, x, 0.06 * b, 0);
+          sp.rotation.x = -0.6;
+          g.add(sp);
+        }
+        if (trim) glowStrip(0.03, 0.03, 0.2 * b, x + s * 0.1 * b, 0, 0);
+      }
+      break;
+    }
+    case 'limb': {
+      g.add(box(0.2 * b, 0.24 * b, 0.2 * b, body, 0, 0, 0)); // limb shell
+      for (let i = 0; i < spec.plates; i++) g.add(box(0.22 * b, 0.03, 0.22 * b, dark, 0, 0.08 * b - i * 0.06, 0));
+      if (trim) glowStrip(0.02, 0.16 * b, 0.02, 0.11 * b, 0, 0.02);
+      break;
+    }
+    case 'cap': {
+      g.add(cylY(0.11 * b, 0.1 * b, body, 0, 0, 0.04)); // knee dome
+      if (trim) glowStrip(0.06, 0.02, 0.02, 0, 0, 0.12 * b);
+      break;
+    }
+    case 'glove': {
+      g.add(box(0.16 * b, 0.14 * b, 0.18 * b, body, 0, 0, 0.02)); // gauntlet
+      g.add(box(0.14 * b, 0.06, 0.1, dark, 0, -0.06 * b, 0.1)); // knuckle
+      if (trim) glowStrip(0.03, 0.03, 0.03, 0.06 * b, 0.02, 0.08);
+      break;
+    }
+    case 'boot': {
+      g.add(box(0.2 * b, 0.14 * b, 0.24 * b, body, 0, 0, 0.02)); // boot
+      g.add(box(0.22 * b, 0.06, 0.34 * b, dark, 0, -0.06 * b, 0.06)); // sole + toe
+      if (trim) glowStrip(0.03, 0.03, 0.1, 0.09 * b, 0, 0);
+      break;
+    }
+    case 'backpack': {
+      g.add(box(0.32 * b, 0.4 * b, 0.16 * b, body, 0, 0, 0)); // pack body
+      for (const s of [-1, 1]) g.add(cylY(0.06 * b, 0.34 * b, dark, s * 0.18 * b, 0, 0.02)); // canisters
+      if (trim) glowStrip(0.1 * b, 0.03, 0.03, 0, 0.14 * b, 0.09 * b);
+      addSpinner(-0.12 * b, 0.09 * b, 0.06 * b);
+      break;
+    }
+    case 'core': {
+      g.add(box(0.16 * b, 0.16 * b, 0.08, dark, 0, 0, 0)); // housing
+      glowStrip(0.09 * b, 0.09 * b, 0.05, 0, 0, 0.04); // reactor face
+      addSpinner(0, 0.06, 0.07 * b);
+      break;
+    }
+    case 'comms': {
+      g.add(box(0.08 * b, 0.08 * b, 0.08 * b, dark, 0, 0, 0)); // module
+      g.add(cylY(0.008, 0.2 * b, dark, 0, 0.14 * b, 0)); // antenna
+      glowStrip(0.02, 0.02, 0.02, 0, 0.25 * b, 0); // antenna tip
+      break;
+    }
+    case 'insignia': {
+      const m = box(0.14 * b, 0.14 * b, 0.01, glow, 0, 0, 0);
+      m.name = 'glow';
+      g.add(m);
+      g.add(box(0.16 * b, 0.16 * b, 0.008, dark, 0, 0, -0.005)); // backing
+      break;
+    }
+    case 'coating':
+    default:
+      break; // coating is applied as a whole-rig tint in model.ts
+  }
+  return g;
+}

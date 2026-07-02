@@ -10,23 +10,49 @@
  */
 import { useMemo, useState } from 'react';
 import { GunPreview } from './GunPreview';
+import { MarinePreview } from './MarinePreview';
 import { gunById } from '../fps/weapons';
 import { categoriesForFamily } from '../fps/arsenal/categories';
 import { loadArsenal, equippedParts } from '../fps/arsenal/store';
 import { hasSlots } from '../fps/arsenal/partModel';
+import { loadMarine, equippedArmorPieces } from '../fps/marine/store';
+import { aggregateArmor } from '../fps/marine/stats';
+import { ARMOR_STAT_LABEL, type ArmorStat } from '../fps/marine/slots';
+
+const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 
 export function AvatarPanel() {
+  const [save] = useState(() => loadMarine()); // remounts with the menu → always fresh
+  const equipped = useMemo(() => equippedArmorPieces(save), [save]);
+  const totals = useMemo(() => aggregateArmor(equipped), [equipped]);
+  const rank = save.marineLevel <= 5 ? `RECRUIT · LVL ${save.marineLevel}` : `VETERAN · LVL ${save.marineLevel}`;
+
   return (
     <div className="w-52 rounded-lg border border-[#7fdfff]/20 bg-black/50 p-3 font-pixel backdrop-blur-sm">
-      <p className="text-[8px] tracking-[0.25em] text-[#7fdfff]/80">PILOT</p>
-      <div className="mt-2 flex h-56 items-center justify-center rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
-        {/* placeholder silhouette — avatar TBD */}
-        <div className="flex flex-col items-center gap-2 opacity-60">
-          <div className="h-10 w-10 rounded-full border border-[#7fdfff]/40 bg-[#7fdfff]/10" />
-          <div className="h-14 w-16 rounded-t-2xl border border-[#7fdfff]/40 bg-[#7fdfff]/10" />
-        </div>
+      <div className="flex items-baseline justify-between">
+        <p className="text-[8px] tracking-[0.25em] text-[#7fdfff]/80">MARINE</p>
+        <p className="text-[7px] text-white/45">◈ {totals.rating}</p>
       </div>
-      <p className="mt-2 text-center text-[7px] text-white/35">AVATAR · TBD</p>
+      <div className="relative mt-2 h-56 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
+        <MarinePreview equipped={equipped} />
+        <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
+      </div>
+      <div className="mt-2 flex flex-col gap-0.5">
+        {STAT_ORDER.map((k) => {
+          const v = Math.max(0, totals[k]);
+          return (
+            <div key={k} className="flex items-center gap-1.5">
+              <span className="w-12 text-[6px] text-white/40">{ARMOR_STAT_LABEL[k]}</span>
+              <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                <span className="block h-full rounded-full bg-[#7fdfff]/70" style={{ width: `${Math.min(100, v * 260)}%` }} />
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-[6px] text-white/35">
+        {equipped.length > 0 ? `${equipped.length} COMPONENT${equipped.length > 1 ? 'S' : ''} ENGINEERED` : 'STANDARD ISSUE · no engineering'}
+      </p>
     </div>
   );
 }
