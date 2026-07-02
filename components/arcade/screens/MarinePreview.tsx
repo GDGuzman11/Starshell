@@ -14,7 +14,7 @@ import { disposeModel } from '../fps/models';
 import { buildMarine } from '../fps/marine/model';
 import type { ArmorPiece } from '../fps/marine/parts';
 
-export function MarinePreview({ equipped, previewPiece }: { equipped: ArmorPiece[]; previewPiece?: ArmorPiece | null }) {
+export function MarinePreview({ equipped, previewPiece, divisionId }: { equipped: ArmorPiece[]; previewPiece?: ArmorPiece | null; divisionId?: string | null }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -103,7 +103,7 @@ export function MarinePreview({ equipped, previewPiece }: { equipped: ArmorPiece
     // Try-on: the hovered piece replaces the equipped piece in its own slot.
     const list = equipped.filter((p) => !previewPiece || p.slot !== previewPiece.slot);
     if (previewPiece) list.push(previewPiece);
-    const m = buildMarine(list, 'desktop');
+    const m = buildMarine(list, 'desktop', divisionId);
 
     // Centre at the pivot so it spins in place, then frame it.
     const bbox = new THREE.Box3().setFromObject(m);
@@ -128,7 +128,7 @@ export function MarinePreview({ equipped, previewPiece }: { equipped: ArmorPiece
     });
     spinRef.current = spins;
     glowRef.current = glows;
-  }, [equipped, previewPiece]);
+  }, [equipped, previewPiece, divisionId]);
 
   return <div ref={mountRef} className="h-full w-full" aria-hidden />;
 }

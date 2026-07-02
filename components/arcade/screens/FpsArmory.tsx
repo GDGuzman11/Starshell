@@ -11,6 +11,7 @@
 import { useMemo, useState } from 'react';
 import { MarinePreview } from './MarinePreview';
 import { ARMOR_SLOTS, ARMOR_STAT_LABEL, type ArmorSlot, type ArmorStat } from '../fps/marine/slots';
+import { divisionById, divisionSlots } from '../fps/marine/divisions';
 import { generateArmor, ARMOR_TIERS, type ArmorPiece, type ArmorTier } from '../fps/marine/parts';
 import { aggregateArmor } from '../fps/marine/stats';
 import { MANUFACTURERS } from '../fps/arsenal/manufacturers';
@@ -31,7 +32,10 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
   const [hover, setHover] = useState<ArmorPiece | null>(null); // transient preview
   const [tryOn, setTryOn] = useState<Record<string, ArmorPiece>>({}); // one try-on per slot
 
-  const slot = ARMOR_SLOTS.find((s) => s.id === slotId) ?? ARMOR_SLOTS[0];
+  // Recruit slots always; the chosen division's own engineering slots are appended.
+  const slots = useMemo(() => [...ARMOR_SLOTS, ...divisionSlots(save.division)], [save.division]);
+  const slot = slots.find((s) => s.id === slotId) ?? slots[0];
+  const div = divisionById(save.division);
   const pieces = useMemo(() => generateArmor(slotId), [slotId]);
   const equipped = useMemo(() => equippedArmorPieces(save), [save]);
   const equippedIds = useMemo(() => new Set(equipped.map((p) => p.id)), [equipped]);
@@ -74,7 +78,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
     });
   };
 
-  const rank = save.marineLevel <= 5 ? `RECRUIT · LVL ${save.marineLevel}` : `VETERAN · LVL ${save.marineLevel}`;
+  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `RECRUIT · LVL ${save.marineLevel}`;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-black/90 px-3 py-4 font-pixel">
@@ -94,12 +98,12 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
           <p className="text-[7px] text-white/50 sm:text-[8px]"><span className="text-white/85">{slot.label}</span> · {GROUP_LABEL[slot.group]}</p>
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          {ARMOR_SLOTS.map((s) => (
+          {slots.map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => { setSlotId(s.id); setSel(null); setHover(null); }}
-              className={`whitespace-nowrap rounded border px-2.5 py-1.5 text-[7px] uppercase transition-colors sm:text-[8px] ${s.id === slotId ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/10'}`}
+              className={`whitespace-nowrap rounded border px-2.5 py-1.5 text-[7px] uppercase transition-colors sm:text-[8px] ${s.id === slotId ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : s.division ? 'border-[#c8a8ff]/25 bg-[#c8a8ff]/[0.04] text-white/60 hover:bg-white/10' : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/10'}`}
             >
               {s.label}
               {save.equipped[s.id] && <span className="ml-1 text-[#aef5c8]">✓</span>}
@@ -112,7 +116,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
         {/* left: live Marine + armor stats + focused piece + familiarity */}
         <div className="flex flex-col gap-2 lg:w-[42%]">
           <div className="relative h-56 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f] sm:h-72">
-            <MarinePreview equipped={previewPieces} previewPiece={hover} />
+            <MarinePreview equipped={previewPieces} previewPiece={hover} divisionId={save.division} />
             <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
           </div>
 
@@ -155,7 +159,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
               <span>MARINE LVL {save.marineLevel}</span>
               <span>BOSSES {save.bosses}</span>
               <span>OWNED {save.owned.length}</span>
-              <span>EQUIPPED {equipped.length}/{ARMOR_SLOTS.length}</span>
+              <span>EQUIPPED {equipped.length}/{slots.length}</span>
               <span>NEXT {fam.next ?? 'MAX'}</span>
             </div>
           </div>

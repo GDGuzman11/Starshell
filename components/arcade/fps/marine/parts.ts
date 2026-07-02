@@ -14,7 +14,7 @@
 import { rng } from '../rand';
 import { priceFor, legendaryGate, type PartGate } from '../arsenal/economy';
 import { MANUFACTURERS, MANUFACTURER_IDS, type ManufacturerId } from '../arsenal/manufacturers';
-import { ARMOR_SLOTS, type ArmorFamily, type ArmorSlot, type ArmorStat } from './slots';
+import { slotById, type ArmorFamily, type ArmorSlot, type ArmorStat } from './slots';
 
 export type ArmorTier = 'standard' | 'prototype' | 'legendary';
 export const ARMOR_TIERS: ArmorTier[] = ['standard', 'prototype', 'legendary'];
@@ -107,8 +107,8 @@ const cache = new Map<string, ArmorPiece[]>();
 
 /** One slot's 60 pieces (20 per tier), deterministic per slot. */
 function buildSlot(slot: ArmorSlot): ArmorPiece[] {
-  const roles = SLOT_ROLES[slot.id] ?? ['Combat'];
-  const noun = SLOT_NOUN[slot.id] ?? 'Plate';
+  const roles = slot.roles ?? SLOT_ROLES[slot.id] ?? ['Combat'];
+  const noun = slot.noun ?? SLOT_NOUN[slot.id] ?? 'Plate';
   const out: ArmorPiece[] = [];
   // 60 DISTINCT (manufacturer, role) combos so names never repeat within a slot.
   const combos: [ManufacturerId, string][] = [];
@@ -188,9 +188,9 @@ function buildSlot(slot: ArmorSlot): ArmorPiece[] {
 export function generateArmor(slotId: string): ArmorPiece[] {
   const hit = cache.get(slotId);
   if (hit) return hit;
-  const slot = ARMOR_SLOTS.find((s) => s.id === slotId);
+  const slot = slotById(slotId);
   const parts = slot ? buildSlot(slot) : [];
-  cache.set(slotId, parts);
+  if (slot) cache.set(slotId, parts); // don't cache misses (slot may register later)
   return parts;
 }
 

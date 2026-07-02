@@ -13,30 +13,14 @@ import type { RenderTier } from '../materials';
 import { buildHumanoid } from '../enemies/models/humanoid';
 import type { EnemyParts } from '../enemies/models/trooper';
 import { slotById, type BodyPart } from './slots';
+import { divisionBase } from './divisions';
 import { buildArmorPiece } from './partModel';
 import type { ArmorPiece } from './parts';
 
-/** The recruit Marine's fixed base build — anchors in slots.ts are baked for this. */
-function buildRecruitBase(rt: RenderTier): THREE.Group {
-  return buildHumanoid({
-    tier: rt,
-    scale: 1.0,
-    girth: 1.15,
-    accent: 0x7fdfff,
-    body: 0x3a4250,
-    dark: 0x1c1f24,
-    legs: 'normal',
-    shoulders: 0.7,
-    heavyArms: false,
-    weapon: 'none',
-    backpack: 'none',
-    antenna: 1,
-  });
-}
-
-/** Build the Marine wearing the given equipped pieces (empty = base recruit armor). */
-export function buildMarine(equipped: ArmorPiece[], rt: RenderTier): THREE.Group {
-  const root = buildRecruitBase(rt);
+/** Build the Marine wearing the given equipped pieces (empty = base armour). A
+ *  `divisionId` swaps the base silhouette to that Combat Division; undefined = Recruit. */
+export function buildMarine(equipped: ArmorPiece[], rt: RenderTier, divisionId?: string | null): THREE.Group {
+  const root = buildHumanoid(divisionBase(divisionId, rt));
   const parts = root.userData.parts as EnemyParts;
   const groupOf = (p: BodyPart): THREE.Object3D => parts[p];
 

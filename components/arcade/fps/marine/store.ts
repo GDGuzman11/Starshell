@@ -26,10 +26,11 @@ export interface MarineSave {
   bosses: number; // lifetime bosses defeated (Legendary gate signal)
   marineLevel: number; // 1..; ≤5 = Recruit
   marineXp: number; // toward the next Marine Level
+  division: string | null; // chosen Combat Division (permanent in production; selectable now)
 }
 
 function blank(): MarineSave {
-  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0, marineLevel: 1, marineXp: 0 };
+  return { owned: [], equipped: {}, partXp: {}, service: {}, bosses: 0, marineLevel: 1, marineXp: 0, division: null };
 }
 
 export function loadMarine(): MarineSave {
@@ -45,6 +46,7 @@ export function loadMarine(): MarineSave {
       bosses: Number.isFinite(raw.bosses) ? raw.bosses : b.bosses,
       marineLevel: Number.isFinite(raw.marineLevel) ? Math.max(1, raw.marineLevel) : b.marineLevel,
       marineXp: Number.isFinite(raw.marineXp) ? raw.marineXp : b.marineXp,
+      division: typeof raw.division === 'string' ? raw.division : b.division,
     };
   } catch {
     return blank();
@@ -78,6 +80,11 @@ export function buyArmor(s: MarineSave, p: ArmorPiece): MarineSave {
 /** Equip an owned piece into its slot (one per slot). */
 export function equipArmor(s: MarineSave, p: ArmorPiece): MarineSave {
   return { ...s, equipped: { ...s.equipped, [p.slot]: p.id } };
+}
+
+/** Set the Marine's Combat Division (permanent in production; freely settable now). */
+export function setDivision(s: MarineSave, division: string | null): MarineSave {
+  return { ...s, division };
 }
 
 /** Familiarity XP a piece has accrued (for its evolution stage). */

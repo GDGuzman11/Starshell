@@ -33,6 +33,9 @@ export interface ArmorSlot {
   primary: ArmorStat;
   cosmetic?: boolean; // no gameplay stat (coating / insignia)
   group: 'plating' | 'systems' | 'cosmetic'; // bench section
+  division?: string; // undefined = recruit slot; else a Combat Division slot
+  roles?: string[]; // name-pool override (division slots carry their own themed pool)
+  noun?: string; // piece-noun override (e.g. "Cuirass")
 }
 
 /**
@@ -67,8 +70,18 @@ export const ARMOR_SLOTS: ArmorSlot[] = [
 ];
 
 export const ARMOR_SLOT_IDS = ARMOR_SLOTS.map((s) => s.id);
+
+// A slot REGISTRY so the generator can resolve any slot by id — recruit slots plus
+// the Combat Division slots that divisions.ts registers at import time.
+const REGISTRY: ArmorSlot[] = [...ARMOR_SLOTS];
+export function registerArmorSlots(slots: ArmorSlot[]): void {
+  for (const s of slots) if (!REGISTRY.some((r) => r.id === s.id)) REGISTRY.push(s);
+}
+export function allArmorSlots(): ArmorSlot[] {
+  return REGISTRY;
+}
 export function slotById(id: string): ArmorSlot | undefined {
-  return ARMOR_SLOTS.find((s) => s.id === id);
+  return REGISTRY.find((s) => s.id === id);
 }
 
 export const ARMOR_STAT_LABEL: Record<ArmorStat, string> = {

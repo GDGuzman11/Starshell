@@ -11,6 +11,7 @@ import { FpsShop } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { FpsArsenal } from './screens/FpsArsenal';
 import { FpsArmory } from './screens/FpsArmory';
+import { FpsDivision } from './screens/FpsDivision';
 import { FpsPremium } from './screens/FpsPremium';
 import { AvatarPanel, LoadoutPanel } from './screens/MenuPanels';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
@@ -30,7 +31,7 @@ import { armorPlayerBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { THEME_LIST } from './fps/kit/themes';
 
-type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal' | 'armory' | 'premium';
+type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal' | 'armory' | 'division' | 'premium';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 const ARMOR_COST = 100;
@@ -642,12 +643,15 @@ export function FpsGame() {
             <button type="button" onClick={() => { if (fullBleed && !fsActive) toggleFullscreen(); setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
               Loadout ▸
             </button>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button type="button" onClick={() => setMode('arsenal')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
                 ◈ Arsenal
               </button>
               <button type="button" onClick={() => setMode('armory')} className="min-h-[40px] rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-6 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 sm:text-[10px]">
                 ⛨ Armory
+              </button>
+              <button type="button" onClick={() => setMode('division')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
+                ⬢ Division
               </button>
               <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
@@ -771,6 +775,8 @@ export function FpsGame() {
         {mode === 'arsenal' && <FpsArsenal astro={astro} onSpend={spendAstro} onBack={() => setMode('menu')} />}
 
         {mode === 'armory' && <FpsArmory astro={astro} onSpend={spendAstro} onBack={() => setMode('menu')} />}
+
+        {mode === 'division' && <FpsDivision onBack={() => setMode('menu')} />}
 
         {mode === 'premium' && <FpsPremium onBack={() => setMode('menu')} />}
 
