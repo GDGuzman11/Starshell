@@ -22,6 +22,8 @@ export interface Player3 {
    *  only by shield drops. Capped at `maxArmor`. */
   armor: number;
   maxArmor: number;
+  /** Move-speed multiplier from armor mobility (small, capped ~1.08). Default 1. */
+  speedMul?: number;
   /** Active zipline ride (index into level.ziplines + progress 0..1). */
   zip: { i: number; t: number } | null;
   /** Active grapple flight — arcs the player from (x0,y0,z0) to (tx,ty,tz). */
@@ -200,8 +202,9 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
     wx /= wl;
     wz /= wl;
   }
-  let vx = wx * MOVE;
-  let vz = wz * MOVE;
+  const spd = MOVE * (p.speedMul ?? 1);
+  let vx = wx * spd;
+  let vz = wz * spd;
 
   // External impulse (boss knockback / pull vortex): add to this frame's velocity,
   // then decay it. Ignored while on a ladder/zip (those override vx/vz below).

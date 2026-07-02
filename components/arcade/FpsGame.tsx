@@ -25,6 +25,8 @@ import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { applyEngineering } from './fps/arsenal/parts';
 import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } from './fps/arsenal/store';
+import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
+import { armorPlayerBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { THEME_LIST } from './fps/kit/themes';
 
@@ -285,8 +287,13 @@ export function FpsGame() {
         return applyEngineering(withGold, parts, famDmg);
       });
       const thrown = throwById(lo.th);
+      // Permanent ARMOR: small, hard-capped bonuses (prestige-first, never pay-to-win).
+      const armorBonus = armorPlayerBonus(equippedArmorPieces(loadMarine()));
+      const deployHp = maxHp + armorBonus.maxHp;
       const player = makePlayer3(lvl.spawn);
-      player.health = maxHp;
+      player.health = deployHp;
+      player.armor = Math.min(player.maxArmor, armorBonus.overshield); // start with overshield
+      player.speedMul = armorBonus.moveMul;
       // The FINAL level is the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord →
       // Kraken). Regular boss levels (every 5th) cycle through the three boss kinds.
       const gauntlet = forcedBoss == null && isGauntletLevel(level, total);
@@ -320,7 +327,7 @@ export function FpsGame() {
         dmgDealt: 0,
         regenT: 0,
         squads: squadStates,
-        maxHp,
+        maxHp: deployHp, // regen caps at the armor-boosted max
         god: godRef.current,
         elapsed: 0,
       };
@@ -435,6 +442,11 @@ export function FpsGame() {
         const p1 = gunById(lastLoadout.p1);
         setFamNote(`${p1.name} · FAMILIARITY ${stageFor(serviceFor(nextArsenal, p1.id).xp).toUpperCase()} (+${xp})`);
       }
+      // MARINE: equipped armour gains familiarity; the Marine earns experience toward
+      // the next Marine Level (Recruit spans 1..5), separate from campaign progression.
+      const { save: nextMarine, leveledTo } = recordArmorOperation(loadMarine(), { kills: snap.kills, shots: snap.shotsFired, hits: snap.shotsHit, won, bossWin: won && isBossLevel(run.level) });
+      saveMarine(nextMarine);
+      if (leveledTo != null) setFamNote(`MARINE PROMOTED · LEVEL ${leveledTo}`);
     }
     if (snap.status === 'won') {
       const total = campaignTotalLevels();
