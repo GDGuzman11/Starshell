@@ -269,6 +269,27 @@ class Sfx {
     src.stop(t + dur);
   }
 
+  /** Metallic resonant ring — high-Q bandpass NOISE (not a musical tone), for the
+   *  "clang inside a barrel" tail. Q controls how metallic/ringing it reads. */
+  private ring(dur: number, gain: number, freq: number, q: number): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    const src = this.noiseSource();
+    if (!src) return;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(this.out());
+    const off = Math.random() * Math.max(0, (this.whiteBuf?.duration ?? 1) - dur);
+    src.start(t, off);
+    src.stop(t + dur);
+  }
+
   // ── family generators (distinct synthesis per weapon type) ──────────────────
   /** Ballistic: sharp filtered-noise crack + bass punch + mechanical click. */
   private genBallistic(p: WProfile): void {
@@ -303,16 +324,16 @@ class Sfx {
    *  resonant ring that decays. Serves the Standard Issue rifles (Pulse / Ranger). */
   private genBarrel(p: WProfile): void {
     const pj = p.pitch * (1 + (Math.random() * 2 - 1) * p.jitter);
-    // deep concussive body
-    this.tone('sine', 140 * pj, 58 * pj, 0.11 * p.len, 0.6 * p.vol * (0.5 + 0.5 * p.bass));
+    // deep concussive body (heavy-MG-style thump)
+    this.tone('sine', 135 * pj, 55 * pj, 0.13 * p.len, 0.62 * p.vol * (0.5 + 0.5 * p.bass));
     // low, gritty muzzle crack (lowpass — no piercing highs)
-    this.distNoise(0.05 * p.len, 0.32 * p.vol * (0.4 + p.grit), 1300 * pj);
-    this.burst(0.09 * p.len, 0.3 * p.vol, 1700 * pj, 300 * pj, 'lowpass');
+    this.distNoise(0.06 * p.len, 0.34 * p.vol * (0.4 + p.grit), 1400 * pj);
+    this.burst(0.1 * p.len, 0.3 * p.vol, 1600 * pj, 300 * pj, 'lowpass'); // metallic slam
     // mechanical bolt thunk
-    this.tone('square', 230 * pj, 110 * pj, 0.02, 0.11 * p.vol);
-    // METALLIC BARREL RING — near-constant resonant tones that ring out
-    this.tone('triangle', 700 * pj, 680 * pj, 0.2 * p.len, 0.12 * p.vol);
-    this.tone('triangle', 1380 * pj, 1350 * pj, 0.14 * p.len, 0.06 * p.vol);
+    this.tone('square', 230 * pj, 110 * pj, 0.02, 0.1 * p.vol);
+    // METALLIC BARREL RING — resonant bandpass NOISE (a clang, not a musical note)
+    this.ring(0.16 * p.len, 0.13 * p.vol, 2200 * pj, 14);
+    this.ring(0.1 * p.len, 0.07 * p.vol, 3600 * pj, 18);
   }
   /** Electric: randomized crackle snaps + HP noise buzz + unstable square layer. */
   private genElectric(p: WProfile): void {
