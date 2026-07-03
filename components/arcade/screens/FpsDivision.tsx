@@ -10,17 +10,20 @@
  */
 import { useState } from 'react';
 import { MarinePreview } from './MarinePreview';
+import { StatBar } from './StatBar';
 import { DIVISIONS, type DivisionId } from '../fps/marine/divisions';
+import { ARMOR_STAT_LABEL, type ArmorStat } from '../fps/marine/slots';
 import { loadMarine, saveMarine, setDivision, type MarineSave } from '../fps/marine/store';
 import { emitProgressChanged } from '../lib/progressEvent';
 
 const NO_PIECES: [] = [];
 const GRADUATE_LEVEL = 5;
+const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 export function FpsDivision({ onBack }: { onBack: () => void }) {
   const [save, setSave] = useState<MarineSave>(() => loadMarine());
-  const [focus, setFocus] = useState<DivisionId>((save.division as DivisionId) || 'vanguard');
+  const [focus, setFocus] = useState<DivisionId>((save.division as DivisionId) || 'outrider');
   const div = DIVISIONS.find((d) => d.id === focus) ?? DIVISIONS[0];
   const selected = save.division;
   // Graduation is a one-time permanent pick, gated to Marine Level 5 with no division yet.
@@ -38,10 +41,10 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
 
   const heading = canGraduate ? 'COMBAT DIVISION · GRADUATION' : 'COMBAT DIVISIONS';
   const subline = selected
-    ? 'Your division is permanent — its silhouette and engineering are locked in.'
+    ? 'Your division is permanent — its silhouette, stats and engineering are locked in.'
     : canGraduate
-      ? 'You have reached Marine Level 5. You serve as a MARINE — choose ONE division to graduate into. This choice is permanent.'
-      : `You serve as a MARINE — the standard frame every recruit starts with. Each division below hybridises two battlefield philosophies with its own silhouette + engineering; you graduate into ONE, permanently, at Marine Level ${GRADUATE_LEVEL} (currently Level ${save.marineLevel}).`;
+      ? 'You have reached Marine Level 5. You serve as an OUTRIDER — keep it, or graduate into ONE specialist division. This choice is permanent.'
+      : `You serve as an OUTRIDER — the balanced frame every recruit starts with. Each division below trades strengths for weaknesses (see its stat bars); you lock into ONE, permanently, at Marine Level ${GRADUATE_LEVEL} (currently Level ${save.marineLevel}).`;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-black/90 px-3 py-4 font-pixel">
@@ -80,6 +83,12 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[8px] text-white/85 sm:text-[9px]">{div.primary} <span className="text-white/40">/ {div.secondary}</span></p>
             <p className="mt-1 text-[7px] leading-relaxed text-white/55 sm:text-[8px]">{div.philosophy}</p>
+            {/* the division's battlefield identity — armor / mobility / shield / recovery */}
+            <div className="mt-2 flex flex-col gap-1">
+              {STAT_ORDER.map((k) => (
+                <StatBar key={k} label={ARMOR_STAT_LABEL[k]} base={div.stats[k]} />
+              ))}
+            </div>
             {selected ? (
               <p className="mt-2 w-full rounded border border-[#aef5c8]/40 bg-[#aef5c8]/10 py-1.5 text-center text-[8px] uppercase text-[#aef5c8] sm:text-[9px]">
                 {selected === div.id ? 'YOUR DIVISION ✓' : `LOCKED · ${DIVISIONS.find((d) => d.id === selected)?.name ?? ''} CHOSEN`}

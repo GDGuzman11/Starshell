@@ -29,7 +29,7 @@ import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } 
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
 import { emitProgressChanged } from './lib/progressEvent';
 import type { RunSlot } from './lib/runSlot';
-import { armorPlayerBonus } from './fps/marine/stats';
+import { combatBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { sfx } from './engine/audio';
 import { THEME_LIST } from './fps/kit/themes';
@@ -340,13 +340,15 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
         return applyEngineering(withGold, parts, famDmg);
       });
       const thrown = throwById(lo.th);
-      // Permanent ARMOR: small, hard-capped bonuses (prestige-first, never pay-to-win).
-      const armorBonus = armorPlayerBonus(equippedArmorPieces(loadMarine()));
-      const deployHp = maxHp + armorBonus.maxHp;
+      // DIVISION identity + equipped ARMOR → the deploy combat bonus (bounded; heavy
+      // divisions are genuinely slower/tankier, light ones faster/squishier).
+      const marine = loadMarine();
+      const cb = combatBonus(marine.division, equippedArmorPieces(marine));
+      const deployHp = maxHp + cb.maxHp;
       const player = makePlayer3(lvl.spawn);
       player.health = deployHp;
-      player.armor = Math.min(player.maxArmor, armorBonus.overshield); // start with overshield
-      player.speedMul = armorBonus.moveMul;
+      player.armor = Math.min(player.maxArmor, cb.overshield); // start with overshield
+      player.speedMul = cb.moveMul;
       // The FINAL level is the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord →
       // Kraken). Regular boss levels (every 5th) cycle through the three boss kinds.
       const gauntlet = forcedBoss == null && isGauntletLevel(level, total);
@@ -379,6 +381,8 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
         shotsHit: 0,
         dmgDealt: 0,
         regenT: 0,
+        regenDelay: 2 * cb.regenDelayMul, // RECOVERY: division shortens/lengthens the wait
+        regenRate: 24 * cb.regenRateMul, //  …and speeds/slows the heal
         squads: squadStates,
         maxHp: deployHp, // regen caps at the armor-boosted max
         god: godRef.current,

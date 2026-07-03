@@ -18,43 +18,36 @@ import { categoriesForFamily } from '../fps/arsenal/categories';
 import { loadArsenal, equippedParts } from '../fps/arsenal/store';
 import { hasSlots } from '../fps/arsenal/partModel';
 import { loadMarine, equippedArmorPieces } from '../fps/marine/store';
-import { aggregateArmor } from '../fps/marine/stats';
+import { statLayers } from '../fps/marine/stats';
+import { StatBar } from './StatBar';
 import { ARMOR_STAT_LABEL, type ArmorStat } from '../fps/marine/slots';
-import { divisionById } from '../fps/marine/divisions';
+import { divisionById, OUTRIDER } from '../fps/marine/divisions';
 
 const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 
 export function AvatarPanel({ onArmory }: { onArmory?: () => void }) {
   const [save] = useState(() => loadMarine()); // remounts with the menu → always fresh
   const equipped = useMemo(() => equippedArmorPieces(save), [save]);
-  const totals = useMemo(() => aggregateArmor(equipped), [equipped]);
+  const layers = useMemo(() => statLayers(save.division, equipped), [save.division, equipped]);
   const div = divisionById(save.division);
-  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `MARINE · LVL ${save.marineLevel}`;
+  const rank = `${(div ?? OUTRIDER).name} · LVL ${save.marineLevel}`;
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div className="w-52 rounded-lg border border-[#7fdfff]/20 bg-black/50 p-3 font-pixel backdrop-blur-sm">
       <div className="flex items-baseline justify-between">
-        <p className="text-[8px] tracking-[0.25em] text-[#7fdfff]/80">MARINE</p>
-        <p className="text-[7px] text-white/45">◈ {totals.rating}</p>
+        <p className="text-[8px] tracking-[0.25em] text-[#7fdfff]/80">{(div ?? OUTRIDER).name}</p>
+        <p className="text-[7px] text-white/45">◈ {layers.rating}</p>
       </div>
       <div className="relative mt-2 h-56 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
         <MarinePreview equipped={equipped} divisionId={save.division} onExpand={() => setExpanded(true)} />
         <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
         <span className="pointer-events-none absolute right-1.5 top-1.5 text-[8px] text-white/50">⤢</span>
       </div>
-      <div className="mt-2 flex flex-col gap-0.5">
-        {STAT_ORDER.map((k) => {
-          const v = Math.max(0, totals[k]);
-          return (
-            <div key={k} className="flex items-center gap-1.5">
-              <span className="w-12 text-[6px] text-white/40">{ARMOR_STAT_LABEL[k]}</span>
-              <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-                <span className="block h-full rounded-full bg-[#7fdfff]/70" style={{ width: `${Math.min(100, v * 260)}%` }} />
-              </span>
-            </div>
-          );
-        })}
+      <div className="mt-2 flex flex-col gap-1">
+        {STAT_ORDER.map((k) => (
+          <StatBar key={k} label={ARMOR_STAT_LABEL[k]} base={layers.base[k]} added={layers.added[k]} compact />
+        ))}
       </div>
       <p className="mt-1.5 text-[6px] text-white/35">
         {equipped.length > 0 ? `${equipped.length} COMPONENT${equipped.length > 1 ? 'S' : ''} ENGINEERED` : 'STANDARD ISSUE · no engineering'}

@@ -12,7 +12,16 @@ import type { HumanoidOpts } from '../enemies/models/humanoid';
 import type { RenderTier } from '../materials';
 import { registerArmorSlots, type ArmorFamily, type ArmorSlot, type ArmorStat, type BodyPart } from './slots';
 
-export type DivisionId = 'vanguard' | 'ghost' | 'warden' | 'phantom' | 'lifeline';
+export type DivisionId = 'outrider' | 'vanguard' | 'ghost' | 'warden' | 'phantom' | 'lifeline';
+
+/** The four defensive stats on a 0..100 identity scale (see stats.ts for the gameplay
+ *  mapping). Outrider is balanced; specialists trade clear strengths for weaknesses. */
+export interface DivisionStats {
+  armor: number;
+  mobility: number;
+  shield: number;
+  recovery: number;
+}
 
 export interface Division {
   id: DivisionId;
@@ -21,52 +30,76 @@ export interface Division {
   secondary: string;
   philosophy: string; // one-line silhouette language
   accent: number;
+  stats: DivisionStats; // 0..100 base identity per stat
   /** Base humanoid options (minus tier) — the division's unmistakable silhouette. */
   base: Omit<HumanoidOpts, 'tier'>;
 }
 
+// The generic starting frame everyone begins as (division = null resolves here too).
+const OUTRIDER_BASE: Omit<HumanoidOpts, 'tier'> = { scale: 1.0, girth: 1.15, accent: 0x7fdfff, body: 0x3a4250, dark: 0x1c1f24, legs: 'normal', shoulders: 0.7, weapon: 'none', antenna: 1 };
+
 export const DIVISIONS: Division[] = [
+  {
+    id: 'outrider', name: 'OUTRIDER', primary: 'Balanced', secondary: 'All-Round',
+    philosophy: 'The standard frame — no weakness, no specialty. Ready for anything.',
+    accent: 0x9fe8ff,
+    stats: { armor: 55, mobility: 55, shield: 50, recovery: 55 },
+    base: OUTRIDER_BASE,
+  },
   {
     id: 'vanguard', name: 'VANGUARD', primary: 'Assault', secondary: 'Heavy',
     philosophy: 'Aggressive, broad, forward-leaning — a breaching juggernaut.',
     accent: 0xff8a3a,
+    stats: { armor: 85, mobility: 35, shield: 65, recovery: 40 },
     base: { scale: 1.05, girth: 1.42, accent: 0xff8a3a, body: 0x5a5048, dark: 0x241d18, legs: 'thick', shoulders: 1.3, heavyArms: true, hunch: 0.12, backpack: 'ammo', antenna: 1 },
   },
   {
     id: 'ghost', name: 'GHOST', primary: 'Recon', secondary: 'Engineer',
     philosophy: 'Slim, angular, tall sensor arrays — mobility over mass.',
     accent: 0x7fdfff,
+    stats: { armor: 30, mobility: 90, shield: 40, recovery: 65 },
     base: { scale: 1.16, girth: 0.72, accent: 0x7fdfff, body: 0x2a3540, dark: 0x141a20, legs: 'digi', shoulders: 0.2, backpack: 'tech', antenna: 2, drones: 1 },
   },
   {
     id: 'warden', name: 'WARDEN', primary: 'Heavy', secondary: 'Engineer',
     philosophy: 'Extremely broad, massive shoulders — a walking bunker.',
     accent: 0xaef5c8,
+    stats: { armor: 95, mobility: 20, shield: 90, recovery: 35 },
     base: { scale: 1.12, girth: 1.72, accent: 0xaef5c8, body: 0x4a4e44, dark: 0x1e211c, legs: 'piston', shoulders: 1.7, heavyArms: true, spine: true, backpack: 'reactor' },
   },
   {
     id: 'phantom', name: 'PHANTOM', primary: 'Marksman', secondary: 'Recon',
     philosophy: 'Long proportions, slim shoulders — precision incarnate.',
     accent: 0xc08bff,
+    stats: { armor: 35, mobility: 80, shield: 30, recovery: 70 },
     base: { scale: 1.28, girth: 0.68, accent: 0xc08bff, body: 0x3a3346, dark: 0x191424, legs: 'normal', shoulders: 0.2, fins: true, antenna: 1 },
   },
   {
     id: 'lifeline', name: 'LIFELINE', primary: 'Medic', secondary: 'Engineer',
     philosophy: 'Compact support frame — drones, injectors, rescue gear.',
     accent: 0xff5d6e,
+    stats: { armor: 45, mobility: 50, shield: 60, recovery: 95 },
     base: { scale: 0.98, girth: 0.98, accent: 0xff5d6e, body: 0x4a4048, dark: 0x201a1e, legs: 'normal', shoulders: 0.4, backpack: 'tech', drones: 2, antenna: 1 },
   },
 ];
+
+/** The balanced default division — used for `division = null` (un-graduated) and as the
+ *  fallback stat/label everywhere the player hasn't specialised. */
+export const OUTRIDER: Division = DIVISIONS[0];
 
 export function divisionById(id: string | null | undefined): Division | undefined {
   return id ? DIVISIONS.find((d) => d.id === id) : undefined;
 }
 
-/** A division base humanoid config (falls back to a plain recruit-ish body). */
+/** A division base humanoid config (falls back to the balanced Outrider body). */
 export function divisionBase(id: string | null | undefined, tier: RenderTier): HumanoidOpts {
-  const d = divisionById(id);
-  if (!d) return { tier, scale: 1.0, girth: 1.15, accent: 0x7fdfff, body: 0x3a4250, dark: 0x1c1f24, legs: 'normal', shoulders: 0.7, weapon: 'none', antenna: 1 };
+  const d = divisionById(id) ?? OUTRIDER;
   return { ...d.base, tier, weapon: 'none' };
+}
+
+/** The 0..100 base stat vector for a division id (Outrider for null / unknown). */
+export function divisionStats(id: string | null | undefined): DivisionStats {
+  return (divisionById(id) ?? OUTRIDER).stats;
 }
 
 // ── division engineering slots ──────────────────────────────────────────────────
@@ -94,8 +127,12 @@ type CatDef = {
   group?: ArmorSlot['group']; anchor?: [number, number, number]; parts?: BodyPart[];
 };
 
+// Outrider uses the recruit ARMOR_SLOTS; only the five specialists carry their own
+// engineering set, so the slot tables below are keyed by SpecialistId (not DivisionId).
+type SpecialistId = Exclude<DivisionId, 'outrider'>;
+
 /** Themed name-role pools — every division's pieces read in its own voice. */
-const ROLES: Record<DivisionId, string[]> = {
+const ROLES: Record<SpecialistId, string[]> = {
   vanguard: ['Assault', 'Breacher', 'Heavy', 'Storm', 'Vanguard', 'Iron', 'Siege', 'Brawler', 'Juggernaut', 'Bastion', 'Warhound', 'Crusher', 'Onslaught', 'Rampart'],
   ghost: ['Recon', 'Phantom', 'Shadow', 'Scout', 'Stalker', 'Whisper', 'Spectre', 'Cipher', 'Wraith', 'Ghost', 'Veil', 'Silent', 'Nomad', 'Drift'],
   warden: ['Fortress', 'Bulwark', 'Aegis', 'Bastion', 'Rampart', 'Titan', 'Guardian', 'Sentinel', 'Colossus', 'Anvil', 'Warden', 'Redoubt', 'Bunker', 'Keep'],
@@ -103,7 +140,7 @@ const ROLES: Record<DivisionId, string[]> = {
   lifeline: ['Medic', 'Nano', 'Rescue', 'Guardian', 'Mercy', 'Vital', 'Restore', 'Seraph', 'Lifeline', 'Aegis', 'Field', 'Triage', 'Warden', 'Grace'],
 };
 
-const CATS: Record<DivisionId, CatDef[]> = {
+const CATS: Record<SpecialistId, CatDef[]> = {
   vanguard: [
     { key: 'helmet', label: 'Helmet', family: 'helmet', primary: 'armor', noun: 'Helm' },
     { key: 'chest', label: 'Chest Plate', family: 'chest', primary: 'armor', noun: 'Cuirass' },
@@ -166,7 +203,7 @@ const CATS: Record<DivisionId, CatDef[]> = {
   ],
 };
 
-function buildDivisionSlots(div: DivisionId): ArmorSlot[] {
+function buildDivisionSlots(div: SpecialistId): ArmorSlot[] {
   return CATS[div].map((c) => {
     const fam = FAM[c.family];
     return {
@@ -184,7 +221,7 @@ function buildDivisionSlots(div: DivisionId): ArmorSlot[] {
   });
 }
 
-const DIVISION_SLOTS: Record<DivisionId, ArmorSlot[]> = {
+const DIVISION_SLOTS: Record<SpecialistId, ArmorSlot[]> = {
   vanguard: buildDivisionSlots('vanguard'),
   ghost: buildDivisionSlots('ghost'),
   warden: buildDivisionSlots('warden'),
@@ -192,10 +229,11 @@ const DIVISION_SLOTS: Record<DivisionId, ArmorSlot[]> = {
   lifeline: buildDivisionSlots('lifeline'),
 };
 
-// Register every division's slots so the generator/renderer can resolve them by id.
-for (const d of DIVISIONS) registerArmorSlots(DIVISION_SLOTS[d.id]);
+// Register each specialist's slots so the generator/renderer can resolve them by id.
+// Outrider has none (it uses the recruit ARMOR_SLOTS).
+for (const slots of Object.values(DIVISION_SLOTS)) registerArmorSlots(slots);
 
-/** The engineering slots for a division (empty for an unknown/undefined id). */
+/** The engineering slots for a division (empty for Outrider / unknown / undefined). */
 export function divisionSlots(id: string | null | undefined): ArmorSlot[] {
-  return id && id in DIVISION_SLOTS ? DIVISION_SLOTS[id as DivisionId] : [];
+  return id && id in DIVISION_SLOTS ? DIVISION_SLOTS[id as SpecialistId] : [];
 }

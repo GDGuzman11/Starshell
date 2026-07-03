@@ -69,6 +69,8 @@ export interface FpsGameState {
   shotsHit: number;
   dmgDealt: number;
   regenT: number;
+  regenDelay?: number; // seconds hidden before regen starts (RECOVERY stat; default 2)
+  regenRate?: number; //  HP/sec regenerated once healing (RECOVERY stat; default 24)
   squads: Squad[]; // one shared-intel object per squad (independent squads)
   maxHp: number;
   god?: boolean; // dev: invincible (health stays full)
@@ -1471,7 +1473,7 @@ export function useFpsLoop(
           if (anySeen || totalDamage > 0) g.regenT = 0;
           else {
             g.regenT += dt;
-            if (g.regenT > 2) p.health = Math.min(g.maxHp, p.health + 24 * dt);
+            if (g.regenT > (g.regenDelay ?? 2)) p.health = Math.min(g.maxHp, p.health + (g.regenRate ?? 24) * dt);
           }
           if (g.god) p.health = g.maxHp; // dev god-mode: stay topped up after all damage
           // Drive the 3D viewmodel (bob from movement; recoil/flash/reload poses

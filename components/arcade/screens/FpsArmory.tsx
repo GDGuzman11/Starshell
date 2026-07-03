@@ -11,9 +11,10 @@
 import { useMemo, useState } from 'react';
 import { MarinePreview } from './MarinePreview';
 import { ARMOR_SLOTS, ARMOR_STAT_LABEL, type ArmorSlot, type ArmorStat } from '../fps/marine/slots';
-import { divisionById, divisionSlots } from '../fps/marine/divisions';
+import { divisionById, divisionSlots, OUTRIDER } from '../fps/marine/divisions';
 import { generateArmor, ARMOR_TIERS, type ArmorPiece, type ArmorTier } from '../fps/marine/parts';
-import { aggregateArmor } from '../fps/marine/stats';
+import { statLayers } from '../fps/marine/stats';
+import { StatBar } from './StatBar';
 import { MANUFACTURERS } from '../fps/arsenal/manufacturers';
 import { FAMILIARITY_STAGES, stageProgress } from '../fps/arsenal/familiarity';
 import { loadMarine, saveMarine, buyArmor, equipArmor, equippedArmorPieces, pieceXp, type MarineSave } from '../fps/marine/store';
@@ -24,7 +25,6 @@ const TIER_COLOR: Record<ArmorTier, string> = { standard: '#9fb4ff', prototype: 
 const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 const GROUP_LABEL: Record<ArmorSlot['group'], string> = { plating: 'PLATING', systems: 'SYSTEMS', cosmetic: 'FINISH' };
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
-const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: (n: number) => void; onBack: () => void }) {
   const [save, setSave] = useState<MarineSave>(() => loadMarine());
@@ -50,8 +50,9 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
   }, [equipped, tryOn]);
   const previewIds = useMemo(() => new Set(previewPieces.map((p) => p.id)), [previewPieces]);
 
-  const baseTotals = useMemo(() => aggregateArmor(equipped), [equipped]);
-  const enhTotals = useMemo(() => aggregateArmor(previewPieces), [previewPieces]);
+  // Bars: division base + what's EQUIPPED (green) + the try-on's extra add (amber).
+  const equippedLayers = useMemo(() => statLayers(save.division, equipped), [save.division, equipped]);
+  const previewLayers = useMemo(() => statLayers(save.division, previewPieces), [save.division, previewPieces]);
 
   // Per-slot familiarity: XP the equipped piece has accrued in this slot.
   const slotXp = save.equipped[slotId] ? pieceXp(save, save.equipped[slotId]) : 0;
@@ -81,7 +82,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
     emitProgressChanged();
   };
 
-  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `MARINE · LVL ${save.marineLevel}`;
+  const rank = `${(div ?? OUTRIDER).name} · LVL ${save.marineLevel}`;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-black/90 px-3 py-4 font-pixel">
@@ -123,15 +124,29 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
             <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
           </div>
 
-          {/* configured armor — aggregate rating + the 4 stats (try-on reflected live) */}
+          {/* configured armor — division base (cyan) + equipped armor (green) + the
+              live try-on's extra add (amber). RATING reflects division + armor. */}
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
             <div className="mb-1 flex items-center justify-between text-[7px] sm:text-[8px]">
-              <span className="text-white/70">CONFIGURED ARMOR</span>
-              <span className="text-[#aef5c8]/80">RATING ◈ {enhTotals.rating}</span>
+              <span className="text-white/70">DIVISION <span className="text-[#7fdfff]">■</span> ARMOR <span className="text-[#aef5c8]">■</span> ADDS <span className="text-[#ffd27a]">■</span></span>
+              <span className="text-[#aef5c8]/80">RATING ◈ {previewLayers.rating}</span>
             </div>
-            {STAT_ORDER.map((k) => (
-              <ArmorStatRow key={k} label={ARMOR_STAT_LABEL[k]} basePct={Math.max(0, baseTotals[k]) * 2.6} enhPct={Math.max(0, enhTotals[k]) * 2.6} delta={enhTotals[k] - baseTotals[k]} />
-            ))}
+            <div className="flex flex-col gap-1">
+              {STAT_ORDER.map((k) => {
+                const previewExtra = previewLayers.added[k] - equippedLayers.added[k];
+                return (
+                  <StatBar
+                    key={k}
+                    label={ARMOR_STAT_LABEL[k]}
+                    base={equippedLayers.base[k]}
+                    added={equippedLayers.added[k]}
+                    preview={Math.max(0, previewExtra)}
+                    previewDown={previewExtra < 0}
+                    delta={previewExtra / 100}
+                  />
+                );
+              })}
+            </div>
           </div>
 
           {/* focused piece — buy / equip for real */}
@@ -228,26 +243,6 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** A defensive-stat bar: base value + the try-on enhancement as a bright-green extension. */
-function ArmorStatRow({ label, basePct, enhPct, delta }: { label: string; basePct: number; enhPct: number; delta: number }) {
-  const base = clamp01(basePct);
-  const e = clamp01(enhPct);
-  const lo = Math.min(base, e);
-  const ext = Math.max(0, e - base);
-  const down = e < base - 0.001;
-  const dTxt = Math.abs(delta) > 0.0005 ? `${delta > 0 ? '+' : ''}${Math.round(delta * 100)}%` : '';
-  return (
-    <div className="mt-0.5 flex items-center gap-2">
-      <span className="w-12 shrink-0 text-[6px] uppercase text-white/45 sm:text-[7px]">{label}</span>
-      <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full transition-[width] duration-300" style={{ width: `${lo * 100}%`, backgroundColor: down ? '#8a8f9a' : '#7fdfff' }} />
-        {ext > 0 && <div className="h-full transition-[width] duration-300" style={{ width: `${ext * 100}%`, backgroundColor: '#aef5c8' }} />}
-      </div>
-      <span className="w-10 shrink-0 text-right text-[7px] text-white/85">{dTxt && <span className={delta >= 0 ? 'text-[#aef5c8]' : 'text-[#ff9aa6]'}>{dTxt}</span>}</span>
     </div>
   );
 }

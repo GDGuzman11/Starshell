@@ -10,6 +10,7 @@
  */
 import type { ArmorStat } from './slots';
 import type { ArmorPiece } from './parts';
+import { divisionStats } from './divisions';
 
 export interface ArmorTotals {
   armor: number;
@@ -18,6 +19,9 @@ export interface ArmorTotals {
   recovery: number;
   rating: number; // 0..100 headline number for the panel
 }
+
+const STAT_KEYS: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** Sum the (multiplicative) deltas of the equipped pieces per stat. */
 export function aggregateArmor(pieces: ArmorPiece[]): ArmorTotals {
@@ -33,15 +37,37 @@ export function aggregateArmor(pieces: ArmorPiece[]): ArmorTotals {
   return { ...t, rating };
 }
 
-/** The capped bonuses armour actually applies to the player at deploy. Kept small:
- *  at most +20 max HP, +30 overshield, +8% move speed, −15% shield-recharge delay. */
-export function armorPlayerBonus(pieces: ArmorPiece[]): { maxHp: number; overshield: number; moveMul: number; recoverMul: number } {
-  const t = aggregateArmor(pieces);
-  const cap = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+export type StatVector = Record<ArmorStat, number>;
+
+/** Per-stat POINTS (0..100 scale) for the bars: the division's base identity + what
+ *  the equipped armour pieces add on top. `total = base + added`. */
+export function statLayers(divisionId: string | null | undefined, pieces: ArmorPiece[]): { base: StatVector; added: StatVector; total: StatVector; rating: number } {
+  const dv = divisionStats(divisionId);
+  const agg = aggregateArmor(pieces);
+  const base = { ...dv } as StatVector;
+  const added = {} as StatVector;
+  const total = {} as StatVector;
+  for (const k of STAT_KEYS) {
+    added[k] = Math.max(0, agg[k]) * 100; // each piece ≈ +2..6 pts
+    total[k] = base[k] + added[k];
+  }
+  const rating = Math.round(Math.min(100, (total.armor + total.mobility + total.shield + total.recovery) / 4));
+  return { base, added, total, rating };
+}
+
+/** The combat effects the Marine's DIVISION + equipped armour apply at deploy. Divisions
+ *  are earned (not bought) so their identity is meaningful but bounded; heavy divisions
+ *  are genuinely slower (moveMul < 1), light ones squishier. Armour pieces add on top. */
+export function combatBonus(
+  divisionId: string | null | undefined,
+  pieces: ArmorPiece[],
+): { maxHp: number; overshield: number; moveMul: number; regenDelayMul: number; regenRateMul: number } {
+  const { total } = statLayers(divisionId, pieces);
   return {
-    maxHp: Math.round(cap(t.armor, 0.2) * 100),
-    overshield: Math.round(cap(t.shield, 0.3) * 100),
-    moveMul: 1 + cap(t.mobility, 0.08),
-    recoverMul: 1 - cap(t.recovery, 0.15),
+    maxHp: Math.round(clamp(total.armor, 0, 130) * 0.7), // Warden ~+66, Ghost ~+21
+    overshield: Math.round(clamp(total.shield, 0, 130) * 0.7),
+    moveMul: clamp(1 + (total.mobility - 50) * 0.0045, 0.85, 1.25), // <1 for heavy frames
+    regenDelayMul: clamp(1.6 - total.recovery / 100, 0.55, 1.7), // high recovery → shorter wait
+    regenRateMul: clamp(0.7 + (total.recovery / 100) * 0.9, 0.7, 1.8), // …and faster heal
   };
 }

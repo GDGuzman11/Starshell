@@ -9,7 +9,8 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MarinePreview } from './MarinePreview';
 import { ComponentsView } from './ComponentsView';
-import { aggregateArmor } from '../fps/marine/stats';
+import { StatBar } from './StatBar';
+import { statLayers } from '../fps/marine/stats';
 import { ARMOR_STAT_LABEL, type ArmorStat } from '../fps/marine/slots';
 import type { ArmorPiece } from '../fps/marine/parts';
 
@@ -17,7 +18,7 @@ const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 
 export function MarineInspect({ equipped, divisionId, rank, onClose }: { equipped: ArmorPiece[]; divisionId?: string | null; rank: string; onClose: () => void }) {
   const [showComponents, setShowComponents] = useState(false);
-  const totals = useMemo(() => aggregateArmor(equipped), [equipped]);
+  const layers = useMemo(() => statLayers(divisionId, equipped), [divisionId, equipped]);
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -37,20 +38,15 @@ export function MarineInspect({ equipped, divisionId, rank, onClose }: { equippe
             ⛨ Armory Components
           </button>
         </div>
-        {/* armor stats — zoomed in with the picture */}
+        {/* armor stats — zoomed in with the picture (division base + armor add) */}
         <div className="px-4 pb-1">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[7px] tracking-[0.2em] text-white/50">ARMOR</span>
-            <span className="text-[8px] text-[#aef5c8]/80">RATING ◈ {totals.rating}</span>
+            <span className="text-[7px] tracking-[0.2em] text-white/50">DIVISION <span className="text-[#7fdfff]">■</span> + ARMOR <span className="text-[#aef5c8]">■</span></span>
+            <span className="text-[8px] text-[#aef5c8]/80">RATING ◈ {layers.rating}</span>
           </div>
           <div className="flex flex-col gap-1">
             {STAT_ORDER.map((k) => (
-              <div key={k} className="flex items-center gap-2">
-                <span className="w-14 text-[6px] uppercase text-white/40">{ARMOR_STAT_LABEL[k]}</span>
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                  <span className="block h-full rounded-full bg-[#7fdfff]/70" style={{ width: `${Math.min(100, Math.max(0, totals[k]) * 260)}%` }} />
-                </span>
-              </div>
+              <StatBar key={k} label={ARMOR_STAT_LABEL[k]} base={layers.base[k]} added={layers.added[k]} />
             ))}
           </div>
         </div>
