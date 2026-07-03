@@ -13,6 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
+import { buildAPX01Revenant } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -59,6 +60,8 @@ const GUN_BUILDERS: Record<string, Builder> = {
   sidearm: buildSidearm,
   handcannon: buildHandCannon,
   machinepistol: buildMachinePistol,
+  // PREMIUM (Apex tier) — the prestige benchmark
+  apx01: buildAPX01Revenant,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -121,6 +124,7 @@ const GUN_ACCENT: Record<string, number> = {
   sidearm: ACCENT.green,
   handcannon: ACCENT.green,
   machinepistol: ACCENT.green,
+  apx01: 0x7fdfff, // Revenant plasma cyan-white
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */

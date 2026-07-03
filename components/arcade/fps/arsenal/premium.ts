@@ -22,3 +22,34 @@ export const PREMIUM_TIERS: PremiumTier[] = [
   { id: 'sovereign', name: 'SOVEREIGN', code: 'SOV', accent: 0xc8a8ff, blurb: 'Command-tier masterwork arms — engineered without compromise.', slots: 10 },
   { id: 'legendary', name: 'LEGENDARY', code: 'LGD', accent: 0xffd27a, blurb: 'The pinnacle. Mythic-grade hardware few will ever wield.', slots: 10 },
 ];
+
+/** A showcased premium weapon (catalog entry). SHOWCASE-ONLY for now — the model is
+ *  rendered + inspectable in the Premium store, but acquisition is `locked` (real
+ *  monetization + in-game realization are a later step). `stats` are display-only
+ *  (not wired to gameplay). The `id` must be registered in `fps/models/index.ts`. */
+export interface PremiumWeapon {
+  id: string; // model id (GUN_BUILDERS key)
+  name: string;
+  code: string; // tier designation prefix
+  tier: string; // PremiumTier id
+  accent: number;
+  philosophy: string; // its unique engineering identity (one line)
+  blurb: string;
+  stats: { power: number; rate: number; mag: number; reload: number }; // display only
+  locked: boolean;
+}
+
+/** The premium weapon catalog. The first benchmark only for now; grows to ten. */
+export const PREMIUM_WEAPONS: PremiumWeapon[] = [
+  {
+    id: 'apx01',
+    name: 'APX-01 REVENANT',
+    code: 'APX',
+    tier: 'apex',
+    accent: 0x7fdfff,
+    philosophy: 'Exposed fusion reactor feeding twin magnetic rails, wrapped in counter-rotating plasma-containment rings.',
+    blurb: 'The absolute pinnacle of human military engineering — engineered without compromise.',
+    stats: { power: 95, rate: 0.14, mag: 40, reload: 2.1 },
+    locked: true,
+  },
+];
