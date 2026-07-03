@@ -23,6 +23,14 @@ export const PREMIUM_TIERS: PremiumTier[] = [
   { id: 'legendary', name: 'LEGENDARY', code: 'LGD', accent: 0xffd27a, blurb: 'The pinnacle. Mythic-grade hardware few will ever wield.', slots: 10 },
 ];
 
+/** Storefront categories (the Weapons tab's top level). */
+export type WeaponCategory = 'primary' | 'heavy' | 'handheld';
+export const PREMIUM_CATEGORIES: { id: WeaponCategory; label: string }[] = [
+  { id: 'primary', label: 'Primary' },
+  { id: 'heavy', label: 'Heavy' },
+  { id: 'handheld', label: 'Hand Held' },
+];
+
 /** A showcased premium weapon (catalog entry). SHOWCASE-ONLY for now — the model is
  *  rendered + inspectable in the Premium store, but acquisition is `locked` (real
  *  monetization + in-game realization are a later step). `stats` are display-only
@@ -32,6 +40,8 @@ export interface PremiumWeapon {
   name: string;
   code: string; // tier designation prefix
   tier: string; // PremiumTier id
+  category: WeaponCategory; // storefront section
+  type: string; // weapon-type group within the category (e.g. 'Assault Rifles')
   accent: number;
   philosophy: string; // its unique engineering identity (one line)
   blurb: string;
@@ -47,6 +57,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-01 REVENANT',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0x7fdfff,
     philosophy: 'Exposed fusion reactor feeding twin magnetic rails, wrapped in counter-rotating plasma-containment rings.',
     blurb: 'The absolute pinnacle of human military engineering — engineered without compromise.',
@@ -58,6 +70,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-02 HYDRA',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0xff7a2a,
     philosophy: 'Exposed hydraulic rams cycle the action under crushing pressure — every shot is a piston strike.',
     blurb: 'Industrial hydraulics turned into a weapon. It hits like a hammer press.',
@@ -69,6 +83,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-03 CYCLONE',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0x63ff84,
     philosophy: 'A forward turbine and radial cooling fins bleed heat so the barrel never stops — sustained fire without mercy.',
     blurb: 'Spin it up and it simply does not overheat. Hold the trigger.',
@@ -80,6 +96,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-04 BASTION',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0x6ab0ff,
     philosophy: 'Twin recoil dampeners swallow the kick of oversized rounds — a bunker you carry into the fight.',
     blurb: 'Absurd rounds, zero muzzle climb. Immovable.',
@@ -91,6 +109,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-05 AEGIS',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0xb15cff,
     philosophy: 'A rotating iris shutter seals the bore between shots — surgical, sealed, immaculate.',
     blurb: 'Every shot leaves a perfect, sealed chamber. Precision as ritual.',
@@ -102,6 +122,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-06 SCAVENGER',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0xffc24a,
     philosophy: 'An exposed rotary magazine feeds visible rounds on an open track — it eats everything you give it.',
     blurb: 'You can watch it devour the drum. It never asks for less.',
@@ -113,6 +135,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-07 IRONCLAD',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0xff3a48,
     philosophy: 'Riveted industrial armor slabs over every system — engineered to be shot AND to shoot.',
     blurb: 'A gun built like a blast door. It outlives its operator.',
@@ -124,6 +148,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-08 GYRE',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0x49a6ff,
     philosophy: 'A spinning gyroscope and deploying stabilizer arms lock the aim — recoil simply does not exist.',
     blurb: 'Point it and it stays pointed. The rounds go exactly where you look.',
@@ -135,6 +161,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-09 VULCAN',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0xff5a2a,
     philosophy: 'Pressurized reaction vessels vent through mechanical valves — controlled industrial detonation.',
     blurb: 'A furnace with a trigger. Each shot is a metered explosion.',
@@ -146,6 +174,8 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     name: 'APX-10 TESLA',
     code: 'APX',
     tier: 'apex',
+    category: 'primary',
+    type: 'Assault Rifles',
     accent: 0x9ad8ff,
     philosophy: 'A stacked electromagnetic coil column accelerates the slug to a blinding rail-line — charge and release.',
     blurb: 'The apex charge rifle. Coils sequence, then the world tears open.',
@@ -153,3 +183,15 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     locked: true,
   },
 ];
+
+/** Distinct weapon-type labels present in a category, in catalog order. */
+export function typesIn(category: WeaponCategory): string[] {
+  const out: string[] = [];
+  for (const w of PREMIUM_WEAPONS) if (w.category === category && !out.includes(w.type)) out.push(w.type);
+  return out;
+}
+
+/** The weapons in a category + type (in catalog order). */
+export function weaponsIn(category: WeaponCategory, type: string): PremiumWeapon[] {
+  return PREMIUM_WEAPONS.filter((w) => w.category === category && w.type === type);
+}

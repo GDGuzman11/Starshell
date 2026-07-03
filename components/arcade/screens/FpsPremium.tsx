@@ -1,16 +1,16 @@
 'use client';
 
 /**
- * PREMIUM STORE — three sections. WEAPONS is a live showcase of the prestige arsenal:
- * each Premium weapon renders as a rotating 3D model (same preview mechanics as the
- * Loadout Preview — drag-rotate + auto-spin + tap-to-expand inspect) with its stats and
- * engineering philosophy. Acquisition is LOCKED for now (real monetization + in-game
- * realization are a separate future build). Armor / Levels stay "coming soon".
+ * PREMIUM STORE — three sections. WEAPONS is a categorized storefront: category chips
+ * (Primary / Heavy / Hand Held) → weapon-type chips (Assault Rifles, …) → a grid of small
+ * gun cards. Each card is a STATIC 3D thumbnail (zero ongoing WebGL contexts); selecting a
+ * gun opens the magnified, auto-spinning, drag-rotatable inspect (same mechanics as the
+ * Loadout Preview). Acquisition is LOCKED for now. Armor / Levels stay "coming soon".
  */
-import { useState } from 'react';
-import { GunPreview } from './GunPreview';
+import { useEffect, useMemo, useState } from 'react';
 import { PremiumInspect } from './PremiumInspect';
-import { PREMIUM_WEAPONS } from '../fps/arsenal/premium';
+import { weaponThumb, disposeWeaponThumbRenderer } from './weaponThumb';
+import { PREMIUM_CATEGORIES, typesIn, weaponsIn, type PremiumWeapon, type WeaponCategory } from '../fps/arsenal/premium';
 
 type Tab = 'weapons' | 'armor' | 'levels';
 const TABS: { id: Tab; label: string; blurb: string }[] = [
@@ -20,74 +20,101 @@ const TABS: { id: Tab; label: string; blurb: string }[] = [
 ];
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
-function WeaponsShowcase() {
-  const [selId, setSelId] = useState(PREMIUM_WEAPONS[0]?.id ?? '');
-  const [inspect, setInspect] = useState(false);
-  const weapon = PREMIUM_WEAPONS.find((w) => w.id === selId) ?? PREMIUM_WEAPONS[0];
-  if (!weapon) {
-    return <p className="mt-8 text-center text-[8px] text-white/40">No premium weapons yet.</p>;
-  }
+function WeaponCard({ weapon, onOpen }: { weapon: PremiumWeapon; onOpen: () => void }) {
+  const thumb = useMemo(() => weaponThumb(weapon.id), [weapon.id]);
   const accent = hex(weapon.accent);
-  const stats: { label: string; value: string }[] = [
-    { label: 'POWER', value: `${weapon.stats.power}` },
-    { label: 'RATE', value: weapon.stats.rate.toFixed(2) },
-    { label: 'MAG', value: `${weapon.stats.mag}` },
-    { label: 'RELOAD', value: `${weapon.stats.reload.toFixed(2)}s` },
-  ];
-
   return (
-    <div className="mx-auto w-full max-w-lg">
-      {/* weapon chips (grows as the catalog fills to ten) */}
-      {PREMIUM_WEAPONS.length > 1 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {PREMIUM_WEAPONS.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              onClick={() => setSelId(w.id)}
-              className={`rounded border px-3 py-1.5 text-[8px] uppercase tracking-[0.1em] transition-colors ${w.id === selId ? 'text-black' : 'border-white/15 bg-white/[0.03] text-white/60 hover:bg-white/10'}`}
-              style={w.id === selId ? { borderColor: hex(w.accent), backgroundColor: hex(w.accent) } : undefined}
-            >
-              {w.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* live rotating preview (tap to inspect) */}
-      <div className="relative h-56 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-b from-[#1a2330] to-[#080c12] sm:h-64">
-        <GunPreview gunId={weapon.id} onExpand={() => setInspect(true)} />
-        <span className="pointer-events-none absolute right-2 top-2 text-[9px] text-white/50">⤢</span>
-        <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-white/40">TAP TO INSPECT · DRAG TO ROTATE</span>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2 text-left transition-colors hover:border-white/25 hover:bg-white/[0.06]"
+    >
+      <div className="relative h-24 w-full overflow-hidden rounded-md bg-gradient-to-b from-[#1a2330] to-[#080c12] sm:h-28">
+        {thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumb} alt={weapon.name} className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-110" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[7px] text-white/30">rendering…</div>
+        )}
+        <span className="pointer-events-none absolute right-1 top-1 text-[8px] text-white/40 opacity-0 transition-opacity group-hover:opacity-100">⤢</span>
       </div>
-
-      {/* identity */}
-      <div className="mt-3 flex items-baseline justify-between">
-        <p className="text-[12px]" style={{ color: accent }}>{weapon.name}</p>
-        <p className="text-[7px] tracking-[0.25em] text-white/40">{weapon.code} · PREMIUM</p>
-      </div>
-      <p className="mt-1 text-[7px] leading-relaxed text-white/55">{weapon.philosophy}</p>
-
-      {/* display stats */}
-      <div className="mt-3 grid grid-cols-4 gap-2">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded border border-white/10 bg-white/[0.03] p-2 text-center">
-            <p className="text-[11px] text-white">{s.value}</p>
-            <p className="mt-0.5 text-[5px] tracking-[0.15em] text-white/40">{s.label}</p>
+      <p className="mt-1.5 truncate text-[8px]" style={{ color: accent }}>{weapon.name}</p>
+      <div className="mt-1 grid grid-cols-4 gap-1 text-center">
+        {[['PWR', weapon.stats.power], ['RATE', weapon.stats.rate], ['MAG', weapon.stats.mag], ['RLD', `${weapon.stats.reload}s`]].map(([l, v]) => (
+          <div key={l as string}>
+            <p className="text-[7px] text-white/85">{v}</p>
+            <p className="text-[4px] tracking-[0.1em] text-white/35">{l}</p>
           </div>
         ))}
       </div>
+    </button>
+  );
+}
 
-      {/* locked acquire */}
-      <button
-        type="button"
-        disabled
-        className="mt-4 w-full cursor-not-allowed rounded-md border border-white/15 bg-white/[0.03] py-2 text-[8px] uppercase tracking-[0.2em] text-white/40"
-      >
-        🔒 Coming soon
-      </button>
+function WeaponsStore() {
+  const [category, setCategory] = useState<WeaponCategory>('primary');
+  const [type, setType] = useState<string>(() => typesIn('primary')[0] ?? '');
+  const [inspect, setInspect] = useState<PremiumWeapon | null>(null);
 
-      {inspect && <PremiumInspect weapon={weapon} onClose={() => setInspect(false)} />}
+  const types = useMemo(() => typesIn(category), [category]);
+  const activeType = types.includes(type) ? type : types[0] ?? '';
+  const weapons = useMemo(() => (activeType ? weaponsIn(category, activeType) : []), [category, activeType]);
+
+  // Free the thumbnail renderer's WebGL context when leaving the store.
+  useEffect(() => () => disposeWeaponThumbRenderer(), []);
+
+  const pickCategory = (c: WeaponCategory) => {
+    setCategory(c);
+    setType(typesIn(c)[0] ?? '');
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      {/* category chips */}
+      <div className="flex gap-2">
+        {PREMIUM_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => pickCategory(c.id)}
+            className={`rounded-md border px-4 py-1.5 text-[8px] uppercase tracking-[0.15em] transition-colors sm:text-[9px] ${c.id === category ? 'border-[#ffd27a] bg-[#ffd27a]/15 text-[#ffd27a]' : 'border-white/15 bg-white/[0.03] text-white/55 hover:bg-white/10'}`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {types.length === 0 ? (
+        <div className="mt-6 flex flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[0.02] p-10 text-center">
+          <p className="text-[10px] tracking-[0.2em] text-white/50">NO PREMIUM WEAPONS YET</p>
+          <p className="mt-3 rounded-full border border-white/15 px-4 py-1.5 text-[7px] uppercase tracking-[0.25em] text-white/40">🔒 Coming soon</p>
+        </div>
+      ) : (
+        <>
+          {/* weapon-type chips */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {types.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className={`rounded border px-3 py-1 text-[7px] uppercase tracking-[0.1em] transition-colors sm:text-[8px] ${t === activeType ? 'border-white/60 bg-white/10 text-white' : 'border-white/12 bg-white/[0.02] text-white/50 hover:bg-white/10'}`}
+              >
+                {t} <span className="text-white/35">· {weaponsIn(category, t).length}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* card grid */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {weapons.map((w) => (
+              <WeaponCard key={w.id} weapon={w} onOpen={() => setInspect(w)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {inspect && <PremiumInspect weapon={inspect} onClose={() => setInspect(null)} />}
     </div>
   );
 }
@@ -120,7 +147,7 @@ export function FpsPremium({ onBack }: { onBack: () => void }) {
       {/* content */}
       {tab === 'weapons' ? (
         <div className="mt-1 flex-1">
-          <WeaponsShowcase />
+          <WeaponsStore />
         </div>
       ) : (
         <div className="mx-auto mt-2 flex w-full max-w-lg flex-1 flex-col items-center justify-center rounded-xl border border-[#ffd27a]/20 bg-[#ffd27a]/[0.03] p-8 text-center">
