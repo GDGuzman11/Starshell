@@ -29,6 +29,10 @@ import { VANGUARD_HELMETS } from './products/vanguardHead';
 import { VANGUARD_CHESTS, VANGUARD_PAULDRONS, VANGUARD_HARNESS } from './products/vanguardTorso';
 import { VANGUARD_AMMO, VANGUARD_BACKPACK, VANGUARD_BREACH, VANGUARD_CORE } from './products/vanguardSystems';
 import { VANGUARD_GLOVES, VANGUARD_BOOTS } from './products/vanguardLimbs';
+import { WARDEN_HELMETS } from './products/wardenHead';
+import { WARDEN_CHESTS, WARDEN_PAULDRONS, WARDEN_BARRIER } from './products/wardenTorso';
+import { WARDEN_EMITTER, WARDEN_CORE, WARDEN_BACKPACK, WARDEN_REACTOR } from './products/wardenSystems';
+import { WARDEN_BOOTS, WARDEN_BRACES } from './products/wardenLimbs';
 
 export interface ArmorProduct {
   id: string; // stable template id (stored on the piece's model spec)
@@ -79,6 +83,17 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   vanguard_core: VANGUARD_CORE,
   vanguard_gloves: VANGUARD_GLOVES,
   vanguard_boots: VANGUARD_BOOTS,
+  // ── WARDEN (walking fortress) ────────────────────────────────────────────────
+  warden_helmet: WARDEN_HELMETS,
+  warden_chest: WARDEN_CHESTS,
+  warden_shoulders: WARDEN_PAULDRONS,
+  warden_barrier: WARDEN_BARRIER,
+  warden_emitter: WARDEN_EMITTER,
+  warden_core: WARDEN_CORE,
+  warden_backpack: WARDEN_BACKPACK,
+  warden_reactor: WARDEN_REACTOR,
+  warden_boots: WARDEN_BOOTS,
+  warden_braces: WARDEN_BRACES,
 };
 
 export function productsForSlot(slotId: string): ArmorProduct[] | undefined {
