@@ -403,3 +403,92 @@ export function buildAPX10Tesla(tier: RenderTier): THREE.Group {
 
   return model([receiver, spine, coils, coilCore, chargeRing, cap, capGlow, muzzleGlow, mag, grp, stock, pad, mzAnchor(-0.6, 0.05)]);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PREMIUM MACHINE GUNS (Apex tier) — humanity's finest suppression hardware. The
+// first benchmark below establishes the standard; the other nine will never share
+// its silhouette, mechanism, or feed philosophy.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** A forward-facing FEED SPROCKET (spins) — a toothed wheel with brass rounds seated
+ *  between the teeth and a glowing hub, where a belt enters the receiver. */
+function feedSprocket(x: number, y: number, z: number, steel: THREE.Material, brass: THREE.Material, gl: THREE.Material): THREE.Group {
+  const g = new THREE.Group(); g.name = 'spin'; g.position.set(x, y, z);
+  g.add(cylZ(0.05, 0.05, steel, 0, 0, 0, 12)); // hub
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const tooth = box(0.018, 0.03, 0.055, steel, Math.cos(a) * 0.058, Math.sin(a) * 0.058, 0); tooth.rotation.z = a; g.add(tooth);
+    g.add(cylZ(0.012, 0.062, brass, Math.cos(a) * 0.05, Math.sin(a) * 0.05, 0, 6)); // seated round
+  }
+  const hub = cylZ(0.02, 0.055, gl, 0, 0, 0.004); hub.name = 'glow'; g.add(hub);
+  return g;
+}
+
+/** APX-M1 "LEVIATHAN" — a TWIN-FEED SUPPRESSION PLATFORM. Two exposed ammunition belts
+ *  feed converging oscillating sprockets into a dual-chamber receiver under a massive
+ *  ribbed cooling jacket; twin recoil pistons ride the top; a folded bipod hangs beneath.
+ *  Suppression through sustained fire, not raw damage. Molten-amber reactor accent. */
+export function buildAPXM1Leviathan(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.olive, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const brass = metal(COL.bronze, tier);
+  const gl = accent(0xffa833, tier, 2.4);
+
+  // ── DUAL-CHAMBER RECEIVER (wide, heavy core) ─────────────────────────────────
+  const receiver = box(0.24, 0.2, 0.42, gun, 0, 0, 0.06);
+  const receiverTop = box(0.16, 0.04, 0.36, dark, 0, 0.12, 0.04);
+  const carry = box(0.045, 0.055, 0.14, dark, 0, 0.18, 0.0); // top carry handle
+  const chamber = box(0.07, 0.07, 0.16, gl, 0, 0.03, 0.08); chamber.name = 'glow'; // glowing dual chamber
+  const reactorHum = cylX(0.03, 0.24, gl, 0, -0.02, 0.1); reactorHum.name = 'coil'; // reactor hum underneath
+
+  // ── MASSIVE RIBBED COOLING JACKET + BARREL ───────────────────────────────────
+  const barrel = cylZ(0.05, 0.62, dark, 0, 0.02, -0.36);
+  const jacket = cylZ(0.09, 0.44, steel, 0, 0.02, -0.32);
+  const ribs = new THREE.Group();
+  for (let i = 0; i < 6; i++) ribs.add(cylZ(0.11, 0.016, steel, 0, 0.02, -0.14 - i * 0.06, 16));
+  const jacketVentL = tagGlow(ventSlats(4, 0.055, 0.02, 0.02, gl, 0.092, 0.06, -0.24), 'coil');
+  const jacketVentR = tagGlow(ventSlats(4, 0.055, 0.02, 0.02, gl, -0.092, 0.06, -0.24), 'coil');
+  const brake = box(0.15, 0.15, 0.13, steel, 0, 0.02, -0.64); // massive muzzle brake
+  const brakeSlot = ventSlats(3, 0.04, 0.14, 0.02, dark, 0, 0.05, -0.64);
+
+  // ── TWIN BELT FEEDS (exposed ammunition, both flanks) ────────────────────────
+  const boxL = box(0.11, 0.17, 0.2, body, 0.2, -0.06, 0.14); // ammo box (left)
+  const boxR = box(0.11, 0.17, 0.2, body, -0.2, -0.06, 0.14);
+  const beltL = new THREE.Group();
+  const beltR = new THREE.Group();
+  for (let i = 0; i < 5; i++) { // belt links arcing from each box into the sprockets
+    const t = i / 4;
+    beltL.add(box(0.03, 0.045, 0.03, brass, 0.18 - t * 0.06, 0.02 - t * 0.0, 0.02 - t * 0.02));
+    beltR.add(box(0.03, 0.045, 0.03, brass, -0.18 + t * 0.06, 0.02 - t * 0.0, 0.02 - t * 0.02));
+  }
+  const sprocketL = feedSprocket(0.115, 0.02, -0.02, steel, brass, gl);
+  const sprocketR = feedSprocket(-0.115, 0.02, -0.02, steel, brass, gl);
+
+  // ── TWIN RECOIL PISTONS (top) ────────────────────────────────────────────────
+  const pistL = cylZ(0.03, 0.36, steel, 0.055, 0.14, -0.06);
+  const pistR = cylZ(0.03, 0.36, steel, -0.055, 0.14, -0.06);
+  const rodL = cylZ(0.014, 0.4, gun, 0.055, 0.14, -0.16);
+  const rodR = cylZ(0.014, 0.4, gun, -0.055, 0.14, -0.16);
+
+  // ── FOLDED BIPOD (deploying stabilizer legs, stowed) ─────────────────────────
+  const legL = box(0.02, 0.02, 0.22, steel, 0.05, -0.11, -0.3); legL.rotation.x = 0.5;
+  const legR = box(0.02, 0.02, 0.22, steel, -0.05, -0.11, -0.3); legR.rotation.x = 0.5;
+
+  // ── GRIP + HEAVY STOCK ───────────────────────────────────────────────────────
+  const grp = grip(0.082, 0.18, 0.092, dark, 0, -0.16, 0.22);
+  const guard = box(0.055, 0.022, 0.1, dark, 0, -0.07, 0.18);
+  const stock = box(0.13, 0.17, 0.24, body, 0, -0.02, 0.42);
+  const stockPad = box(0.1, 0.19, 0.035, dark, 0, -0.02, 0.55);
+
+  return model([
+    receiver, receiverTop, carry, chamber, reactorHum,
+    barrel, jacket, ribs, jacketVentL, jacketVentR, brake, brakeSlot,
+    boxL, boxR, beltL, beltR, sprocketL, sprocketR,
+    pistL, pistR, rodL, rodR,
+    legL, legR,
+    grp, guard, stock, stockPad,
+    mzAnchor(-0.68, 0.02),
+  ]);
+}

@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -71,6 +71,8 @@ const GUN_BUILDERS: Record<string, Builder> = {
   apx08: buildAPX08Gyre,
   apx09: buildAPX09Vulcan,
   apx10: buildAPX10Tesla,
+  // PREMIUM machine guns (Apex tier)
+  apxm1: buildAPXM1Leviathan,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -143,6 +145,7 @@ const GUN_ACCENT: Record<string, number> = {
   apx08: 0x49a6ff, // Gyre gyro azure
   apx09: 0xff5a2a, // Vulcan furnace orange-red
   apx10: 0x9ad8ff, // Tesla electric blue-white
+  apxm1: 0xffa833, // Leviathan molten amber
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */

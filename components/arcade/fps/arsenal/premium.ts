@@ -182,6 +182,20 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     stats: { power: 150, rate: 0.7, mag: 12, reload: 2.8 },
     locked: true,
   },
+  // ── PRIMARY · MACHINE GUNS ───────────────────────────────────────────────────
+  {
+    id: 'apxm1',
+    name: 'APX-M1 LEVIATHAN',
+    code: 'APX',
+    tier: 'apex',
+    category: 'primary',
+    type: 'Machine Guns',
+    accent: 0xffa833,
+    philosophy: 'A twin-feed suppression platform: two exposed belts feed oscillating sprockets into a dual chamber under a massive ribbed cooling jacket.',
+    blurb: 'The finest suppression weapon humanity has ever built. It does not stop.',
+    stats: { power: 30, rate: 0.05, mag: 150, reload: 3.5 },
+    locked: true,
+  },
 ];
 
 /** Distinct weapon-type labels present in a category, in catalog order. */
