@@ -120,9 +120,11 @@ export function FpsLoadout({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
-          <Picker label="PRIMARY" items={PRIMARIES} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="HEAVY" items={SECONDARIES} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="SIDEARM" items={SIDEARMS} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
+          {/* Loadout lists only weapons you OWN (recruit gear is always owned; others must be
+              unlocked first). */}
+          <Picker label="PRIMARY" items={PRIMARIES.filter((g) => isWeaponUnlocked(save, g.id))} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="HEAVY" items={SECONDARIES.filter((g) => isWeaponUnlocked(save, g.id))} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="SIDEARM" items={SIDEARMS.filter((g) => isWeaponUnlocked(save, g.id))} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
           <div>
             <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
             <div className="mt-1 flex flex-wrap gap-1.5">

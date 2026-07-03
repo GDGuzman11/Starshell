@@ -14,7 +14,17 @@ import { disposeModel } from '../fps/models';
 import { buildMarine } from '../fps/marine/model';
 import type { ArmorPiece } from '../fps/marine/parts';
 
-export function MarinePreview({ equipped, previewPiece, divisionId }: { equipped: ArmorPiece[]; previewPiece?: ArmorPiece | null; divisionId?: string | null }) {
+export function MarinePreview({
+  equipped,
+  previewPiece,
+  divisionId,
+  onExpand,
+}: {
+  equipped: ArmorPiece[];
+  previewPiece?: ArmorPiece | null;
+  divisionId?: string | null;
+  onExpand?: () => void; // when set, a tap (no drag) fires this; a drag rotates
+}) {
   const mountRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -24,6 +34,7 @@ export function MarinePreview({ equipped, previewPiece, divisionId }: { equipped
   const spinRef = useRef<THREE.Object3D[]>([]);
   const glowRef = useRef<{ mat: THREE.MeshStandardMaterial; base: number }[]>([]);
   const reducedRef = useRef(false);
+  const dragRef = useRef({ active: false, lastX: 0, startX: 0, moved: false }); // click-and-hold to rotate; tap = expand
 
   // One-time renderer/scene/camera/lights + animation loop.
   useEffect(() => {
@@ -65,7 +76,7 @@ export function MarinePreview({ equipped, previewPiece, divisionId }: { equipped
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, clock.getDelta());
       const t = clock.elapsedTime;
-      if (!reducedRef.current && pivot) pivot.rotation.y += dt * 0.5;
+      if (!reducedRef.current && pivot && !dragRef.current.active) pivot.rotation.y += dt * 0.5;
       for (const s of spinRef.current) s.rotation.z += dt * 3.2;
       for (const g of glowRef.current) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3)));
       renderer.render(scene, camera);
@@ -130,5 +141,33 @@ export function MarinePreview({ equipped, previewPiece, divisionId }: { equipped
     glowRef.current = glows;
   }, [equipped, previewPiece, divisionId]);
 
-  return <div ref={mountRef} className="h-full w-full" aria-hidden />;
+  return (
+    <div
+      ref={mountRef}
+      className={`h-full w-full touch-none ${onExpand ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
+      title={onExpand ? 'Tap to inspect · drag to rotate' : 'Drag to rotate'}
+      onPointerDown={(e) => {
+        const d = dragRef.current;
+        d.active = true;
+        d.lastX = e.clientX;
+        d.startX = e.clientX;
+        d.moved = false;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const d = dragRef.current;
+        if (!d.active) return;
+        const p = pivotRef.current;
+        if (p) p.rotation.y += (e.clientX - d.lastX) * 0.01;
+        d.lastX = e.clientX;
+        if (Math.abs(e.clientX - d.startX) > 6) d.moved = true;
+      }}
+      onPointerUp={() => {
+        const d = dragRef.current;
+        if (d.active && onExpand && !d.moved) onExpand();
+        d.active = false;
+      }}
+      onPointerCancel={() => (dragRef.current.active = false)}
+    />
+  );
 }

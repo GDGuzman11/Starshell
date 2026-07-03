@@ -24,6 +24,7 @@ export function GunPreview({ gunId, equipped, previewPart }: { gunId: string; eq
   const spinRef = useRef<THREE.Object3D[]>([]);
   const glowRef = useRef<{ mat: THREE.MeshStandardMaterial; base: number }[]>([]);
   const reducedRef = useRef(false);
+  const dragRef = useRef({ active: false, lastX: 0 }); // click-and-hold to rotate
 
   // One-time renderer/scene/camera/lights + animation loop.
   useEffect(() => {
@@ -67,7 +68,7 @@ export function GunPreview({ gunId, equipped, previewPart }: { gunId: string; eq
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, clock.getDelta());
       const t = clock.elapsedTime;
-      if (!reducedRef.current && pivot) pivot.rotation.y += dt * 0.5;
+      if (!reducedRef.current && pivot && !dragRef.current.active) pivot.rotation.y += dt * 0.5;
       for (const s of spinRef.current) s.rotation.z += dt * 3.2;
       for (const g of glowRef.current) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3)));
       renderer.render(scene, camera);
@@ -141,5 +142,24 @@ export function GunPreview({ gunId, equipped, previewPart }: { gunId: string; eq
     glowRef.current = glows;
   }, [gunId, equipped, previewPart]);
 
-  return <div ref={mountRef} className="h-full w-full" aria-hidden />;
+  return (
+    <div
+      ref={mountRef}
+      className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
+      title="Drag to rotate"
+      onPointerDown={(e) => {
+        dragRef.current.active = true;
+        dragRef.current.lastX = e.clientX;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!dragRef.current.active) return;
+        const p = pivotRef.current;
+        if (p) p.rotation.y += (e.clientX - dragRef.current.lastX) * 0.01;
+        dragRef.current.lastX = e.clientX;
+      }}
+      onPointerUp={() => (dragRef.current.active = false)}
+      onPointerCancel={() => (dragRef.current.active = false)}
+    />
+  );
 }

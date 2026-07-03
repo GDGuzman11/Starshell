@@ -11,6 +11,8 @@
 import { useMemo, useState } from 'react';
 import { GunPreview } from './GunPreview';
 import { MarinePreview } from './MarinePreview';
+import { MarineInspect } from './MarineInspect';
+import { ComponentsView } from './ComponentsView';
 import { gunById } from '../fps/weapons';
 import { categoriesForFamily } from '../fps/arsenal/categories';
 import { loadArsenal, equippedParts } from '../fps/arsenal/store';
@@ -22,12 +24,13 @@ import { divisionById } from '../fps/marine/divisions';
 
 const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 
-export function AvatarPanel() {
+export function AvatarPanel({ onArmory }: { onArmory?: () => void }) {
   const [save] = useState(() => loadMarine()); // remounts with the menu → always fresh
   const equipped = useMemo(() => equippedArmorPieces(save), [save]);
   const totals = useMemo(() => aggregateArmor(equipped), [equipped]);
   const div = divisionById(save.division);
   const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `RECRUIT · LVL ${save.marineLevel}`;
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div className="w-52 rounded-lg border border-[#7fdfff]/20 bg-black/50 p-3 font-pixel backdrop-blur-sm">
@@ -36,8 +39,9 @@ export function AvatarPanel() {
         <p className="text-[7px] text-white/45">◈ {totals.rating}</p>
       </div>
       <div className="relative mt-2 h-56 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
-        <MarinePreview equipped={equipped} divisionId={save.division} />
+        <MarinePreview equipped={equipped} divisionId={save.division} onExpand={() => setExpanded(true)} />
         <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
+        <span className="pointer-events-none absolute right-1.5 top-1.5 text-[8px] text-white/50">⤢</span>
       </div>
       <div className="mt-2 flex flex-col gap-0.5">
         {STAT_ORDER.map((k) => {
@@ -55,11 +59,17 @@ export function AvatarPanel() {
       <p className="mt-1.5 text-[6px] text-white/35">
         {equipped.length > 0 ? `${equipped.length} COMPONENT${equipped.length > 1 ? 'S' : ''} ENGINEERED` : 'STANDARD ISSUE · no engineering'}
       </p>
+      {onArmory && (
+        <button type="button" onClick={onArmory} className="pointer-events-auto mt-2 w-full rounded border border-[#7fdfff]/40 bg-[#7fdfff]/10 py-1.5 text-[8px] uppercase tracking-[0.1em] text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20">
+          ⛨ Armory
+        </button>
+      )}
+      {expanded && <MarineInspect equipped={equipped} divisionId={save.division} rank={rank} onClose={() => setExpanded(false)} />}
     </div>
   );
 }
 
-export function LoadoutPanel({ guns }: { guns: string[] }) {
+export function LoadoutPanel({ guns, onArsenal }: { guns: string[]; onArsenal?: () => void }) {
   const ids = Array.from(new Set(guns)); // the player's selected loadout weapons only
   const [gunId, setGunId] = useState(ids[0] ?? 'ar01');
   const [save] = useState(() => loadArsenal()); // remounts with the menu → always fresh
@@ -67,6 +77,7 @@ export function LoadoutPanel({ guns }: { guns: string[] }) {
   const cats = categoriesForFamily(gun.family);
   const equipped = useMemo(() => equippedParts(save, gunId, gun.family), [save, gunId, gun.family]);
   const catLabel = (id: string) => cats.find((c) => c.id === id)?.label ?? id;
+  const [showComponents, setShowComponents] = useState(false);
 
   return (
     <div className="w-56 rounded-lg border border-[#c8a8ff]/25 bg-black/50 p-3 font-pixel backdrop-blur-sm">
@@ -84,6 +95,13 @@ export function LoadoutPanel({ guns }: { guns: string[] }) {
       </select>
       <div className="relative mt-2 h-40 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
         <GunPreview gunId={gunId} equipped={equipped} />
+        <button
+          type="button"
+          onClick={() => setShowComponents(true)}
+          className="pointer-events-auto absolute bottom-1.5 right-1.5 rounded border border-[#c8a8ff]/40 bg-black/60 px-2 py-1 text-[7px] uppercase tracking-[0.1em] text-[#c8a8ff] backdrop-blur-sm hover:bg-[#c8a8ff]/20"
+        >
+          Components
+        </button>
       </div>
       <p className="mt-2 text-[8px] text-white/85">{gun.name}</p>
       <div className="mt-1 flex flex-col gap-0.5">
@@ -99,6 +117,12 @@ export function LoadoutPanel({ guns }: { guns: string[] }) {
         )}
         {!hasSlots(gunId) && equipped.length > 0 && <p className="mt-0.5 text-[5px] text-white/25">3D attachment coming to this weapon</p>}
       </div>
+      {onArsenal && (
+        <button type="button" onClick={onArsenal} className="pointer-events-auto mt-2 w-full rounded border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 py-1.5 text-[8px] uppercase tracking-[0.1em] text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20">
+          ◈ Arsenal
+        </button>
+      )}
+      {showComponents && <ComponentsView mode="weapon" gunId={gunId} onBack={() => setShowComponents(false)} />}
     </div>
   );
 }

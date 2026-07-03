@@ -156,6 +156,7 @@ export function FpsGame() {
   const [crouched, setCrouched] = useState(false);
   const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
   const MAX_RESTARTS = 5;
+  const [runActive, setRunActive] = useState(false); // a campaign is in progress (menu shows a live tracker instead of the run config)
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -382,6 +383,7 @@ export function FpsGame() {
       sandboxRef.current = false;
       setRecovery(null);
       setRestarts(0); // fresh campaign → reset the per-level restart budget
+      setRunActive(true); // a run is now in progress
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
@@ -494,6 +496,7 @@ export function FpsGame() {
         } else {
           saveBest(total);
           setBest((b) => Math.max(b, total));
+          setRunActive(false);
           setMode('complete');
         }
       } else {
@@ -660,65 +663,83 @@ export function FpsGame() {
 
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
-            {/* Arcade-cabinet side screens (wide layouts only): pilot avatar + loadout preview. */}
-            <div className="pointer-events-none absolute left-5 top-1/2 hidden -translate-y-1/2 xl:block">
-              <AvatarPanel />
+            {/* Arcade-cabinet side screens (wide layouts only): pilot avatar (+ Armory) +
+                loadout preview (+ Arsenal). */}
+            <div className="absolute left-5 top-1/2 hidden -translate-y-1/2 xl:block">
+              <AvatarPanel onArmory={() => setMode('armory')} />
             </div>
             <div className="absolute right-5 top-1/2 hidden -translate-y-1/2 xl:block">
-              <LoadoutPanel guns={[lastLoadout.p1, lastLoadout.p2, lastLoadout.sa]} />
+              <LoadoutPanel guns={[lastLoadout.p1, lastLoadout.p2, lastLoadout.sa]} onArsenal={() => setMode('arsenal')} />
             </div>
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
             <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>
             {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
             <p className="mt-1 font-pixel text-[7px] text-[#c8a8ff] sm:text-[9px]">◈ {astro} ASTRODIAMONDS</p>
 
-            <p className="mt-5 font-pixel text-[7px] text-white/45 sm:text-[8px]">DIFFICULTY</p>
-            <div className="mt-2 flex gap-2">
-              {TIERS.map((d) => (
-                <button key={d} type="button" onClick={() => setDiff(d)} className={`min-h-[38px] rounded-md border px-3 font-pixel text-[8px] uppercase transition-colors sm:text-[9px] ${diff === d ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-                  {d}
+            {runActive ? (
+              /* A run is in progress — swap the config for a live tracker + restart. */
+              <>
+                <div className="mt-5 w-full max-w-xs rounded-lg border border-[#7fdfff]/25 bg-white/[0.03] p-4 text-center">
+                  <p className="font-pixel text-[8px] tracking-[0.2em] text-[#7fdfff]/80">MISSION IN PROGRESS</p>
+                  <p className="mt-2 font-pixel text-[20px] text-[#aef5c8] sm:text-[26px]">LEVEL {run.level}</p>
+                  <p className="font-pixel text-[6px] tracking-[0.2em] text-white/40">OF {campaignLen}</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 font-pixel">
+                    <div><p className="text-[12px] text-white">{runStats.kills}</p><p className="mt-0.5 text-[5px] tracking-[0.2em] text-white/40">KILLS</p></div>
+                    <div><p className="text-[12px] text-[#ffd27a]">⛀ {run.gold}</p><p className="mt-0.5 text-[5px] tracking-[0.2em] text-white/40">GOLD</p></div>
+                    <div><p className="text-[12px] text-[#aef5c8]">{best}</p><p className="mt-0.5 text-[5px] tracking-[0.2em] text-white/40">BEST</p></div>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setMode('play')} className="mt-4 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:text-[13px]">
+                  ▸ Resume
                 </button>
-              ))}
-            </div>
-
-            <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">ENEMY SQUADS · {squads * SQUAD_SIZE} SOLDIERS</p>
-            <div className="mt-2 flex gap-2">
-              {SQUAD_OPTIONS.map((n) => (
-                <button key={n} type="button" onClick={() => setSquads(n)} className={`flex h-9 flex-col items-center justify-center rounded-md border px-2 font-pixel transition-colors ${squads === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
-                  <span className="text-[10px] leading-none">{n}</span>
-                  <span className="mt-0.5 text-[5px] leading-none opacity-70">{n * SQUAD_SIZE}</span>
+                <button type="button" onClick={() => beginCampaign(lastLoadout)} className="mt-3 min-h-[44px] w-full max-w-xs rounded-md border border-[#ff5d6e]/50 bg-[#ff5d6e]/10 px-6 font-pixel text-[10px] uppercase tracking-[0.1em] text-[#ff5d6e] transition-colors hover:bg-[#ff5d6e]/20 sm:text-[11px]">
+                  ⟲ Restart Run from the beginning
                 </button>
-              ))}
-            </div>
-            <p className="mt-2 font-pixel text-[6px] text-[#c8a8ff]/70 sm:text-[8px]">REWARDS ×{(diffMult(diff) * squadMult(squads)).toFixed(2)} · harder + more squads earn more ⛀ &amp; ◈</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-5 font-pixel text-[7px] text-white/45 sm:text-[8px]">DIFFICULTY</p>
+                <div className="mt-2 flex gap-2">
+                  {TIERS.map((d) => (
+                    <button key={d} type="button" onClick={() => setDiff(d)} className={`min-h-[38px] rounded-md border px-3 font-pixel text-[8px] uppercase transition-colors sm:text-[9px] ${diff === d ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
 
-            <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">
-              LOOK SENSITIVITY · {sensitivity.toFixed(1)}×
-            </p>
-            <input
-              type="range"
-              min={0.3}
-              max={4}
-              step={0.1}
-              value={sensitivity}
-              onChange={(e) => setSensitivityState(Number(e.target.value))}
-              aria-label="Look sensitivity"
-              className="mt-2 h-1.5 w-56 cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
-            />
+                <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">ENEMY SQUADS · {squads * SQUAD_SIZE} SOLDIERS</p>
+                <div className="mt-2 flex gap-2">
+                  {SQUAD_OPTIONS.map((n) => (
+                    <button key={n} type="button" onClick={() => setSquads(n)} className={`flex h-9 flex-col items-center justify-center rounded-md border px-2 font-pixel transition-colors ${squads === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+                      <span className="text-[10px] leading-none">{n}</span>
+                      <span className="mt-0.5 text-[5px] leading-none opacity-70">{n * SQUAD_SIZE}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 font-pixel text-[6px] text-[#c8a8ff]/70 sm:text-[8px]">REWARDS ×{(diffMult(diff) * squadMult(squads)).toFixed(2)} · harder + more squads earn more ⛀ &amp; ◈</p>
 
-            <button type="button" onClick={() => { if (fullBleed && !fsActive) toggleFullscreen(); setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
-              Loadout ▸
-            </button>
+                <p className="mt-4 font-pixel text-[7px] text-white/45 sm:text-[8px]">
+                  LOOK SENSITIVITY · {sensitivity.toFixed(1)}×
+                </p>
+                <input
+                  type="range"
+                  min={0.3}
+                  max={4}
+                  step={0.1}
+                  value={sensitivity}
+                  onChange={(e) => setSensitivityState(Number(e.target.value))}
+                  aria-label="Look sensitivity"
+                  className="mt-2 h-1.5 w-56 cursor-pointer appearance-none rounded-full bg-white/15 accent-[#7fdfff]"
+                />
+
+                <button type="button" onClick={() => { if (fullBleed && !fsActive) toggleFullscreen(); setLoadoutReturn('campaign'); setMode('loadout'); }} className="mt-6 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#aef5c8] sm:text-[13px]">
+                  Loadout ▸
+                </button>
+              </>
+            )}
+            {/* Arsenal + Armory now live under the Loadout / Marine previews; Division is
+                info-only (Phase C). Central grid keeps Premium. */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => setMode('arsenal')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
-                ◈ Arsenal
-              </button>
-              <button type="button" onClick={() => setMode('armory')} className="min-h-[40px] rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-6 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 sm:text-[10px]">
-                ⛨ Armory
-              </button>
-              <button type="button" onClick={() => setMode('division')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
-                ⬢ Division
-              </button>
               <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
               </button>
@@ -824,7 +845,7 @@ export function FpsGame() {
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
             onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
-            onExit={() => setMode('menu')}
+            onExit={() => { setRunActive(false); setMode('menu'); }}
           />
         )}
 
@@ -859,7 +880,7 @@ export function FpsGame() {
             earnedAstro={lastAstro}
             stats={runStats}
             onRestart={() => beginCampaign(lastLoadout)}
-            onMenu={() => setMode('menu')}
+            onMenu={() => { setRunActive(false); setMode('menu'); }}
           />
         )}
 
@@ -876,7 +897,7 @@ export function FpsGame() {
             restartsLeft={MAX_RESTARTS - restarts}
             onRestartLevel={() => { setRestarts((n) => n + 1); startLevel(run.level, lastLoadout, run.maxHp, run.upgrades); }}
             onRestart={() => beginCampaign(lastLoadout)}
-            onMenu={() => setMode('menu')}
+            onMenu={() => { setRunActive(false); setMode('menu'); }}
           />
         )}
       </CRTFrame>
