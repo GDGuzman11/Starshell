@@ -24,7 +24,9 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
   const spinRef = useRef<THREE.Object3D[]>([]);
   const glowRef = useRef<{ mat: THREE.MeshStandardMaterial; base: number }[]>([]);
   const reducedRef = useRef(false);
-  const dragRef = useRef({ active: false, lastX: 0, startX: 0, moved: false }); // click-and-hold to rotate; tap = expand
+  // click-and-hold to rotate (full 2-axis for weapons); tap = expand. Once the user grabs it,
+  // `paused` latches so the auto-spin stops and the model stays in the posed angle.
+  const dragRef = useRef({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, moved: false, paused: false });
 
   // One-time renderer/scene/camera/lights + animation loop.
   useEffect(() => {
@@ -68,7 +70,7 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, clock.getDelta());
       const t = clock.elapsedTime;
-      if (!reducedRef.current && pivot && !dragRef.current.active) pivot.rotation.y += dt * 0.5;
+      if (!reducedRef.current && pivot && !dragRef.current.paused) pivot.rotation.y += dt * 0.5;
       for (const s of spinRef.current) s.rotation.z += dt * 3.2;
       for (const g of glowRef.current) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3)));
       renderer.render(scene, camera);
@@ -150,8 +152,11 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
       onPointerDown={(e) => {
         const d = dragRef.current;
         d.active = true;
+        d.paused = true; // grabbing latches the pose — stop the auto-spin
         d.lastX = e.clientX;
+        d.lastY = e.clientY;
         d.startX = e.clientX;
+        d.startY = e.clientY;
         d.moved = false;
         e.currentTarget.setPointerCapture(e.pointerId);
       }}
@@ -159,9 +164,13 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
         const d = dragRef.current;
         if (!d.active) return;
         const p = pivotRef.current;
-        if (p) p.rotation.y += (e.clientX - d.lastX) * 0.01;
+        if (p) {
+          p.rotation.y += (e.clientX - d.lastX) * 0.01; // yaw
+          p.rotation.x += (e.clientY - d.lastY) * 0.01; // pitch — weapons rotate on every axis
+        }
         d.lastX = e.clientX;
-        if (Math.abs(e.clientX - d.startX) > 6) d.moved = true;
+        d.lastY = e.clientY;
+        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 6) d.moved = true;
       }}
       onPointerUp={() => {
         const d = dragRef.current;

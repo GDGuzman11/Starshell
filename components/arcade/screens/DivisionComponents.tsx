@@ -41,8 +41,8 @@ export function DivisionComponents({ division, onClose }: { division: string; on
         <button type="button" onClick={onClose} className="rounded border border-white/20 px-3 py-1.5 text-[9px] uppercase text-white/70 hover:bg-white/10">◂ Back</button>
       </div>
 
-      {/* slot rack */}
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      {/* slot rack — wraps so every component for the division is visible at once */}
+      <div className="flex flex-wrap gap-1.5 pb-0.5">
         {slots.map((s) => (
           <button
             key={s.id}

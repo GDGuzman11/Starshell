@@ -34,7 +34,9 @@ export function MarinePreview({
   const spinRef = useRef<THREE.Object3D[]>([]);
   const glowRef = useRef<{ mat: THREE.MeshStandardMaterial; base: number }[]>([]);
   const reducedRef = useRef(false);
-  const dragRef = useRef({ active: false, lastX: 0, startX: 0, moved: false }); // click-and-hold to rotate; tap = expand
+  // click-and-hold to rotate (yaw only — the Marine stays upright); tap = expand. Once the user
+  // grabs it, `paused` latches so the auto-spin stops and the Marine stays in that pose.
+  const dragRef = useRef({ active: false, lastX: 0, startX: 0, moved: false, paused: false });
 
   // One-time renderer/scene/camera/lights + animation loop.
   useEffect(() => {
@@ -76,7 +78,7 @@ export function MarinePreview({
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, clock.getDelta());
       const t = clock.elapsedTime;
-      if (!reducedRef.current && pivot && !dragRef.current.active) pivot.rotation.y += dt * 0.5;
+      if (!reducedRef.current && pivot && !dragRef.current.paused) pivot.rotation.y += dt * 0.5;
       for (const s of spinRef.current) s.rotation.z += dt * 3.2;
       for (const g of glowRef.current) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3)));
       renderer.render(scene, camera);
@@ -149,6 +151,7 @@ export function MarinePreview({
       onPointerDown={(e) => {
         const d = dragRef.current;
         d.active = true;
+        d.paused = true; // grabbing latches the pose — stop the auto-spin
         d.lastX = e.clientX;
         d.startX = e.clientX;
         d.moved = false;
