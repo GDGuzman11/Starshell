@@ -155,7 +155,6 @@ const CATS: Record<SpecialistId, CatDef[]> = {
   ],
   ghost: [
     { key: 'helmet', label: 'Recon Helmet', family: 'helmet', primary: 'mobility', noun: 'Helm' },
-    { key: 'visor', label: 'Tactical Visor', family: 'visor', primary: 'recovery', noun: 'Visor' },
     { key: 'scanner', label: 'Scanner Array', family: 'comms', primary: 'recovery', noun: 'Array', group: 'systems', anchor: [-0.1, 0.22, -0.05] },
     { key: 'chest', label: 'Lightweight Chest Plate', family: 'chest', primary: 'mobility', noun: 'Plate' },
     { key: 'sensorpack', label: 'Sensor Backpack', family: 'backpack', primary: 'recovery', noun: 'Pack', group: 'systems' },

@@ -23,7 +23,7 @@ import { buildLimb } from './limbs';
 import { buildGlove } from './gloves';
 import { buildCore } from './cores';
 import { buildVisor } from './visors';
-import { productById } from './products';
+import { productForPiece } from './products';
 import type { ArmorModelSpec } from './parts';
 
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
@@ -32,7 +32,7 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
   const g = new THREE.Group();
   // Pt2: a bespoke PRODUCT template overrides the per-division language when present.
   if (spec.template) {
-    const product = productById(spec.division, spec.family, spec.template);
+    const product = productForPiece(spec.slot, spec.template);
     if (product) {
       g.add(product.build(spec, rt));
       return g;

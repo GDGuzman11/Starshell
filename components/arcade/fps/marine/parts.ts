@@ -15,7 +15,7 @@ import { rng } from '../rand';
 import { priceFor, legendaryGate, type PartGate } from '../arsenal/economy';
 import { MANUFACTURERS, MANUFACTURER_IDS, type ManufacturerId } from '../arsenal/manufacturers';
 import { slotById, type ArmorFamily, type ArmorSlot, type ArmorStat } from './slots';
-import { productsFor } from './products';
+import { productsForSlot } from './products';
 
 export type ArmorTier = 'standard' | 'prototype' | 'legendary';
 export const ARMOR_TIERS: ArmorTier[] = ['standard', 'prototype', 'legendary'];
@@ -42,6 +42,7 @@ export interface ArmorModelSpec {
   animated: boolean; // moving geometry (prototype/legendary)
   accent: number; // manufacturer emissive colour
   body: number; // manufacturer body metal
+  slot?: string; // owning slot id (Pt2 product lookup)
   template?: string; // Pt2 product id (partModel renders a bespoke product when set)
 }
 
@@ -113,9 +114,9 @@ const cache = new Map<string, ArmorPiece[]>();
 function buildSlot(slot: ArmorSlot): ArmorPiece[] {
   const roles = slot.roles ?? SLOT_ROLES[slot.id] ?? ['Combat'];
   const noun = slot.noun ?? SLOT_NOUN[slot.id] ?? 'Plate';
-  // Pt2: if this division+family has a bespoke PRODUCT line, each piece becomes one
-  // product (distinct silhouette + product name) instead of a seeded language variant.
-  const products = productsFor(slot.division, slot.family);
+  // Pt2: if this SLOT has a bespoke PRODUCT line, each piece becomes one product
+  // (distinct silhouette + product name) instead of a seeded language variant.
+  const products = productsForSlot(slot.id);
   const out: ArmorPiece[] = [];
   // 60 DISTINCT (manufacturer, role) combos so names never repeat within a slot.
   const combos: [ManufacturerId, string][] = [];
@@ -178,6 +179,7 @@ function buildSlot(slot: ArmorSlot): ArmorPiece[] {
         animated,
         accent: man.accent,
         body: man.body,
+        slot: slot.id,
         template: product?.id,
       };
       const magSum = Math.abs(stats[slot.primary] ?? 0.03) + Math.abs(stats[STATS[(r() * STATS.length) | 0]] ?? 0);
