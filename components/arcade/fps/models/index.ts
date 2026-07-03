@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord, buildAPXH1Oblivion, buildAPXH2Meridian, buildAPXH3Inferno, buildAPXH4Glacier, buildAPXH5Contagion, buildAPXH6Sunder, buildAPXH7Helios, buildAPXH8Salvo, buildAPXH9Auger, buildAPXH10Nemesis } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord, buildAPXH1Oblivion, buildAPXH2Meridian, buildAPXH3Inferno, buildAPXH4Glacier, buildAPXH5Contagion, buildAPXH6Sunder, buildAPXH7Helios, buildAPXH8Salvo, buildAPXH9Auger, buildAPXH10Nemesis, buildOTR01Obelisk, buildOTR02Stiletto } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -93,6 +93,9 @@ const GUN_BUILDERS: Record<string, Builder> = {
   apxh8: buildAPXH8Salvo,
   apxh9: buildAPXH9Auger,
   apxh10: buildAPXH10Nemesis,
+  // OUTRIDER premium sniper rifles
+  otr01: buildOTR01Obelisk,
+  otr02: buildOTR02Stiletto,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -185,6 +188,8 @@ const GUN_ACCENT: Record<string, number> = {
   apxh8: 0xff5a5a, // Salvo micro-missile red
   apxh9: 0xffa040, // Auger drill orange-gold
   apxh10: 0xc8ff3a, // Nemesis radiation yellow-green
+  otr01: 0x8fd0ff, // Obelisk gauss blue
+  otr02: 0xffb84a, // Stiletto marksman amber
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */

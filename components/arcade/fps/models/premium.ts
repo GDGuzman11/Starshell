@@ -1048,3 +1048,105 @@ export function buildAPXH10Nemesis(tier: RenderTier): THREE.Group {
 
   return model([frame, stripes, barrel, muzzle, muzzleGl, core, rods, vents, grp, stock, mzAnchor(-0.56, 0.02)]);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OUTRIDER (OTR) PREMIUM SNIPER RIFLES — two long guns, one bolt-action anti-materiel
+// (single high-power slug, slow chambering) and one semi-automatic marksman rifle.
+// Same premium-rifle standard: unmistakable silhouette + a mechanically-alive mechanism.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** OTR-01 "OBELISK" — a bolt-action GAUSS anti-materiel rifle. A metre of coil-wrapped
+ *  barrel accelerates a single dense slug; a rotating charge cycle + glowing rails read the
+ *  chambering. Long-range scope, folding bipod. One shot, one certainty. */
+export function buildOTR01Obelisk(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x8fd0ff, tier, 2.5);
+
+  // ── heavy receiver + very long barrel ────────────────────────────────────────
+  const receiver = box(0.16, 0.16, 0.42, gun, 0, 0, 0.1);
+  const barrel = cylZ(0.028, 0.86, dark, 0, 0.03, -0.42); // long barrel
+  const shroud = cylZ(0.05, 0.5, steel, 0, 0.03, -0.34); // barrel shroud
+  const coils = tagGlow(coilStack(8, 0.07, 0.062, gl, 0, 0.03, -0.2), 'coil'); // magnetic accel coils
+  const railL = box(0.012, 0.014, 0.6, gl, 0.05, 0.06, -0.34); railL.name = 'coil'; // glowing rails
+  const railR = box(0.012, 0.014, 0.6, gl, -0.05, 0.06, -0.34); railR.name = 'coil';
+  const brake = box(0.13, 0.13, 0.14, steel, 0, 0.03, -0.86); // huge muzzle brake
+  const brakeVent = ventSlats(3, 0.04, 0.12, 0.02, dark, 0, 0.06, -0.86);
+  const mzGlow = cylZ(0.04, 0.02, gl, 0, 0.03, -0.92); mzGlow.name = 'glow';
+  // ── rotating charge cycle at the breech ──────────────────────────────────────
+  const charge = new THREE.Group(); charge.name = 'spin'; charge.position.set(0, 0.03, 0.06);
+  charge.add(cylZ(0.08, 0.03, steel, 0, 0, 0, 12));
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; charge.add(box(0.018, 0.05, 0.03, gl, Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0)); }
+  const boltArm = cylX(0.014, 0.14, steel, 0.11, 0.05, 0.14); // bolt handle
+  const boltKnob = box(0.035, 0.035, 0.035, dark, 0.18, 0.05, 0.14);
+  // ── long-range scope ─────────────────────────────────────────────────────────
+  const scope = cylZ(0.036, 0.36, dark, 0, 0.16, 0.0);
+  const scopeFront = cylZ(0.042, 0.03, gl, 0, 0.16, -0.18); scopeFront.name = 'glow';
+  const scopeRear = cylZ(0.03, 0.02, gl, 0, 0.16, 0.18); scopeRear.name = 'glow';
+  const mountF = box(0.04, 0.06, 0.04, dark, 0, 0.1, -0.08);
+  const mountR = box(0.04, 0.06, 0.04, dark, 0, 0.1, 0.1);
+  // ── folding bipod (front) ────────────────────────────────────────────────────
+  const legL = box(0.02, 0.02, 0.3, steel, 0.05, -0.1, -0.5); legL.rotation.x = 0.6; legL.rotation.z = 0.2;
+  const legR = box(0.02, 0.02, 0.3, steel, -0.05, -0.1, -0.5); legR.rotation.x = 0.6; legR.rotation.z = -0.2;
+  // ── magazine + grip + heavy stock ────────────────────────────────────────────
+  const mag = box(0.07, 0.19, 0.13, dark, 0, -0.15, 0.14); mag.name = 'mag';
+  const grp = grip(0.07, 0.17, 0.08, dark, 0, -0.15, 0.22);
+  const guard = box(0.05, 0.02, 0.09, dark, 0, -0.06, 0.18);
+  const stock = box(0.09, 0.15, 0.26, body, 0, -0.02, 0.42);
+  const cheek = box(0.06, 0.05, 0.16, dark, 0, 0.07, 0.4); // cheek rest
+  const pad = box(0.075, 0.17, 0.03, dark, 0, -0.02, 0.55);
+
+  return model([
+    receiver, barrel, shroud, coils, railL, railR, brake, brakeVent, mzGlow,
+    charge, boltArm, boltKnob, scope, scopeFront, scopeRear, mountF, mountR,
+    legL, legR, mag, grp, guard, stock, cheek, pad, mzAnchor(-0.92, 0.03),
+  ]);
+}
+
+/** OTR-02 "STILETTO" — a gas-operated SEMI-AUTOMATIC marksman rifle. Suppressed, skeletonized,
+ *  fast on the follow-up; a reciprocating gas piston + glowing ejection port read the cycle. */
+export function buildOTR02Stiletto(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xffb84a, tier, 2.3);
+
+  // ── sleek receiver + mid barrel ──────────────────────────────────────────────
+  const receiver = box(0.13, 0.14, 0.38, gun, 0, 0, 0.08);
+  const barrel = cylZ(0.024, 0.54, dark, 0, 0.03, -0.32);
+  const handguard = box(0.07, 0.07, 0.28, steel, 0, 0.03, -0.26); // vented handguard
+  const hgVent = tagGlow(ventSlats(4, 0.05, 0.02, 0.02, gl, 0.038, 0.05, -0.26), 'coil');
+  const gasBlock = box(0.05, 0.05, 0.05, dark, 0, 0.08, -0.34); // gas block on top
+  const piston = cylZ(0.014, 0.24, steel, 0, 0.085, -0.28); // gas piston (reciprocating)
+  const suppressor = cylZ(0.045, 0.18, dark, 0, 0.03, -0.62); // suppressor
+  const supGlow = cylZ(0.03, 0.02, gl, 0, 0.03, -0.7); supGlow.name = 'glow';
+  // ── charging handle + glowing ejection port ──────────────────────────────────
+  const ejport = box(0.012, 0.05, 0.07, gl, 0.065, 0.05, 0.02); ejport.name = 'glow'; // ejection port
+  const chargeHandle = cylX(0.012, 0.1, steel, 0.09, 0.07, 0.08);
+  // small spinning gas regulator (front, reads as mechanical life)
+  const reg = new THREE.Group(); reg.name = 'spin'; reg.position.set(0, 0.11, -0.34);
+  reg.add(cylZ(0.03, 0.02, steel, 0, 0, 0, 8));
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; reg.add(box(0.012, 0.03, 0.02, gl, Math.cos(a) * 0.03, Math.sin(a) * 0.03, 0)); }
+  // ── compact scope ────────────────────────────────────────────────────────────
+  const scope = cylZ(0.03, 0.24, dark, 0, 0.13, 0.02);
+  const scopeGlow = cylZ(0.034, 0.02, gl, 0, 0.13, -0.1); scopeGlow.name = 'glow';
+  const mount = box(0.05, 0.05, 0.14, dark, 0, 0.09, 0.02);
+  // ── curved mag + grip + skeletonized stock ───────────────────────────────────
+  const mag = box(0.06, 0.17, 0.11, dark, 0, -0.14, 0.06); mag.name = 'mag';
+  const magCurve = box(0.06, 0.06, 0.1, dark, 0, -0.23, 0.02); magCurve.rotation.x = 0.25;
+  const grp = grip(0.064, 0.16, 0.076, dark, 0, -0.13, 0.16);
+  // skeletonized stock: a thin frame rather than a solid block
+  const stockTop = box(0.04, 0.03, 0.24, body, 0, 0.06, 0.34);
+  const stockBot = box(0.04, 0.03, 0.2, body, 0, -0.06, 0.34);
+  const stockRear = box(0.05, 0.16, 0.03, dark, 0, 0.0, 0.46);
+  const stockStrut = box(0.03, 0.03, 0.14, steel, 0, 0.0, 0.36); stockStrut.rotation.x = 0.4;
+
+  return model([
+    receiver, barrel, handguard, hgVent, gasBlock, piston, suppressor, supGlow,
+    ejport, chargeHandle, reg, scope, scopeGlow, mount,
+    mag, magCurve, grp, stockTop, stockBot, stockRear, stockStrut, mzAnchor(-0.72, 0.03),
+  ]);
+}

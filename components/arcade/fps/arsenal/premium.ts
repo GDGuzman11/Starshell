@@ -332,6 +332,21 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     battlefieldEvent: 'RADIATION ZONE — a glowing hazard field that irradiates and weakens everything standing in it.',
     locked: true,
   },
+  // ── PRIMARY · SNIPER RIFLES (Outrider line) ──────────────────────────────────
+  {
+    id: 'otr01', name: 'OTR-01 OBELISK', code: 'OTR', tier: 'apex', category: 'primary', type: 'Sniper Rifles', accent: 0x8fd0ff,
+    philosophy: 'A bolt-action gauss anti-materiel rifle: a metre of coil-wrapped barrel accelerates a single dense slug. Chamber, brace, and end the argument.',
+    blurb: 'One shot, one certainty. It is worth the wait between them.',
+    stats: { power: 230, rate: 1.1, mag: 5, reload: 3.6 },
+    locked: true,
+  },
+  {
+    id: 'otr02', name: 'OTR-02 STILETTO', code: 'OTR', tier: 'apex', category: 'primary', type: 'Sniper Rifles', accent: 0xffb84a,
+    philosophy: 'A gas-operated semi-automatic marksman rifle: suppressed, skeletonized, and lightning-fast on the follow-up shot.',
+    blurb: 'Precision without the wait. Squeeze, squeeze, squeeze.',
+    stats: { power: 110, rate: 0.4, mag: 12, reload: 2.3 },
+    locked: true,
+  },
 ];
 
 /** Distinct weapon-type labels present in a category, in catalog order. */
