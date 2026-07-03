@@ -81,7 +81,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
     emitProgressChanged();
   };
 
-  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `RECRUIT · LVL ${save.marineLevel}`;
+  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `MARINE · LVL ${save.marineLevel}`;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-black/90 px-3 py-4 font-pixel">

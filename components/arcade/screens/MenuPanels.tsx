@@ -29,7 +29,7 @@ export function AvatarPanel({ onArmory }: { onArmory?: () => void }) {
   const equipped = useMemo(() => equippedArmorPieces(save), [save]);
   const totals = useMemo(() => aggregateArmor(equipped), [equipped]);
   const div = divisionById(save.division);
-  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `RECRUIT · LVL ${save.marineLevel}`;
+  const rank = div ? `${div.name} · LVL ${save.marineLevel}` : `MARINE · LVL ${save.marineLevel}`;
   const [expanded, setExpanded] = useState(false);
 
   return (

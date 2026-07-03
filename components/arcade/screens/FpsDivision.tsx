@@ -40,8 +40,8 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
   const subline = selected
     ? 'Your division is permanent — its silhouette and engineering are locked in.'
     : canGraduate
-      ? 'You have reached Marine Level 5. Choose ONE division — this choice is permanent.'
-      : `Each division hybridises two battlefield philosophies with its own silhouette + engineering. Graduation unlocks at Marine Level ${GRADUATE_LEVEL} (currently Level ${save.marineLevel}).`;
+      ? 'You have reached Marine Level 5. You serve as a MARINE — choose ONE division to graduate into. This choice is permanent.'
+      : `You serve as a MARINE — the standard frame every recruit starts with. Each division below hybridises two battlefield philosophies with its own silhouette + engineering; you graduate into ONE, permanently, at Marine Level ${GRADUATE_LEVEL} (currently Level ${save.marineLevel}).`;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col gap-2 overflow-auto bg-black/90 px-3 py-4 font-pixel">
