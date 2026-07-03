@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -60,8 +60,17 @@ const GUN_BUILDERS: Record<string, Builder> = {
   sidearm: buildSidearm,
   handcannon: buildHandCannon,
   machinepistol: buildMachinePistol,
-  // PREMIUM (Apex tier) — the prestige benchmark
+  // PREMIUM (Apex tier) — ten prestige assault rifles, each a unique engineering division
   apx01: buildAPX01Revenant,
+  apx02: buildAPX02Hydra,
+  apx03: buildAPX03Cyclone,
+  apx04: buildAPX04Bastion,
+  apx05: buildAPX05Aegis,
+  apx06: buildAPX06Scavenger,
+  apx07: buildAPX07Ironclad,
+  apx08: buildAPX08Gyre,
+  apx09: buildAPX09Vulcan,
+  apx10: buildAPX10Tesla,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -125,6 +134,15 @@ const GUN_ACCENT: Record<string, number> = {
   handcannon: ACCENT.green,
   machinepistol: ACCENT.green,
   apx01: 0x7fdfff, // Revenant plasma cyan-white
+  apx02: 0xff7a2a, // Hydra hydraulic orange
+  apx03: 0x63ff84, // Cyclone coolant green
+  apx04: 0x6ab0ff, // Bastion steel-blue
+  apx05: 0xb15cff, // Aegis shutter purple
+  apx06: 0xffc24a, // Scavenger brass amber
+  apx07: 0xff3a48, // Ironclad warning red
+  apx08: 0x49a6ff, // Gyre gyro azure
+  apx09: 0xff5a2a, // Vulcan furnace orange-red
+  apx10: 0x9ad8ff, // Tesla electric blue-white
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */
