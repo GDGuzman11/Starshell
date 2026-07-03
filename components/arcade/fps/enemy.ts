@@ -146,7 +146,7 @@ export const BOSSES: Record<BossKind, BossDef> = {
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
 /** The marksman's long-range weapon (it swaps to a rifle if you close in). */
-const SNIPER_W = { rate: 2.2, dmg: 16, accMod: 1.7, color: 0x9af0ff };
+const SNIPER_W = { rate: 2.6, dmg: 11, accMod: 1.7, color: 0x9af0ff };
 /** Coarse learning grid resolution (HGRID × HGRID cells over the arena). */
 const HGRID = 6;
 /** What the squad LEARNS about the player, persisted across fights in a run so
@@ -221,7 +221,7 @@ const CLASS: Record<EnemyClass, ClassDef> = {
   rifleman: { range: 7, angle: 0.0, strafe: 0.5, speedMul: 1.0, hp: 1.0, viewMul: 1.0 }, // core, uses cover
   scout: { range: 12, angle: 1.3, strafe: 1.0, speedMul: 1.35, hp: 0.7, viewMul: 1.2 }, // fast, circles, retreats
   breacher: { range: 4, angle: 0.1, strafe: 0.4, speedMul: 1.05, hp: 2.2, viewMul: 0.95 }, // rushes close
-  marksman: { range: 30, angle: 0.12, strafe: 0.2, speedMul: 0.85, hp: 0.9, viewMul: 1.5 }, // perches, long range (kept inside visual range)
+  marksman: { range: 30, angle: 0.12, strafe: 0.2, speedMul: 0.85, hp: 0.9, viewMul: 1.35 }, // perches, long range (kept inside visual range)
   suppressor: { range: 18, angle: 0.25, strafe: 0.25, speedMul: 0.75, hp: 1.8, viewMul: 1.0 }, // pins, holds
   engineer: { range: 22, angle: 0.3, strafe: 0.3, speedMul: 0.9, hp: 1.2, viewMul: 0.9 }, // hangs back (support)
   tank: { range: 6, angle: 0.0, strafe: 0.2, speedMul: 0.6, hp: 3.0, viewMul: 1.0 }, // slow, heavy push
@@ -915,9 +915,9 @@ export function updateEnemies(
     const moving = pspeed > 1.6;
     let acc: number;
     if (isSniper) {
-      // Sniper: 60% while you move, 80% when you stop; creeps up as you close in.
+      // Sniper: 50% while you move, 70% when you stop; creeps up as you close in.
       const close = Math.max(0, Math.min(1, (45 - dist) / (45 - 12)));
-      acc = (moving ? 0.6 : 0.8) + close * 0.08;
+      acc = (moving ? 0.5 : 0.7) + close * 0.08;
     } else {
       // Assault/ranged: ~60% in-range baseline, worse moving, sharper up close.
       const close = Math.max(0, Math.min(1, (eff - dist) / eff));
