@@ -492,3 +492,256 @@ export function buildAPXM1Leviathan(tier: RenderTier): THREE.Group {
     mzAnchor(-0.68, 0.02),
   ]);
 }
+
+// ── the other nine machine guns — each a different suppression philosophy ──────────
+
+/** APX-M2 "MAELSTROM" — heavy ROTARY suppression platform: a six-barrel cluster spins up
+ *  to a wall of fire, fed from a saddle drum. */
+export function buildAPXM2Maelstrom(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.burntSteel, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xff4a3a, tier, 2.3);
+
+  const receiver = box(0.2, 0.19, 0.38, gun, 0, 0, 0.08);
+  const motor = cylZ(0.09, 0.12, steel, 0, 0.02, -0.06); // spin-up motor housing
+  const motorCore = cylZ(0.04, 0.13, gl, 0, 0.02, -0.06); motorCore.name = 'glow';
+  // rotating six-barrel CLUSTER (spins around the bore axis)
+  const cluster = new THREE.Group(); cluster.name = 'spin'; cluster.position.set(0, 0.02, -0.34);
+  cluster.add(cylZ(0.07, 0.06, steel, 0, 0, 0.24, 12)); // front hub
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; cluster.add(cylZ(0.02, 0.56, dark, Math.cos(a) * 0.055, Math.sin(a) * 0.055, 0, 8)); const tip = cylZ(0.024, 0.03, gl, Math.cos(a) * 0.055, Math.sin(a) * 0.055, -0.28, 8); tip.name = 'glow'; cluster.add(tip); }
+  const shroud = cylZ(0.1, 0.08, steel, 0, 0.02, -0.6); // muzzle shroud
+  const drum = cylX(0.12, 0.14, body, 0, -0.05, 0.2); // saddle ammo drum
+  const drumBand = cylX(0.125, 0.02, gl, 0, -0.05, 0.2); drumBand.name = 'coil';
+  const grp = grip(0.08, 0.18, 0.09, dark, 0, -0.16, 0.24);
+  const stock = box(0.12, 0.16, 0.2, body, 0, -0.02, 0.4);
+  const legL = box(0.02, 0.02, 0.2, steel, 0.05, -0.11, -0.3); legL.rotation.x = 0.5;
+  const legR = box(0.02, 0.02, 0.2, steel, -0.05, -0.11, -0.3); legR.rotation.x = 0.5;
+
+  return model([receiver, motor, motorCore, cluster, shroud, drum, drumBand, grp, stock, legL, legR, mzAnchor(-0.64, 0.02)]);
+}
+
+/** APX-M3 "IGNIS" — industrial PLASMA-FED machine gun: a pressurized plasma reservoir
+ *  feeds superheated cells through a cycling injector ring. No belt, no brass. */
+export function buildAPXM3Ignis(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xb15cff, tier, 2.5);
+
+  const receiver = box(0.17, 0.17, 0.4, gun, 0, 0, 0.06);
+  const barrel = cylZ(0.04, 0.56, dark, 0, 0.03, -0.32);
+  const conduit = box(0.014, 0.014, 0.44, gl, 0, 0.075, -0.28); conduit.name = 'coil'; // plasma conduit
+  // plasma RESERVOIR tank (under-slung, glowing)
+  const tank = capsuleZ(0.075, 0.22, steel, 0, -0.12, 0.02);
+  const tankWin = box(0.05, 0.05, 0.2, gl, 0, -0.12, 0.02); tankWin.name = 'glow';
+  // cycling INJECTOR ring (spins) at the breech
+  const inj = new THREE.Group(); inj.name = 'spin'; inj.position.set(0, 0.03, 0.02);
+  inj.add(cylZ(0.07, 0.03, steel, 0, 0, 0, 8));
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const c = box(0.02, 0.03, 0.04, gl, Math.cos(a) * 0.05, Math.sin(a) * 0.05, 0); inj.add(c); }
+  const muzzle = coneZ(0.06, 0.04, 0.1, steel, 0, 0.03, -0.6);
+  const muzzleGlow = cylZ(0.05, 0.02, gl, 0, 0.03, -0.62); muzzleGlow.name = 'glow';
+  const grp = grip(0.072, 0.16, 0.082, dark, 0, -0.15, 0.22);
+  const stock = box(0.1, 0.14, 0.2, gun, 0, -0.01, 0.38);
+  const pad = box(0.08, 0.16, 0.03, dark, 0, -0.01, 0.49);
+
+  return model([receiver, barrel, conduit, tank, tankWin, inj, muzzle, muzzleGlow, grp, stock, pad, mzAnchor(-0.62, 0.03)]);
+}
+
+/** APX-M4 "BULWARK" — heavy ASSAULT CANNON: a reciprocating breech and rotating lock throw
+ *  oversized rounds like artillery. Massively thick barrel + recoil sleeve. */
+export function buildAPXM4Bulwark(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.burntSteel, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xff7a2a, tier, 2.2);
+
+  const receiver = box(0.22, 0.2, 0.36, gun, 0, 0, 0.08);
+  const barrel = cylZ(0.07, 0.6, dark, 0, 0.03, -0.34);
+  const sleeve = cylZ(0.11, 0.34, steel, 0, 0.03, -0.28); // recoil sleeve
+  const brake = box(0.18, 0.18, 0.14, steel, 0, 0.03, -0.66);
+  const brakeVent = ventSlats(3, 0.045, 0.16, 0.02, dark, 0, 0.07, -0.66);
+  // reciprocating BREECH + rotating LOCK collar (spins)
+  const breech = box(0.13, 0.13, 0.12, dark, 0, 0.03, 0.12);
+  const breechGlow = box(0.05, 0.05, 0.13, gl, 0, 0.03, 0.12); breechGlow.name = 'glow';
+  const lock = new THREE.Group(); lock.name = 'spin'; lock.position.set(0, 0.03, -0.02);
+  lock.add(cylZ(0.09, 0.04, steel, 0, 0, 0, 8));
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; lock.add(box(0.03, 0.03, 0.05, gl, Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0)); }
+  const mag = box(0.12, 0.2, 0.16, body, 0, -0.18, 0.1); mag.name = 'mag';
+  const grp = grip(0.085, 0.18, 0.095, dark, 0, -0.16, 0.22);
+  const stock = box(0.14, 0.18, 0.2, body, 0, -0.02, 0.4);
+
+  return model([receiver, barrel, sleeve, brake, brakeVent, breech, breechGlow, lock, mag, grp, stock, mzAnchor(-0.72, 0.03)]);
+}
+
+/** APX-M5 "MAGNETAR" — magnetic recoil STABILIZATION: the barrel floats inside a cage of
+ *  rotating magnetic stabilizer rings that catch the recoil in the field. */
+export function buildAPXM5Magnetar(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x49a6ff, tier, 2.4);
+
+  const receiver = box(0.16, 0.16, 0.4, gun, 0, 0, 0.08);
+  const barrel = cylZ(0.03, 0.62, dark, 0, 0.03, -0.34); // slim floating barrel
+  // suspension CAGE: four rotating magnetic rings around the barrel (spins)
+  const cage = new THREE.Group(); cage.name = 'spin'; cage.position.set(0, 0.03, -0.28);
+  for (let k = 0; k < 4; k++) {
+    const z = k * 0.13;
+    const seg = 10;
+    for (let i = 0; i < seg; i++) { const a = (i / seg) * Math.PI * 2; const b = box(0.028, 0.016, 0.016, i % 2 ? gl : steel, Math.cos(a) * 0.075, Math.sin(a) * 0.075, z); b.rotation.z = a + Math.PI / 2; cage.add(b); }
+  }
+  const strutT = box(0.016, 0.016, 0.5, steel, 0, 0.11, -0.28); // frame struts holding the cage
+  const strutB = box(0.016, 0.016, 0.5, steel, 0, -0.05, -0.28);
+  const coilPack = tagGlow(coilStack(4, 0.04, 0.05, gl, 0, 0.03, 0.06), 'coil');
+  const grp = grip(0.07, 0.16, 0.08, dark, 0, -0.15, 0.24);
+  const stock = box(0.1, 0.13, 0.2, gun, 0, -0.01, 0.4);
+  const pad = box(0.08, 0.15, 0.03, dark, 0, -0.01, 0.51);
+
+  return model([receiver, barrel, cage, strutT, strutB, coilPack, grp, stock, pad, mzAnchor(-0.66, 0.03)]);
+}
+
+/** APX-M6 "SERVITOR" — servo-assisted support weapon: exposed servo motors and an
+ *  articulated loader arm cycle ammunition with tireless mechanical precision. */
+export function buildAPXM6Servitor(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.olive, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x63ff84, tier, 2.2);
+
+  const receiver = box(0.19, 0.17, 0.4, gun, 0, 0, 0.06);
+  const barrel = cylZ(0.042, 0.56, dark, 0, 0.03, -0.32);
+  const shroud = cylZ(0.07, 0.26, steel, 0, 0.03, -0.24);
+  // exposed SERVO motors (drums with glow indicators)
+  const servoL = cylX(0.05, 0.08, steel, 0.11, 0.06, 0.14);
+  const servoR = cylX(0.05, 0.08, steel, -0.11, 0.06, 0.14);
+  const servoLg = cylX(0.02, 0.085, gl, 0.11, 0.06, 0.14); servoLg.name = 'glow';
+  const servoRg = cylX(0.02, 0.085, gl, -0.11, 0.06, 0.14); servoRg.name = 'glow';
+  // articulated LOADER ARM (mid-cycle, angled)
+  const arm1 = box(0.025, 0.025, 0.14, steel, 0.09, -0.02, 0.08); arm1.rotation.z = 0.6;
+  const arm2 = box(0.022, 0.022, 0.1, steel, 0.13, -0.08, 0.04); arm2.rotation.z = -0.3;
+  // servo GEARTRAIN (spins)
+  const gear = new THREE.Group(); gear.name = 'spin'; gear.position.set(-0.1, 0.0, 0.02);
+  gear.add(cylZ(0.05, 0.03, steel, 0, 0, 0, 10));
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; gear.add(box(0.014, 0.014, 0.03, gl, Math.cos(a) * 0.055, Math.sin(a) * 0.055, 0)); }
+  const mag = box(0.09, 0.19, 0.13, dark, 0, -0.16, 0.1); mag.name = 'mag';
+  const grp = grip(0.078, 0.17, 0.088, dark, 0, -0.15, 0.22);
+  const stock = box(0.11, 0.15, 0.2, body, 0, -0.02, 0.4);
+
+  return model([receiver, barrel, shroud, servoL, servoR, servoLg, servoRg, arm1, arm2, gear, mag, grp, stock, mzAnchor(-0.62, 0.03)]);
+}
+
+/** APX-M7 "KILN" — adaptive cooling platform: a colossal rotating cooling drum + deploying
+ *  fins dump heat continuously so the barrel refuses to quit. */
+export function buildAPXM7Kiln(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x3ad8c0, tier, 2.3);
+
+  const receiver = box(0.18, 0.17, 0.38, gun, 0, 0, 0.08);
+  const barrel = cylZ(0.038, 0.58, dark, 0, 0.03, -0.34);
+  // rotating COOLING DRUM around the barrel (spins) — thick finned cylinder
+  const drum = new THREE.Group(); drum.name = 'spin'; drum.position.set(0, 0.03, -0.26);
+  drum.add(cylZ(0.075, 0.36, steel, 0, 0, 0, 16));
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; const fin = box(0.014, 0.04, 0.34, gl, Math.cos(a) * 0.088, Math.sin(a) * 0.088, 0); fin.rotation.z = a; drum.add(fin); }
+  const coolant = box(0.09, 0.1, 0.14, dark, 0, -0.12, 0.14); // coolant reservoir
+  const coolantWin = box(0.05, 0.06, 0.15, gl, 0, -0.12, 0.14); coolantWin.name = 'glow';
+  const grp = grip(0.076, 0.17, 0.086, dark, 0, -0.16, 0.22);
+  const stock = box(0.11, 0.15, 0.2, gun, 0, -0.02, 0.4);
+  const legL = box(0.02, 0.02, 0.2, steel, 0.05, -0.11, -0.34); legL.rotation.x = 0.5;
+  const legR = box(0.02, 0.02, 0.2, steel, -0.05, -0.11, -0.34); legR.rotation.x = 0.5;
+
+  return model([receiver, barrel, drum, coolant, coolantWin, grp, stock, legL, legR, mzAnchor(-0.66, 0.03)]);
+}
+
+/** APX-M8 "PILEDRIVER" — high-pressure KINETIC weapon: pneumatic accumulators pressurize
+ *  between shots, driving a kinetic ram that hammers rounds downrange. */
+export function buildAPXM8Piledriver(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.burntSteel, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const brass = metal(COL.bronze, tier);
+  const gl = accent(0xff5a2a, tier, 2.3);
+
+  const receiver = box(0.19, 0.18, 0.4, gun, 0, 0, 0.06);
+  const barrel = cylZ(0.05, 0.54, dark, 0, 0.02, -0.32);
+  // pneumatic ACCUMULATOR tanks (twin capsules on top)
+  const tankL = capsuleZ(0.045, 0.18, steel, 0.06, 0.13, -0.02);
+  const tankR = capsuleZ(0.045, 0.18, steel, -0.06, 0.13, -0.02);
+  const tankGl = box(0.14, 0.012, 0.16, gl, 0, 0.17, -0.02); tankGl.name = 'coil';
+  // kinetic RAM (piston into the breech)
+  const ram = cylZ(0.035, 0.24, brass, 0, 0.02, 0.16);
+  // pressure REGULATOR wheel (spins)
+  const reg = new THREE.Group(); reg.name = 'spin'; reg.position.set(0.1, 0.0, 0.1);
+  reg.add(cylZ(0.05, 0.02, brass, 0, 0, 0, 12));
+  reg.add(box(0.1, 0.016, 0.016, brass, 0, 0, 0));
+  reg.add(box(0.016, 0.1, 0.016, brass, 0, 0, 0));
+  const regHub = cylZ(0.016, 0.02, gl, 0, 0, 0.006); regHub.name = 'glow'; reg.add(regHub);
+  const muzzle = box(0.12, 0.12, 0.1, steel, 0, 0.02, -0.58);
+  const mag = box(0.1, 0.19, 0.13, dark, 0, -0.17, 0.1); mag.name = 'mag';
+  const grp = grip(0.08, 0.17, 0.09, dark, 0, -0.16, 0.22);
+  const stock = box(0.11, 0.15, 0.2, gun, 0, -0.02, 0.4);
+
+  return model([receiver, barrel, tankL, tankR, tankGl, ram, reg, muzzle, mag, grp, stock, mzAnchor(-0.62, 0.02)]);
+}
+
+/** APX-M9 "DYNAMO" — belt-fed REACTOR machine gun: a spinning reactor turbine powers an
+ *  open belt feed. Humanity's engine of suppression, laid bare. */
+export function buildAPXM9Dynamo(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.olive, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const brass = metal(COL.bronze, tier);
+  const gl = accent(0xeaf2ff, tier, 2.6);
+
+  const receiver = box(0.19, 0.18, 0.38, gun, 0, 0, 0.06);
+  const barrel = cylZ(0.044, 0.56, dark, 0, 0.03, -0.32);
+  const shroud = cylZ(0.07, 0.24, steel, 0, 0.03, -0.24);
+  // reactor TURBINE (spins) — bladed disc with a white-hot core at the breech
+  const turbine = new THREE.Group(); turbine.name = 'spin'; turbine.position.set(0, 0.03, 0.04);
+  turbine.add(cylZ(0.08, 0.04, steel, 0, 0, 0, 16));
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const bl = box(0.03, 0.06, 0.02, steel, Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0); bl.rotation.z = a + 0.4; turbine.add(bl); }
+  const core = cylZ(0.032, 0.05, gl, 0, 0, 0.006); core.name = 'glow'; turbine.add(core);
+  // open BELT feed (visible brass links from a box)
+  const boxA = box(0.1, 0.15, 0.18, body, 0.16, -0.06, 0.16);
+  const belt = new THREE.Group();
+  for (let i = 0; i < 5; i++) { const t = i / 4; belt.add(box(0.03, 0.045, 0.03, brass, 0.14 - t * 0.05, 0.01, 0.06 - t * 0.02)); }
+  const grp = grip(0.078, 0.17, 0.088, dark, 0, -0.15, 0.22);
+  const stock = box(0.11, 0.15, 0.2, body, 0, -0.02, 0.4);
+
+  return model([receiver, barrel, shroud, turbine, boxA, belt, grp, stock, mzAnchor(-0.62, 0.03)]);
+}
+
+/** APX-M10 "OVERLORD" — the apex flagship: concentric power-regulator rings and a wide
+ *  industrial frame command the field through sheer sustained dominance. Gold markings. */
+export function buildAPXM10Overlord(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xffd27a, tier, 2.4);
+
+  const receiver = box(0.26, 0.2, 0.42, gun, 0, 0, 0.06); // wide industrial frame
+  const receiverTop = box(0.16, 0.04, 0.34, dark, 0, 0.12, 0.04);
+  const barrel = cylZ(0.05, 0.6, dark, 0, 0.02, -0.34);
+  const jacket = cylZ(0.085, 0.34, steel, 0, 0.02, -0.28);
+  const ribs = new THREE.Group();
+  for (let i = 0; i < 5; i++) ribs.add(cylZ(0.1, 0.014, steel, 0, 0.02, -0.16 - i * 0.055, 14));
+  // concentric power-regulator RINGS (spins) at the breech
+  const rings = new THREE.Group(); rings.name = 'spin'; rings.position.set(0, 0.02, 0.02);
+  for (const r of [0.09, 0.065]) { const seg = 12; for (let i = 0; i < seg; i++) { const a = (i / seg) * Math.PI * 2; const b = box(2 * r * Math.sin(Math.PI / seg) * 1.1, 0.02, 0.02, i % 3 ? steel : gl, Math.cos(a) * r, Math.sin(a) * r, 0); b.rotation.z = a + Math.PI / 2; rings.add(b); } }
+  const cellL = box(0.05, 0.1, 0.16, dark, 0.14, -0.02, 0.16); const cellLg = box(0.02, 0.07, 0.14, gl, 0.165, -0.02, 0.16); cellLg.name = 'glow'; // power cells
+  const cellR = box(0.05, 0.1, 0.16, dark, -0.14, -0.02, 0.16); const cellRg = box(0.02, 0.07, 0.14, gl, -0.165, -0.02, 0.16); cellRg.name = 'glow';
+  const carry = box(0.045, 0.055, 0.14, dark, 0, 0.18, 0.02);
+  const grp = grip(0.084, 0.18, 0.094, dark, 0, -0.16, 0.22);
+  const stock = box(0.14, 0.18, 0.22, body, 0, -0.02, 0.42);
+  const legL = box(0.02, 0.02, 0.22, steel, 0.06, -0.11, -0.32); legL.rotation.x = 0.5;
+  const legR = box(0.02, 0.02, 0.22, steel, -0.06, -0.11, -0.32); legR.rotation.x = 0.5;
+
+  return model([receiver, receiverTop, barrel, jacket, ribs, rings, cellL, cellLg, cellR, cellRg, carry, grp, stock, legL, legR, mzAnchor(-0.66, 0.02)]);
+}

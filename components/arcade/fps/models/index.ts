@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -73,6 +73,15 @@ const GUN_BUILDERS: Record<string, Builder> = {
   apx10: buildAPX10Tesla,
   // PREMIUM machine guns (Apex tier)
   apxm1: buildAPXM1Leviathan,
+  apxm2: buildAPXM2Maelstrom,
+  apxm3: buildAPXM3Ignis,
+  apxm4: buildAPXM4Bulwark,
+  apxm5: buildAPXM5Magnetar,
+  apxm6: buildAPXM6Servitor,
+  apxm7: buildAPXM7Kiln,
+  apxm8: buildAPXM8Piledriver,
+  apxm9: buildAPXM9Dynamo,
+  apxm10: buildAPXM10Overlord,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -146,6 +155,15 @@ const GUN_ACCENT: Record<string, number> = {
   apx09: 0xff5a2a, // Vulcan furnace orange-red
   apx10: 0x9ad8ff, // Tesla electric blue-white
   apxm1: 0xffa833, // Leviathan molten amber
+  apxm2: 0xff4a3a, // Maelstrom rotary red
+  apxm3: 0xb15cff, // Ignis plasma purple
+  apxm4: 0xff7a2a, // Bulwark cannon orange
+  apxm5: 0x49a6ff, // Magnetar magnetic blue
+  apxm6: 0x63ff84, // Servitor servo green
+  apxm7: 0x3ad8c0, // Kiln coolant teal
+  apxm8: 0xff5a2a, // Piledriver kinetic orange-red
+  apxm9: 0xeaf2ff, // Dynamo white reactor
+  apxm10: 0xffd27a, // Overlord gold
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */
