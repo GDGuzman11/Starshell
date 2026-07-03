@@ -12,6 +12,7 @@ import { xpForOperation } from '../arsenal/familiarity';
 import { generateArmor, armorById, type ArmorPiece } from './parts';
 
 const KEY = 'starshell.marine';
+const GRADUATE_LEVEL = 5; // Combat Divisions unlock at Marine Level 5 (graduation)
 
 export interface ArmorService {
   operations: number;
@@ -38,15 +39,21 @@ export function loadMarine(): MarineSave {
     const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!raw || typeof raw !== 'object') return blank();
     const b = blank();
+    const marineLevel = Number.isFinite(raw.marineLevel) ? Math.max(1, raw.marineLevel) : b.marineLevel;
+    let division = typeof raw.division === 'string' ? raw.division : b.division;
+    // Everyone starts (and stays) a MARINE until the Level-5 graduation. A division
+    // set below that was never legitimately earned (early free-selection builds could
+    // assign one) — normalise it away so no one is stuck in a division they didn't earn.
+    if (division && marineLevel < GRADUATE_LEVEL) division = null;
     return {
       owned: Array.isArray(raw.owned) ? raw.owned.filter((x: unknown) => typeof x === 'string') : b.owned,
       equipped: raw.equipped && typeof raw.equipped === 'object' ? raw.equipped : b.equipped,
       partXp: raw.partXp && typeof raw.partXp === 'object' ? raw.partXp : b.partXp,
       service: raw.service && typeof raw.service === 'object' ? raw.service : b.service,
       bosses: Number.isFinite(raw.bosses) ? raw.bosses : b.bosses,
-      marineLevel: Number.isFinite(raw.marineLevel) ? Math.max(1, raw.marineLevel) : b.marineLevel,
+      marineLevel,
       marineXp: Number.isFinite(raw.marineXp) ? raw.marineXp : b.marineXp,
-      division: typeof raw.division === 'string' ? raw.division : b.division,
+      division,
     };
   } catch {
     return blank();
