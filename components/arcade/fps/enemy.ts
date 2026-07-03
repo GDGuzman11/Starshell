@@ -146,7 +146,7 @@ export const BOSSES: Record<BossKind, BossDef> = {
 
 export type WeaponKind = 'rifle' | 'mg' | 'laser';
 /** The marksman's long-range weapon (it swaps to a rifle if you close in). */
-const SNIPER_W = { rate: 1.7, dmg: 30, accMod: 1.7, color: 0x9af0ff };
+const SNIPER_W = { rate: 2.2, dmg: 16, accMod: 1.7, color: 0x9af0ff };
 /** Coarse learning grid resolution (HGRID × HGRID cells over the arena). */
 const HGRID = 6;
 /** What the squad LEARNS about the player, persisted across fights in a run so
@@ -221,7 +221,7 @@ const CLASS: Record<EnemyClass, ClassDef> = {
   rifleman: { range: 7, angle: 0.0, strafe: 0.5, speedMul: 1.0, hp: 1.0, viewMul: 1.0 }, // core, uses cover
   scout: { range: 12, angle: 1.3, strafe: 1.0, speedMul: 1.35, hp: 0.7, viewMul: 1.2 }, // fast, circles, retreats
   breacher: { range: 4, angle: 0.1, strafe: 0.4, speedMul: 1.05, hp: 2.2, viewMul: 0.95 }, // rushes close
-  marksman: { range: 30, angle: 0.12, strafe: 0.2, speedMul: 0.85, hp: 0.9, viewMul: 2.2 }, // perches, long range
+  marksman: { range: 30, angle: 0.12, strafe: 0.2, speedMul: 0.85, hp: 0.9, viewMul: 1.5 }, // perches, long range (kept inside visual range)
   suppressor: { range: 18, angle: 0.25, strafe: 0.25, speedMul: 0.75, hp: 1.8, viewMul: 1.0 }, // pins, holds
   engineer: { range: 22, angle: 0.3, strafe: 0.3, speedMul: 0.9, hp: 1.2, viewMul: 0.9 }, // hangs back (support)
   tank: { range: 6, angle: 0.0, strafe: 0.2, speedMul: 0.6, hp: 3.0, viewMul: 1.0 }, // slow, heavy push
@@ -230,10 +230,10 @@ const CLASS: Record<EnemyClass, ClassDef> = {
   berserker: { range: 2.5, angle: 0.0, strafe: 0.3, speedMul: 1.3, hp: 1.6, viewMul: 1.0 }, // charges to melee
 };
 
-/** Every squad is a fixed 5-man fireteam: a CAPTAIN who steadies their aim, two
- *  SNIPERS who perch, a heavy TANK who drives forward, and a HEALER who roams and
- *  patches up the wounded. The campaign spawns N of these identical squads. */
-export const SQUAD_ROLES: EnemyClass[] = ['commander', 'marksman', 'marksman', 'tank', 'engineer'];
+/** Every squad is a fixed 5-man fireteam: a CAPTAIN who steadies their aim, ONE
+ *  SNIPER who perches, a RIFLEMAN who works cover, a heavy TANK who drives forward,
+ *  and a HEALER who roams and patches the wounded. The campaign spawns N squads. */
+export const SQUAD_ROLES: EnemyClass[] = ['commander', 'marksman', 'rifleman', 'tank', 'engineer'];
 export const SQUAD_SIZE = SQUAD_ROLES.length;
 const HEAL_RATE = 55; // HP/s a healer restores to a nearby wounded ally
 
@@ -241,18 +241,20 @@ const R = 0.45; // collision radius
 const EYE_H = 1.4;
 
 interface Params {
-  acc: number;
-  dmg: number;
-  rate: number;
-  speed: number;
-  view: number;
+  acc: number; // hit-chance scaler (feeds diffMul in fireAt)
+  rate: number; // reference fire cadence (weapons carry their own rate)
+  speed: number; // enemy move speed
+  view: number; // acquire range (× per-class viewMul; LoS still required)
+  dmgMul: number; // per-tier multiplier on every enemy's per-shot damage
+  hpMul: number; // per-tier multiplier on enemy HP
 }
 const PARAMS: Record<Difficulty, Params> = {
   // `view` = how close a regular bot must be to acquire you (LoS still required).
   // Kept well under the arena size so they DON'T spot you across the map at spawn.
-  normal: { acc: 0.24, dmg: 7, rate: 1.1, speed: 2.4, view: 26 },
-  hard: { acc: 0.36, dmg: 9, rate: 0.85, speed: 3.0, view: 33 },
-  nightmare: { acc: 0.5, dmg: 12, rate: 0.62, speed: 3.6, view: 42 },
+  // Difficulty now scales damage + HP too (not just hit chance), for a real curve.
+  normal: { acc: 0.2, rate: 1.25, speed: 2.3, view: 24, dmgMul: 0.85, hpMul: 0.85 },
+  hard: { acc: 0.34, rate: 0.92, speed: 2.9, view: 30, dmgMul: 1.05, hpMul: 1.0 },
+  nightmare: { acc: 0.48, rate: 0.7, speed: 3.4, view: 38, dmgMul: 1.3, hpMul: 1.2 },
 };
 
 function blocked(lvl: Level3D, x: number, z: number, r = R, grid?: SpatialGrid): boolean {
@@ -500,15 +502,26 @@ function bestVantage(
   return best ? { x: best.x, y: best.y, z: best.z } : null;
 }
 
-/** Spawn `nSquads` independent 5-man fireteams (SQUAD_ROLES each). Squad clusters
- *  are fanned out laterally across the far side so they close in from different
+/** How many fireteams a regular level fields: the player's chosen count plus one more
+ *  every 7 levels (the level ramp). The game must build one Squad state per fireteam. */
+export function fireteamCount(nSquads: number, level: number): number {
+  return nSquads + Math.floor(Math.max(0, level) / 7);
+}
+
+/** Spawn independent 5-man fireteams (SQUAD_ROLES each). The chosen difficulty is
+ *  FIXED for the run; the campaign ramps WITHIN the tier by level — enemies gain HP
+ *  (+3%/level, capped +60%) and an extra fireteam joins every 7 levels — instead of
+ *  a hidden tier bump. Squad clusters fan out laterally so they close from different
  *  bearings; members spawn tight around their squad's cluster centre. */
-export function spawnEnemies(lvl: Level3D, nSquads: number, _level: number, rand: () => number): Enemy[] {
+export function spawnEnemies(lvl: Level3D, nSquads: number, level: number, diff: Difficulty, rand: () => number): Enemy[] {
   const out: Enemy[] = [];
   const half = lvl.size / 2;
   const a = lvl.enemySpawn; // far end, opposite the player
-  for (let s = 0; s < nSquads; s++) {
-    const spread = nSquads > 1 ? s / (nSquads - 1) - 0.5 : 0; // -0.5 … 0.5
+  const P = PARAMS[diff];
+  const hpRamp = 1 + Math.min(0.6, Math.max(0, level) * 0.03); // per-level toughness within the tier
+  const totalSquads = fireteamCount(nSquads, level);
+  for (let s = 0; s < totalSquads; s++) {
+    const spread = totalSquads > 1 ? s / (totalSquads - 1) - 0.5 : 0; // -0.5 … 0.5
     const cx0 = Math.max(-half + 8, Math.min(half - 8, a.x + spread * half * 0.7));
     const cz0 = a.z;
     for (let k = 0; k < SQUAD_ROLES.length; k++) {
@@ -523,7 +536,7 @@ export function spawnEnemies(lvl: Level3D, nSquads: number, _level: number, rand
         z = cz0 + Math.sin(ang) * rad;
         if (Math.abs(x) <= half - 3 && Math.abs(z) <= half - 3 && !blocked(lvl, x, z)) break;
       }
-      const hp = ENEMY_HP * CLASS[cls].hp;
+      const hp = ENEMY_HP * CLASS[cls].hp * P.hpMul * hpRamp;
       const perch = cls === 'marksman' ? assignPerch(lvl, x, z) : null;
       const weapon: WeaponKind = cls === 'tank' ? 'mg' : cls === 'commander' ? 'laser' : 'rifle';
       const side: 1 | -1 = k % 2 === 0 ? 1 : -1;
@@ -794,6 +807,9 @@ export function updateEnemies(
   // level the player gets 10 s to find cover before anything can SEE them.
   const combatLock = elapsed < 2.8;
   const grace = elapsed < 10 && enemies.some((e) => e.boss);
+  // Level-start settle: for a few seconds after the combat lock, non-boss bots see at
+  // HALF range so you can orient at spawn instead of being sniped from off-screen.
+  const settleMul = elapsed < 6 ? 0.5 : 1;
   const peye: Vec3 = [player.x, player.y + EYE, player.z];
   const pspeed = Math.hypot(pvx, pvz);
   let damage = 0;
@@ -809,7 +825,7 @@ export function updateEnemies(
     if (e.health <= 0) return false;
     if (e.blindT > 0) return false; // flashbanged: can't acquire the player
     const dist = Math.hypot(player.x - e.x, player.z - e.z);
-    if (dist >= (e.boss ? 220 : P.view * CLASS[e.cls].viewMul)) return false;
+    if (dist >= (e.boss ? 220 : P.view * CLASS[e.cls].viewMul * settleMul)) return false;
     const eeye: Vec3 = [e.x, e.y + EYE_H, e.z];
     if (segBlocked(eeye, peye, lvl, grid)) return false;
     for (const sm of smokes) if (segHitsSphere(eeye, peye, [sm.x, sm.y, sm.z], sm.r)) return false;
@@ -899,9 +915,9 @@ export function updateEnemies(
     const moving = pspeed > 1.6;
     let acc: number;
     if (isSniper) {
-      // Sniper: 70% while you move, 90% when you stop; creeps up as you close in.
+      // Sniper: 60% while you move, 80% when you stop; creeps up as you close in.
       const close = Math.max(0, Math.min(1, (45 - dist) / (45 - 12)));
-      acc = (moving ? 0.7 : 0.9) + close * 0.08;
+      acc = (moving ? 0.6 : 0.8) + close * 0.08;
     } else {
       // Assault/ranged: ~60% in-range baseline, worse moving, sharper up close.
       const close = Math.max(0, Math.min(1, (eff - dist) / eff));
@@ -912,7 +928,7 @@ export function updateEnemies(
     const zero = 0.9 + 0.1 * Math.min(1, e.track / 1.4); // small zero-in on held LoS
     const buff = now < (squad.buffUntil ?? 0) ? 1.12 : 1; // Warlord Command Beacon (toned down)
     const cap = isSniper ? 0.95 : e.weapon === 'mg' ? 0.6 : 0.85; // never near-perfect
-    if (Math.random() < Math.min(cap, acc * diffMul * zero * buff)) damage += W.dmg;
+    if (Math.random() < Math.min(cap, acc * diffMul * zero * buff)) damage += W.dmg * P.dmgMul;
   };
 
   // Boss phase manager: wake dormant reinforcements as the boss loses health,

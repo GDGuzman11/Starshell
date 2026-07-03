@@ -21,7 +21,7 @@ import { resolveLevel, buildBossArena, campaignTotalLevels, isBossLevel, isGaunt
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
+import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, fireteamCount, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { applyEngineering } from './fps/arsenal/parts';
@@ -47,8 +47,8 @@ const SQUAD_OPTIONS = [2, 4, 6, 8]; // → 10 / 20 / 30 / 40 soldiers
 // A modest map-size proxy (the arena grows with squads but never explodes to the
 // literal soldier count). Boss levels keep their compact 5-count arena.
 const mapCountFor = (squads: number) => 8 + squads;
-const campaignDiff = (base: Difficulty, level: number): Difficulty =>
-  TIERS[Math.min(2, TIERS.indexOf(base) + (level > 14 ? 2 : level > 7 ? 1 : 0))];
+// The chosen difficulty tier is FIXED for the whole run (no hidden escalation). The
+// campaign ramps WITHIN the tier by level — more/tougher enemies (see spawnEnemies).
 // Reward scaling: harder difficulty + more enemy squads pay out more of BOTH currencies.
 const diffMult = (d: Difficulty) => 1 + TIERS.indexOf(d) * 0.5; // normal ×1 · hard ×1.5 · nightmare ×2
 const squadMult = (squads: number) => 1 + (squads - 1) * 0.35; // 1→×1 · 2→×1.35 · 3→×1.7 · 4→×2.05
@@ -354,18 +354,18 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
       const gauntlet = forcedBoss == null && isGauntletLevel(level, total);
       const round = gauntlet ? gauntletRef.current || 1 : 0;
       const bossKinds: BossKind[] = forcedBoss ? [forcedBoss] : gauntlet ? [GAUNTLET_BOSSES[round - 1]] : [bossKindFor(level)];
-      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, Math.random);
+      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, diff, Math.random);
       // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
-      // One shared-intel object per squad (boss levels are a single squad). All
-      // squads reference the same persistent HuntMemory so learning carries across.
+      // One shared-intel object per fireteam (boss levels are a single squad); the count
+      // must match spawnEnemies' level ramp. All squads share the persistent HuntMemory.
       const mem = (huntMemRef.current ??= makeHuntMemory());
-      const squadStates: Squad[] = Array.from({ length: isBoss ? 1 : squads }, () => ({ lastKnown: null, t: 0, mem }));
+      const squadStates: Squad[] = Array.from({ length: isBoss ? 1 : fireteamCount(squads, level) }, () => ({ lastKnown: null, t: 0, mem }));
       gameRef.current = {
         level: lvl,
         player,
         enemies: mobs,
-        difficulty: campaignDiff(diff, level),
+        difficulty: diff,
         guns,
         active: 0,
         mags: guns.map((g) => g.mag),
