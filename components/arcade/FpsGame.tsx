@@ -73,8 +73,9 @@ function saveBest(level: number) {
  * squad-coordinated adaptive aliens, across a 20-level campaign with a gold
  * armory between levels.
  */
-export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
+export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit }: {
   initialRun?: RunSlot | null; // resume this slot on mount (account-backed)
+  initialScreen?: string | null; // open straight to a screen on mount (e.g. 'division')
   onRunSave?: (slot: RunSlot) => void; // persist the run slot at level transitions
   onRunEnd?: (id: string) => void; // the run completed → drop the slot
   onExit?: () => void; // back to the pilot console (site only)
@@ -175,6 +176,11 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
     const m = loadMarine();
     setGradReady(m.marineLevel >= 5 && !m.division);
   }, [mode]);
+
+  // Launched straight to a screen (e.g. the pilot console's Combat Divisions tile).
+  useEffect(() => {
+    if (initialScreen === 'division') setMode('division');
+  }, [initialScreen]);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -829,12 +835,9 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
                 ⬢ Graduation available — choose your division
               </button>
             )}
-            {/* Arsenal + Armory now live under the Loadout / Marine previews. Central grid
-                keeps Divisions (info / graduation) + Premium. */}
+            {/* Arsenal + Armory live under the Loadout / Marine previews; Combat Divisions
+                now lives on the pilot console (main page). Central grid keeps Premium. */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => setMode('division')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
-                ⬢ Divisions
-              </button>
               <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
               </button>
