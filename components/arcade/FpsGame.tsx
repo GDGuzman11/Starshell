@@ -29,6 +29,7 @@ import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } 
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
 import { emitProgressChanged } from './lib/progressEvent';
 import type { RunSlot } from './lib/runSlot';
+import type { ScorePayload } from './lib/score';
 import { combatBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { sfx } from './engine/audio';
@@ -73,11 +74,12 @@ function saveBest(level: number) {
  * squad-coordinated adaptive aliens, across a 20-level campaign with a gold
  * armory between levels.
  */
-export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit }: {
+export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScore, onExit }: {
   initialRun?: RunSlot | null; // resume this slot on mount (account-backed)
   initialScreen?: string | null; // open straight to a screen on mount (e.g. 'division')
   onRunSave?: (slot: RunSlot) => void; // persist the run slot at level transitions
   onRunEnd?: (id: string) => void; // the run completed → drop the slot
+  onScore?: (s: ScorePayload) => void; // a run resolved (win/loss) → submit to the leaderboard
   onExit?: () => void; // back to the pilot console (site only)
 } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -531,6 +533,13 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
       dmg: rs.dmg + snap.dmgDealt,
       endedAt: Date.now(),
     }));
+    // Cumulative run totals (this level folded in) for the leaderboard submit below.
+    const runTotals = {
+      kills: runStats.kills + snap.kills,
+      headshots: runStats.headshots + snap.headshots,
+      shots: runStats.shots + snap.shotsFired,
+      hits: runStats.hits + snap.shotsHit,
+    };
     // ASTRODIAMONDS accrue every level (win OR loss — you keep what you collected) and
     // persist to the wallet immediately, scaled by difficulty + squad count.
     const adEarned = astroFor(run.level, snap.kills, diff, squads);
@@ -572,6 +581,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
         } else {
           saveBest(total);
           setBest((b) => Math.max(b, total));
+          onScore?.({ level: total, ...runTotals, difficulty: diff, won: true });
           if (onRunEnd && slotIdRef.current) onRunEnd(slotIdRef.current);
           slotIdRef.current = '';
           setRunActive(false);
@@ -583,10 +593,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
     } else {
       saveBest(run.level);
       setBest((b) => Math.max(b, run.level));
+      onScore?.({ level: run.level, ...runTotals, difficulty: diff, won: false });
     }
     // Persist this operation's arsenal/marine/astro/best to the account.
     emitProgressChanged(true);
-  }, [snap, mode, run.level, diff, squads, lastLoadout, onRunEnd]);
+  }, [snap, mode, run.level, diff, squads, lastLoadout, runStats, onRunEnd, onScore]);
 
   // Auto-dismiss the familiarity toast.
   useEffect(() => {
