@@ -28,6 +28,7 @@ import { applyEngineering } from './fps/arsenal/parts';
 import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } from './fps/arsenal/store';
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
 import { emitProgressChanged } from './lib/progressEvent';
+import type { RunSlot } from './lib/runSlot';
 import { armorPlayerBonus } from './fps/marine/stats';
 import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { sfx } from './engine/audio';
@@ -72,10 +73,18 @@ function saveBest(level: number) {
  * squad-coordinated adaptive aliens, across a 20-level campaign with a gold
  * armory between levels.
  */
-export function FpsGame() {
+export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
+  initialRun?: RunSlot | null; // resume this slot on mount (account-backed)
+  onRunSave?: (slot: RunSlot) => void; // persist the run slot at level transitions
+  onRunEnd?: (id: string) => void; // the run completed → drop the slot
+  onExit?: () => void; // back to the pilot console (site only)
+} = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<FpsGameState | null>(null);
+  const slotIdRef = useRef<string>(''); // current run-slot id (empty = no account slot)
+  const startedAtRef = useRef<number>(0);
+  const resumedRef = useRef(false);
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
   const sandboxRef = useRef(false); // editor "Play" sandbox → win/lose returns to the editor
   const bossOverrideRef = useRef<BossKind | null>(null); // dev: force a specific boss on warp
@@ -373,6 +382,26 @@ export function FpsGame() {
     [squads, diff],
   );
 
+  // Persist the current run to its account slot (level transitions + start/restart).
+  const persistSlot = useCallback(
+    (level: number, gold: number, maxHp: number, upgrades: Record<string, Upg>, lo: Loadout) => {
+      if (!onRunSave || !slotIdRef.current) return;
+      onRunSave({
+        id: slotIdRef.current,
+        level,
+        gold,
+        maxHp,
+        upgrades: upgrades as Record<string, unknown>,
+        difficulty: diff,
+        squads,
+        loadout: lo,
+        startedAt: startedAtRef.current,
+        updatedAt: Date.now(),
+      });
+    },
+    [onRunSave, diff, squads],
+  );
+
   const beginCampaign = useCallback(
     (lo: Loadout) => {
       // Every loadout gun starts with the free basic enhancement.
@@ -384,12 +413,38 @@ export function FpsGame() {
       setRecovery(null);
       setRestarts(0); // fresh campaign → reset the per-level restart budget
       setRunActive(true); // a run is now in progress
+      if (!slotIdRef.current) slotIdRef.current = (globalThis.crypto?.randomUUID?.() ?? String(Date.now()));
+      startedAtRef.current = Date.now();
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
       setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
+      persistSlot(1, 0, 100, ups, lo);
     },
-    [startLevel],
+    [startLevel, persistSlot],
   );
+
+  // Resume a saved run (from the account) into the LOBBY — restore state + show the
+  // menu tracker; the player presses Resume to deploy into their current level.
+  useEffect(() => {
+    if (resumedRef.current || !initialRun) return;
+    resumedRef.current = true;
+    slotIdRef.current = initialRun.id;
+    startedAtRef.current = initialRun.startedAt || Date.now();
+    setDiff(initialRun.difficulty as Difficulty);
+    setSquads(initialRun.squads);
+    setLastLoadout(initialRun.loadout as Loadout);
+    huntMemRef.current = makeHuntMemory();
+    setRun({ level: initialRun.level, gold: initialRun.gold, maxHp: initialRun.maxHp, upgrades: initialRun.upgrades as Record<string, Upg> });
+    setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+    setRunActive(true);
+    setMode('menu'); // land in the lobby (tracker), not straight into play
+  }, [initialRun]);
+
+  // Resume from the lobby: continue a paused level, or (re)deploy the current level.
+  const resumeRun = useCallback(() => {
+    if (gameRef.current && gameRef.current.status === 'playing') setMode('play');
+    else startLevel(run.level, lastLoadout, run.maxHp, run.upgrades);
+  }, [startLevel, run, lastLoadout]);
 
   // DEV editor "Play": drop straight into a hand-authored layout as a one-off
   // sandbox (default loadout). Win/lose returns to the editor, not the campaign.
@@ -496,6 +551,8 @@ export function FpsGame() {
         } else {
           saveBest(total);
           setBest((b) => Math.max(b, total));
+          if (onRunEnd && slotIdRef.current) onRunEnd(slotIdRef.current);
+          slotIdRef.current = '';
           setRunActive(false);
           setMode('complete');
         }
@@ -508,7 +565,7 @@ export function FpsGame() {
     }
     // Persist this operation's arsenal/marine/astro/best to the account.
     emitProgressChanged(true);
-  }, [snap, mode, run.level, diff, squads, lastLoadout]);
+  }, [snap, mode, run.level, diff, squads, lastLoadout, onRunEnd]);
 
   // Auto-dismiss the familiarity toast.
   useEffect(() => {
@@ -663,6 +720,11 @@ export function FpsGame() {
 
         {mode === 'menu' && (
           <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]">
+            {onExit && (
+              <button type="button" onClick={onExit} className="absolute left-4 top-4 z-50 min-h-[36px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[8px] uppercase text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:text-[9px]">
+                ◂ Back
+              </button>
+            )}
             {/* Arcade-cabinet side screens (wide layouts only): pilot avatar (+ Armory) +
                 loadout preview (+ Arsenal). */}
             <div className="absolute left-5 top-1/2 hidden -translate-y-1/2 xl:block">
@@ -689,7 +751,7 @@ export function FpsGame() {
                     <div><p className="text-[12px] text-[#aef5c8]">{best}</p><p className="mt-0.5 text-[5px] tracking-[0.2em] text-white/40">BEST</p></div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setMode('play')} className="mt-4 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:text-[13px]">
+                <button type="button" onClick={resumeRun} className="mt-4 min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:text-[13px]">
                   ▸ Resume
                 </button>
                 <button type="button" onClick={() => beginCampaign(lastLoadout)} className="mt-3 min-h-[44px] w-full max-w-xs rounded-md border border-[#ff5d6e]/50 bg-[#ff5d6e]/10 px-6 font-pixel text-[10px] uppercase tracking-[0.1em] text-[#ff5d6e] transition-colors hover:bg-[#ff5d6e]/20 sm:text-[11px]">
@@ -844,7 +906,7 @@ export function FpsGame() {
             onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
-            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); setRun((r) => ({ ...r, level: next })); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
+            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); setRun((r) => ({ ...r, level: next })); persistSlot(next, run.gold, run.maxHp, run.upgrades, lastLoadout); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
             onExit={() => { setRunActive(false); setMode('menu'); }}
           />
         )}
