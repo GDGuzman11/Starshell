@@ -43,6 +43,12 @@ const SPREAD: Record<string, number> = { rifle: 0.026, mg: 0.044, laser: 0.016, 
 // secondaries) kick hard so each shot/cycle is obvious; autos stay snappy.
 const RECOIL: Record<string, number> = { rifle: 0.016, mg: 0.011, laser: 0.009, pistol: 0.03, launcher: 0.1, sniper: 0.085 };
 const BURST_GAP = 0.07; // intra-burst round spacing (CB-02)
+// Headshots: a hitscan round landing in the top band of a NON-boss enemy's body
+// sphere hits harder. HEAD_BAND is the fraction of the radius above the sphere
+// centre that counts as "head". Bosses/deployables are immune (their weak-points
+// are their own mechanic).
+const HEADSHOT_MULT = 2.0;
+const HEAD_BAND = 0.45;
 const HEAT_SHOTS = 24; // energy shots to overheat (ER-08); vents ~2 s when idle
 const OVERHEAT_LOCK = 1.9; // overheat cooldown lockout seconds
 // How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),
@@ -65,6 +71,7 @@ export interface FpsGameState {
   throwCount: number;
   status: 'playing' | 'won' | 'lost';
   kills: number;
+  headshots: number;
   shotsFired: number;
   shotsHit: number;
   dmgDealt: number;
@@ -100,10 +107,12 @@ export interface FpsSnapshot {
   enemiesLeft: number;
   status: 'playing' | 'won' | 'lost';
   kills: number;
+  headshots: number;
   shotsFired: number;
   shotsHit: number;
   dmgDealt: number;
   hitAt: number;
+  headshotAt: number; // last headshot time (HUD crit marker)
   fireAt: number;
   hurtAt: number;
   flashAt: number; // player flashbanged
@@ -312,7 +321,7 @@ export function useFpsLoop(
     let lastSnap = 0;
     const snap: FpsSnapshot = {
       health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
-      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
+      slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, headshots: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, headshotAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
 
@@ -985,10 +994,21 @@ export function useFpsLoop(
               if (hit) {
                 // Boss weak-point window (after a missed pounce) = bonus damage.
                 const wm = hit.boss && hit.weakUntil && now < hit.weakUntil ? 2.5 : 1;
-                hurtEnemy(hit, gun.dmg * wm);
-                g.dmgDealt += gun.dmg * wm;
+                // Headshot (non-boss, non-deployable only): the round landed in the
+                // top band of the body sphere → extra damage. The sphere centre for a
+                // regular enemy is at y+1 with radius ENEMY_R; anything above
+                // centre + HEAD_BAND·radius counts as the head.
+                const impactY = eye[1] + sfy2 * hitT;
+                const headshot = !hit.boss && !hit.destructible && impactY > hit.y + 1 + ENEMY_R * HEAD_BAND;
+                const dmg = gun.dmg * wm * (headshot ? HEADSHOT_MULT : 1);
+                hurtEnemy(hit, dmg);
+                g.dmgDealt += dmg;
                 g.shotsHit++;
-                hit.hitFlash = 0.12;
+                if (headshot) {
+                  g.headshots++;
+                  snap.headshotAt = now;
+                }
+                hit.hitFlash = headshot ? 0.2 : 0.12;
                 hit.alarm = 4;
                 hit.state = 'alert';
                 hit.lastSeen = { x: p.x, z: p.z };
@@ -1743,6 +1763,7 @@ export function useFpsLoop(
           snap.radar = radar;
           snap.status = g.status;
           snap.kills = g.kills;
+          snap.headshots = g.headshots;
           snap.shotsFired = g.shotsFired;
           snap.shotsHit = g.shotsHit;
           snap.dmgDealt = g.dmgDealt;

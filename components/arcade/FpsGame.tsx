@@ -102,7 +102,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
   const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   // Cumulative run stats (across all levels of one campaign) for the match-end card.
-  const [runStats, setRunStats] = useState({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
+  const [runStats, setRunStats] = useState({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
   // Per-level cinematic intro (wave title + countdown), cleared by its own timer.
   const [intro, setIntro] = useState<{ level: number; boss: boolean } | null>(null);
   // Gauntlet (lvl 20): current round 1-3, and the between-rounds recovery overlay.
@@ -383,6 +383,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
         throwCount: thrown.count,
         status: 'playing',
         kills: 0,
+        headshots: 0,
         shotsFired: 0,
         shotsHit: 0,
         dmgDealt: 0,
@@ -435,7 +436,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
       if (!slotIdRef.current) slotIdRef.current = (globalThis.crypto?.randomUUID?.() ?? String(Date.now()));
       startedAtRef.current = Date.now();
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
-      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups);
       persistSlot(1, 0, 100, ups, lo);
     },
@@ -454,7 +455,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
     setLastLoadout(initialRun.loadout as Loadout);
     huntMemRef.current = makeHuntMemory();
     setRun({ level: initialRun.level, gold: initialRun.gold, maxHp: initialRun.maxHp, upgrades: initialRun.upgrades as Record<string, Upg> });
-    setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+    setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
     setRunActive(true);
     setMode('menu'); // land in the lobby (tracker), not straight into play
   }, [initialRun]);
@@ -476,7 +477,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
       gauntletRef.current = 0;
       sandboxRef.current = true;
       setRun({ level: 1, gold: 0, maxHp: 100, upgrades: ups });
-      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       startLevel(1, lo, 100, ups, buildFromLayout(layout));
     },
     [lastLoadout, startLevel],
@@ -493,7 +494,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
       gauntletRef.current = 0;
       sandboxRef.current = false;
       setRun({ level: 5, gold: 0, maxHp: 100, upgrades: ups });
-      setRunStats({ kills: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
       if (isTouch && !fsActive) toggleFullscreen();
       bossOverrideRef.current = kind; // startLevel reads this synchronously
       startLevel(5, lo, 100, ups);
@@ -524,6 +525,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onExit
     setRunStats((rs) => ({
       ...rs,
       kills: rs.kills + snap.kills,
+      headshots: rs.headshots + snap.headshots,
       shots: rs.shots + snap.shotsFired,
       hits: rs.hits + snap.shotsHit,
       dmg: rs.dmg + snap.dmgDealt,
@@ -1185,7 +1187,7 @@ function RunStatsCard({
   gold: number;
   astro: number;
   earnedAstro: number;
-  stats: { kills: number; shots: number; hits: number; dmg: number; startedAt: number; endedAt: number };
+  stats: { kills: number; headshots: number; shots: number; hits: number; dmg: number; startedAt: number; endedAt: number };
   onRestart: () => void;
   onRestartLevel?: () => void;
   restartsLeft?: number;
@@ -1197,6 +1199,7 @@ function RunStatsCard({
   const rows: [string, string][] = [
     ['LEVEL', String(level)],
     ['KILLS', String(stats.kills)],
+    ['HEADSHOTS', String(stats.headshots)],
     ['TIME', time],
     ['ACCURACY', `${acc}%`],
     ['DAMAGE', stats.dmg.toLocaleString()],

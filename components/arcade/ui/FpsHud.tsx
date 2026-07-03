@@ -12,6 +12,7 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const flash = now - snap.fireAt < 70;
   const hit = now - snap.hitAt < 180;
+  const headshot = now - snap.headshotAt < 240; // gold crit marker
   const hurt = now - snap.hurtAt < 320;
   const pickup = now - snap.pickupAt < 400; // ammo/shield pickup flash
   const scoped = snap.ads; // any zoom level shows the scope view (snipers go deeper)
@@ -98,8 +99,11 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
       {/* crosshair / hitmarker (hidden while scoped) */}
       {!scoped && (
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <span className={hit ? 'text-[#ff5d6e]' : snap.grappleReady ? 'text-[#ffd27a]' : 'text-[#aef5c8]/80'} style={{ fontSize: 13 }}>
-            {hit ? '✕' : snap.grappleReady ? '⟰' : '+'}
+          <span
+            className={headshot ? 'text-[#ffd27a]' : hit ? 'text-[#ff5d6e]' : snap.grappleReady ? 'text-[#ffd27a]' : 'text-[#aef5c8]/80'}
+            style={{ fontSize: headshot ? 17 : 13, textShadow: headshot ? '0 0 6px rgba(255,210,122,0.9)' : undefined }}
+          >
+            {headshot ? '✖' : hit ? '✕' : snap.grappleReady ? '⟰' : '+'}
           </span>
         </div>
       )}
