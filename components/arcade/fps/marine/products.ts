@@ -33,6 +33,10 @@ import { WARDEN_HELMETS } from './products/wardenHead';
 import { WARDEN_CHESTS, WARDEN_PAULDRONS, WARDEN_BARRIER } from './products/wardenTorso';
 import { WARDEN_EMITTER, WARDEN_CORE, WARDEN_BACKPACK, WARDEN_REACTOR } from './products/wardenSystems';
 import { WARDEN_BOOTS, WARDEN_BRACES } from './products/wardenLimbs';
+import { PHANTOM_HELMETS, PHANTOM_VISORS, PHANTOM_TARGETING } from './products/phantomHead';
+import { PHANTOM_CHESTS, PHANTOM_PAULDRONS, PHANTOM_CAMO } from './products/phantomTorso';
+import { PHANTOM_RANGEFIND, PHANTOM_CORE } from './products/phantomSystems';
+import { PHANTOM_GLOVES, PHANTOM_BOOTS } from './products/phantomLimbs';
 
 export interface ArmorProduct {
   id: string; // stable template id (stored on the piece's model spec)
@@ -94,6 +98,17 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   warden_reactor: WARDEN_REACTOR,
   warden_boots: WARDEN_BOOTS,
   warden_braces: WARDEN_BRACES,
+  // ── PHANTOM (precision hunter) ───────────────────────────────────────────────
+  phantom_helmet: PHANTOM_HELMETS,
+  phantom_visor: PHANTOM_VISORS,
+  phantom_targeting: PHANTOM_TARGETING,
+  phantom_chest: PHANTOM_CHESTS,
+  phantom_shoulders: PHANTOM_PAULDRONS,
+  phantom_camo: PHANTOM_CAMO,
+  phantom_rangefind: PHANTOM_RANGEFIND,
+  phantom_core: PHANTOM_CORE,
+  phantom_gloves: PHANTOM_GLOVES,
+  phantom_boots: PHANTOM_BOOTS,
 };
 
 export function productsForSlot(slotId: string): ArmorProduct[] | undefined {
