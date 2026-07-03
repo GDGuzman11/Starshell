@@ -747,9 +747,20 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
               <LoadoutPanel guns={[lastLoadout.p1, lastLoadout.p2, lastLoadout.sa]} onArsenal={() => setMode('arsenal')} />
             </div>
             <p className="font-pixel text-[18px] text-[#7fdfff] sm:text-[26px]">STARSHELL</p>
-            <p className="mt-2 font-pixel text-[8px] text-white/60 sm:text-[10px]">VOID ARENA · {campaignLen}-LEVEL CAMPAIGN</p>
-            {best > 0 && <p className="mt-1 font-pixel text-[7px] text-[#ffd27a] sm:text-[9px]">BEST: LEVEL {best}</p>}
-            <p className="mt-1 font-pixel text-[7px] text-[#c8a8ff] sm:text-[9px]">◈ {astro} ASTRODIAMONDS</p>
+            {/* Always-visible currency indicators (GOLD + ASTRODIAMONDS) — sit below the title. */}
+            <div className="mt-3 flex items-center justify-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 rounded-full border border-[#ffd27a]/45 bg-[#ffd27a]/10 px-3 py-1.5">
+                <span className="text-[14px] leading-none text-[#ffd27a] sm:text-[16px]">⛀</span>
+                <span className="font-pixel text-[6px] tracking-[0.15em] text-[#ffd27a]/70 sm:text-[7px]">GOLD</span>
+                <span className="font-pixel text-[11px] text-[#ffd27a] sm:text-[13px]">{run.gold}</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full border border-[#c8a8ff]/45 bg-[#c8a8ff]/10 px-3 py-1.5">
+                <span className="text-[14px] leading-none text-[#c8a8ff] sm:text-[16px]">◈</span>
+                <span className="font-pixel text-[6px] tracking-[0.15em] text-[#c8a8ff]/70 sm:text-[7px]">ASTRODIAMONDS</span>
+                <span className="font-pixel text-[11px] text-[#c8a8ff] sm:text-[13px]">{astro}</span>
+              </div>
+            </div>
+            {best > 0 && <p className="mt-2 font-pixel text-[7px] text-[#ffd27a]/80 sm:text-[9px]">BEST: LEVEL {best}</p>}
 
             {runActive ? (
               /* A run is in progress — swap the config for a live tracker + restart. */
