@@ -37,6 +37,10 @@ import { PHANTOM_HELMETS, PHANTOM_VISORS, PHANTOM_TARGETING } from './products/p
 import { PHANTOM_CHESTS, PHANTOM_PAULDRONS, PHANTOM_CAMO } from './products/phantomTorso';
 import { PHANTOM_RANGEFIND, PHANTOM_CORE } from './products/phantomSystems';
 import { PHANTOM_GLOVES, PHANTOM_BOOTS } from './products/phantomLimbs';
+import { LIFELINE_HELMETS, LIFELINE_EMERGENCY } from './products/lifelineHead';
+import { LIFELINE_CHESTS, LIFELINE_HARNESS } from './products/lifelineTorso';
+import { LIFELINE_NANOPACK, LIFELINE_DRONE, LIFELINE_INJECTOR, LIFELINE_CORE } from './products/lifelineSystems';
+import { LIFELINE_GLOVES, LIFELINE_BOOTS } from './products/lifelineLimbs';
 
 export interface ArmorProduct {
   id: string; // stable template id (stored on the piece's model spec)
@@ -109,6 +113,17 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   phantom_core: PHANTOM_CORE,
   phantom_gloves: PHANTOM_GLOVES,
   phantom_boots: PHANTOM_BOOTS,
+  // ── LIFELINE (combat support) ────────────────────────────────────────────────
+  lifeline_helmet: LIFELINE_HELMETS,
+  lifeline_emergency: LIFELINE_EMERGENCY,
+  lifeline_chest: LIFELINE_CHESTS,
+  lifeline_harness: LIFELINE_HARNESS,
+  lifeline_nanopack: LIFELINE_NANOPACK,
+  lifeline_drone: LIFELINE_DRONE,
+  lifeline_injector: LIFELINE_INJECTOR,
+  lifeline_core: LIFELINE_CORE,
+  lifeline_gloves: LIFELINE_GLOVES,
+  lifeline_boots: LIFELINE_BOOTS,
 };
 
 export function productsForSlot(slotId: string): ArmorProduct[] | undefined {
