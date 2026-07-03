@@ -36,6 +36,11 @@ export function PremiumInspect({ weapon, onClose }: { weapon: PremiumWeapon; onC
           <GunPreview gunId={weapon.id} />
         </div>
         <p className="px-4 text-center text-[7px] leading-relaxed text-white/55">{weapon.philosophy}</p>
+        {weapon.battlefieldEvent && (
+          <p className="mx-4 mt-1.5 rounded border px-2 py-1 text-center text-[6px] leading-relaxed" style={{ borderColor: `${accent}55`, backgroundColor: `${accent}12`, color: accent }}>
+            ◈ BATTLEFIELD EVENT · {weapon.battlefieldEvent}
+          </p>
+        )}
         {/* display stats — zoomed in with the picture */}
         <div className="grid grid-cols-4 gap-2 px-4 pb-1 pt-2">
           {stats.map((s) => (

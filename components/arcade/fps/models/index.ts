@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord, buildAPXH1Oblivion, buildAPXH2Meridian } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -82,6 +82,9 @@ const GUN_BUILDERS: Record<string, Builder> = {
   apxm8: buildAPXM8Piledriver,
   apxm9: buildAPXM9Dynamo,
   apxm10: buildAPXM10Overlord,
+  // PREMIUM heavy siege platforms (Apex tier)
+  apxh1: buildAPXH1Oblivion,
+  apxh2: buildAPXH2Meridian,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -164,6 +167,8 @@ const GUN_ACCENT: Record<string, number> = {
   apxm8: 0xff5a2a, // Piledriver kinetic orange-red
   apxm9: 0xeaf2ff, // Dynamo white reactor
   apxm10: 0xffd27a, // Overlord gold
+  apxh1: 0xb15cff, // Oblivion gravity purple
+  apxh2: 0xbfe0ff, // Meridian orbital blue-white
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */

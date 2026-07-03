@@ -745,3 +745,90 @@ export function buildAPXM10Overlord(tier: RenderTier): THREE.Group {
 
   return model([receiver, receiverTop, barrel, jacket, ribs, rings, cellL, cellLg, cellR, cellRg, carry, grp, stock, legL, legR, mzAnchor(-0.66, 0.02)]);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PREMIUM HEAVY WEAPONS (Apex tier) — classified military SIEGE PLATFORMS. Each is a
+// piece of machinery, not a firearm; each leaves a signature Battlefield Event. The
+// two benchmarks below share no silhouette or mechanism with each other or any weapon.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** APX-H1 "OBLIVION" — a GRAVITY PROJECTOR siege cannon. A collapsing core glows inside a
+ *  ring of rotating reactor SHUTTERS; a wide focusing cone projects the field. Deploys
+ *  support arms + hydraulic recoil cylinders. Battlefield Event: a Gravity Well. */
+export function buildAPXH1Oblivion(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xb15cff, tier, 2.6);
+
+  // ── heavy shoulder frame ─────────────────────────────────────────────────────
+  const frame = box(0.24, 0.22, 0.5, gun, 0, 0, 0.12);
+  const frameTop = box(0.16, 0.05, 0.4, dark, 0, 0.14, 0.08);
+  const shoulder = box(0.16, 0.2, 0.12, body, 0, -0.04, 0.42); // shoulder brace/pad
+  // ── GRAVITY CHAMBER (mid-front centerpiece) ──────────────────────────────────
+  const chamberHousing = cylZ(0.15, 0.22, dark, 0, 0.02, -0.14, 20); // dark containment housing
+  const core = capsuleZ(0.07, 0.1, gl, 0, 0.02, -0.14); core.name = 'glow'; // collapsing core
+  const coreRing = cylZ(0.09, 0.03, gl, 0, 0.02, -0.24); coreRing.name = 'glow';
+  // rotating reactor SHUTTERS around the chamber (spins around the bore axis)
+  const shutters = new THREE.Group(); shutters.name = 'spin'; shutters.position.set(0, 0.02, -0.14);
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const bl = box(0.06, 0.02, 0.2, steel, Math.cos(a) * 0.145, Math.sin(a) * 0.145, 0); bl.rotation.z = a + 0.6; shutters.add(bl); }
+  // ── wide FOCUSING CONE (projects the gravity field) ──────────────────────────
+  const cone = coneZ(0.17, 0.09, 0.24, steel, 0, 0.02, -0.4);
+  const coneLip = cylZ(0.18, 0.03, gl, 0, 0.02, -0.52); coneLip.name = 'glow';
+  // ── hydraulic recoil cylinders (top) ─────────────────────────────────────────
+  const hydL = cylZ(0.032, 0.36, steel, 0.06, 0.16, 0.02);
+  const hydR = cylZ(0.032, 0.36, steel, -0.06, 0.16, 0.02);
+  const hydGl = box(0.14, 0.012, 0.28, gl, 0, 0.2, 0.02); hydGl.name = 'coil';
+  // ── deploying SUPPORT ARMS (angled, bracing) ─────────────────────────────────
+  const armL = box(0.03, 0.03, 0.28, steel, 0.11, -0.1, -0.06); armL.rotation.z = 0.5;
+  const armR = box(0.03, 0.03, 0.28, steel, -0.11, -0.1, -0.06); armR.rotation.z = -0.5;
+  // cooling vents (glow) on the frame flanks
+  const ventL = tagGlow(ventSlats(4, 0.045, 0.02, 0.02, gl, 0.122, 0.06, 0.16), 'coil');
+  const ventR = tagGlow(ventSlats(4, 0.045, 0.02, 0.02, gl, -0.122, 0.06, 0.16), 'coil');
+  const grp = grip(0.085, 0.19, 0.095, dark, 0, -0.17, 0.24);
+  const guard = box(0.06, 0.022, 0.1, dark, 0, -0.08, 0.2);
+
+  return model([frame, frameTop, shoulder, chamberHousing, core, coreRing, shutters, cone, coneLip, hydL, hydR, hydGl, armL, armR, ventL, ventR, grp, guard, mzAnchor(-0.56, 0.02)]);
+}
+
+/** APX-H2 "MERIDIAN" — an ORBITAL KINETIC ACCELERATOR (rail siege). A long twin-rail spine
+ *  with sequential acceleration coils drives a loaded high-density slug from a massive
+ *  breech; deploys ground anchors to brace. Battlefield Event: an Orbital Impact Crater. */
+export function buildAPXH2Meridian(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const body = metal(COL.gunmetal, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xbfe0ff, tier, 2.6);
+
+  // ── massive BREECH (rear core) with the loaded slug ──────────────────────────
+  const breech = box(0.2, 0.2, 0.26, gun, 0, 0.02, 0.24);
+  const breechCap = box(0.22, 0.22, 0.05, dark, 0, 0.02, 0.38);
+  const slug = capsuleZ(0.05, 0.1, gl, 0, 0.04, 0.2); slug.name = 'glow'; // high-density slug, loaded
+  const counterweight = box(0.14, 0.14, 0.1, steel, 0, 0.02, 0.42); // rear counterweight
+  // ── long TWIN RAILS + sequential acceleration coils ──────────────────────────
+  const spine = box(0.04, 0.06, 0.86, dark, 0, 0.04, -0.28);
+  const railL = box(0.026, 0.04, 0.8, steel, 0.06, 0.06, -0.26);
+  const railR = box(0.026, 0.04, 0.8, steel, -0.06, 0.06, -0.26);
+  const coilsL = tagGlow(coilStack(8, 0.075, 0.055, gl, 0.06, 0.06, -0.12), 'coil');
+  const coilsR = tagGlow(coilStack(8, 0.075, 0.055, gl, -0.06, 0.06, -0.12), 'coil');
+  const muzzle = box(0.11, 0.11, 0.08, steel, 0, 0.05, -0.66);
+  const muzzleGl = cylZ(0.05, 0.02, gl, 0, 0.05, -0.7); muzzleGl.name = 'glow';
+  // spinning accelerator RING at the breech (forward-facing)
+  const ring = new THREE.Group(); ring.name = 'spin'; ring.position.set(0, 0.04, 0.06);
+  ring.add(cylZ(0.085, 0.02, steel, 0, 0, 0, 16));
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; ring.add(box(0.018, 0.04, 0.024, gl, Math.cos(a) * 0.065, Math.sin(a) * 0.065, 0)); }
+  // ── deploying GROUND ANCHOR braces (it must brace to fire) ────────────────────
+  const anchorL = box(0.03, 0.03, 0.3, steel, 0.09, -0.12, -0.02); anchorL.rotation.x = 0.7; anchorL.rotation.z = 0.4;
+  const anchorR = box(0.03, 0.03, 0.3, steel, -0.09, -0.12, -0.02); anchorR.rotation.x = 0.7; anchorR.rotation.z = -0.4;
+  const footL = box(0.06, 0.02, 0.06, dark, 0.16, -0.24, -0.12);
+  const footR = box(0.06, 0.02, 0.06, dark, -0.16, -0.24, -0.12);
+  // ── long-range TARGETING module (top) ────────────────────────────────────────
+  const scope = box(0.05, 0.05, 0.3, dark, 0, 0.15, -0.06);
+  const lens = box(0.032, 0.032, 0.012, gl, 0, 0.15, -0.22); lens.name = 'glow';
+  const grp = grip(0.078, 0.18, 0.088, dark, 0, -0.14, 0.16);
+  const stock = box(0.1, 0.14, 0.12, body, 0, -0.04, 0.34);
+
+  return model([breech, breechCap, slug, counterweight, spine, railL, railR, coilsL, coilsR, muzzle, muzzleGl, ring, anchorL, anchorR, footL, footR, scope, lens, grp, stock, mzAnchor(-0.74, 0.05)]);
+}

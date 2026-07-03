@@ -46,6 +46,7 @@ export interface PremiumWeapon {
   philosophy: string; // its unique engineering identity (one line)
   blurb: string;
   stats: { power: number; rate: number; mag: number; reload: number }; // display only
+  battlefieldEvent?: string; // Heavy weapons: the map-altering event they leave (identity only)
   locked: boolean;
 }
 
@@ -249,6 +250,23 @@ export const PREMIUM_WEAPONS: PremiumWeapon[] = [
     philosophy: 'Concentric power-regulator rings and a wide industrial frame command the battlefield through sheer sustained dominance.',
     blurb: 'The last word in suppression. Nothing advances.',
     stats: { power: 44, rate: 0.05, mag: 175, reload: 3.3 }, locked: true,
+  },
+  // ── HEAVY · SIEGE PLATFORMS ──────────────────────────────────────────────────
+  {
+    id: 'apxh1', name: 'APX-H1 OBLIVION', code: 'APX', tier: 'apex', category: 'heavy', type: 'Siege Platforms', accent: 0xb15cff,
+    philosophy: 'A gravity-projector siege cannon: a collapsing core burns inside rotating reactor shutters, focused through a wide field cone.',
+    blurb: 'You do not shoot enemies with it. You delete the ground they stand on.',
+    stats: { power: 900, rate: 3.2, mag: 2, reload: 4.6 },
+    battlefieldEvent: 'GRAVITY WELL — collapses space at impact, dragging enemies and debris inward for several seconds.',
+    locked: true,
+  },
+  {
+    id: 'apxh2', name: 'APX-H2 MERIDIAN', code: 'APX', tier: 'apex', category: 'heavy', type: 'Siege Platforms', accent: 0xbfe0ff,
+    philosophy: 'An orbital kinetic accelerator: sequential rail coils drive a high-density slug from a braced breech — it anchors to fire.',
+    blurb: 'A round from orbit, delivered by hand. Whatever it hits, simply ceases.',
+    stats: { power: 1400, rate: 4.0, mag: 1, reload: 5.2 },
+    battlefieldEvent: 'ORBITAL IMPACT CRATER — a glowing crater with falling debris and scorched terrain that lingers.',
+    locked: true,
   },
 ];
 
