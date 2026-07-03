@@ -22,6 +22,9 @@ import { GHOST_BOOTS } from './products/ghostBoots';
 import { GHOST_DRONE, GHOST_CORE } from './products/ghostCores';
 import { GHOST_SCANNER, GHOST_COMM } from './products/ghostComms';
 import { GHOST_HARNESS } from './products/ghostPlates';
+import { OUTRIDER_HELMETS, OUTRIDER_VISORS, OUTRIDER_COMMS } from './products/outriderHead';
+import { OUTRIDER_CHESTS, OUTRIDER_PLATES, OUTRIDER_PAULDRONS, OUTRIDER_BACKPACKS, OUTRIDER_CORES } from './products/outriderTorso';
+import { OUTRIDER_LIMBS, OUTRIDER_GLOVES, OUTRIDER_CAPS, OUTRIDER_BOOTS } from './products/outriderLimbs';
 
 export interface ArmorProduct {
   id: string; // stable template id (stored on the piece's model spec)
@@ -42,6 +45,25 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   ghost_scanner: GHOST_SCANNER,
   ghost_comm: GHOST_COMM,
   ghost_harness: GHOST_HARNESS,
+  // ── OUTRIDER (Standard-Issue; recruit slot ids) ──────────────────────────────
+  helmet: OUTRIDER_HELMETS,
+  visor: OUTRIDER_VISORS,
+  comms: OUTRIDER_COMMS,
+  chest: OUTRIDER_CHESTS,
+  neck: OUTRIDER_PLATES,
+  back: OUTRIDER_PLATES,
+  belt: OUTRIDER_PLATES,
+  hip: OUTRIDER_PLATES,
+  shoulders: OUTRIDER_PAULDRONS,
+  backpack: OUTRIDER_BACKPACKS,
+  core: OUTRIDER_CORES,
+  upperArms: OUTRIDER_LIMBS,
+  forearms: OUTRIDER_LIMBS,
+  thighs: OUTRIDER_LIMBS,
+  shins: OUTRIDER_LIMBS,
+  gloves: OUTRIDER_GLOVES,
+  knees: OUTRIDER_CAPS,
+  boots: OUTRIDER_BOOTS,
 };
 
 export function productsForSlot(slotId: string): ArmorProduct[] | undefined {
