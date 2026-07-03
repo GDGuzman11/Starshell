@@ -15,6 +15,7 @@ import { rng } from '../rand';
 import { priceFor, legendaryGate, type PartGate } from '../arsenal/economy';
 import { MANUFACTURERS, MANUFACTURER_IDS, type ManufacturerId } from '../arsenal/manufacturers';
 import { slotById, type ArmorFamily, type ArmorSlot, type ArmorStat } from './slots';
+import { productsFor } from './products';
 
 export type ArmorTier = 'standard' | 'prototype' | 'legendary';
 export const ARMOR_TIERS: ArmorTier[] = ['standard', 'prototype', 'legendary'];
@@ -41,6 +42,7 @@ export interface ArmorModelSpec {
   animated: boolean; // moving geometry (prototype/legendary)
   accent: number; // manufacturer emissive colour
   body: number; // manufacturer body metal
+  template?: string; // Pt2 product id (partModel renders a bespoke product when set)
 }
 
 export interface ArmorPiece {
@@ -111,6 +113,9 @@ const cache = new Map<string, ArmorPiece[]>();
 function buildSlot(slot: ArmorSlot): ArmorPiece[] {
   const roles = slot.roles ?? SLOT_ROLES[slot.id] ?? ['Combat'];
   const noun = slot.noun ?? SLOT_NOUN[slot.id] ?? 'Plate';
+  // Pt2: if this division+family has a bespoke PRODUCT line, each piece becomes one
+  // product (distinct silhouette + product name) instead of a seeded language variant.
+  const products = productsFor(slot.division, slot.family);
   const out: ArmorPiece[] = [];
   // 60 DISTINCT (manufacturer, role) combos so names never repeat within a slot.
   const combos: [ManufacturerId, string][] = [];
@@ -147,8 +152,15 @@ function buildSlot(slot: ArmorSlot): ArmorPiece[] {
         }
       }
       const shortMfr = man.name.split(' ')[0];
-      const name =
-        tier === 'standard'
+      // Pt2 product line → a catalog-style product name; otherwise the manufacturer/role name.
+      const product = products?.[idx % products.length];
+      const name = product
+        ? tier === 'standard'
+          ? `${product.name} ${product.noun}`
+          : tier === 'prototype'
+            ? `${product.name} ${product.noun} · Mk-II`
+            : `${product.name} ${product.noun} · Apex`
+        : tier === 'standard'
           ? `${shortMfr} ${role} ${noun}`
           : tier === 'prototype'
             ? `${shortMfr} ${role} ${noun} ${PROTO_TOKENS[(r() * PROTO_TOKENS.length) | 0]}`
@@ -166,6 +178,7 @@ function buildSlot(slot: ArmorSlot): ArmorPiece[] {
         animated,
         accent: man.accent,
         body: man.body,
+        template: product?.id,
       };
       const magSum = Math.abs(stats[slot.primary] ?? 0.03) + Math.abs(stats[STATS[(r() * STATS.length) | 0]] ?? 0);
       const price = priceFor(tier === 'standard' ? 'military' : tier, magSum);
