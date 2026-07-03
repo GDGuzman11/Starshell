@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react';
 import { MarinePreview } from './MarinePreview';
 import { ARMOR_SLOTS, ARMOR_STAT_LABEL, type ArmorSlot, type ArmorStat } from '../fps/marine/slots';
-import { DIVISIONS, divisionById, divisionSlots, OUTRIDER } from '../fps/marine/divisions';
+import { divisionById, divisionSlots, OUTRIDER } from '../fps/marine/divisions';
 import { generateArmor, ARMOR_TIERS, type ArmorPiece, type ArmorTier } from '../fps/marine/parts';
 import { statLayers } from '../fps/marine/stats';
 import { StatBar } from './StatBar';
@@ -35,14 +35,12 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
   const [sel, setSel] = useState<ArmorPiece | null>(null); // focused piece (buy/equip)
   const [hover, setHover] = useState<ArmorPiece | null>(null); // transient preview
   const [tryOn, setTryOn] = useState<Record<string, ArmorPiece>>({}); // one try-on per slot
-  // Which division's engineering bay to BROWSE (view-only; does not change your real
-  // division or the graduation lock). Defaults to your division / Outrider.
-  const [browseDiv, setBrowseDiv] = useState<string>(save.division ?? 'outrider');
 
-  // ONLY the browsed division's own components (Outrider = the Standard-Issue set).
-  const slots = useMemo(() => slotsForDiv(browseDiv), [browseDiv]);
+  // ONLY your own division's components (Outrider = the Standard-Issue set).
+  const marineDiv = save.division ?? 'outrider';
+  const slots = useMemo(() => slotsForDiv(marineDiv), [marineDiv]);
   const slot = slots.find((s) => s.id === slotId) ?? slots[0];
-  const div = divisionById(browseDiv);
+  const div = divisionById(save.division);
   const pieces = useMemo(() => generateArmor(slotId), [slotId]);
   const equipped = useMemo(() => equippedArmorPieces(save), [save]);
   const equippedIds = useMemo(() => new Set(equipped.map((p) => p.id)), [equipped]);
@@ -101,23 +99,6 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
         </div>
       </div>
 
-      {/* VIEW-DIVISION selector — browse any division's engineering bay (view only; does
-          NOT change your real division or the graduation lock). */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-        <span className="shrink-0 text-[7px] tracking-[0.2em] text-white/40">VIEW DIVISION</span>
-        {DIVISIONS.map((d) => (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => { setBrowseDiv(d.id); setSlotId(slotsForDiv(d.id)[0]?.id ?? ARMOR_SLOTS[0].id); setSel(null); setHover(null); setTryOn({}); }}
-            className={`whitespace-nowrap rounded border px-2.5 py-1 text-[7px] uppercase transition-colors sm:text-[8px] ${d.id === browseDiv ? 'text-black' : 'border-white/15 bg-white/[0.03] text-white/55 hover:bg-white/10'}`}
-            style={d.id === browseDiv ? { borderColor: hex(d.accent), backgroundColor: hex(d.accent) } : undefined}
-          >
-            {d.name}
-          </button>
-        ))}
-      </div>
-
       {/* slot rack — pick any body slot to engineer */}
       <div className="rounded-lg border border-[#7fdfff]/20 bg-[#7fdfff]/[0.04] p-2">
         <div className="mb-1 flex items-center justify-between">
@@ -143,7 +124,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
         {/* left: live Marine + armor stats + focused piece + familiarity */}
         <div className="flex flex-col gap-2 lg:w-[42%]">
           <div className="relative h-56 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f] sm:h-72">
-            <MarinePreview equipped={previewPieces} previewPiece={hover} divisionId={browseDiv} />
+            <MarinePreview equipped={previewPieces} previewPiece={hover} divisionId={save.division} />
             <p className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 text-[6px] tracking-[0.2em] text-[#7fdfff]/70">{rank}</p>
           </div>
 

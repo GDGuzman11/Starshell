@@ -10,6 +10,7 @@
  */
 import { useState } from 'react';
 import { MarinePreview } from './MarinePreview';
+import { DivisionComponents } from './DivisionComponents';
 import { StatBar } from './StatBar';
 import { DIVISIONS, type DivisionId } from '../fps/marine/divisions';
 import { ARMOR_STAT_LABEL, type ArmorStat } from '../fps/marine/slots';
@@ -24,6 +25,7 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 export function FpsDivision({ onBack }: { onBack: () => void }) {
   const [save, setSave] = useState<MarineSave>(() => loadMarine());
   const [focus, setFocus] = useState<DivisionId>((save.division as DivisionId) || 'outrider');
+  const [showComponents, setShowComponents] = useState(false);
   const div = DIVISIONS.find((d) => d.id === focus) ?? DIVISIONS[0];
   const selected = save.division;
   // Graduation is a one-time permanent pick, gated to Marine Level 5 with no division yet.
@@ -79,6 +81,14 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
           <div className="relative h-64 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f] sm:h-80">
             <MarinePreview equipped={NO_PIECES} divisionId={focus} />
             <p className="pointer-events-none absolute left-2 top-2 text-[10px] sm:text-[13px]" style={{ color: hex(div.accent) }}>{div.name}</p>
+            <button
+              type="button"
+              onClick={() => setShowComponents(true)}
+              className="absolute bottom-2 right-2 rounded-md border px-3 py-2 text-[8px] uppercase tracking-[0.1em] backdrop-blur-sm transition-colors"
+              style={{ borderColor: `${hex(div.accent)}66`, color: hex(div.accent), background: `${hex(div.accent)}1a` }}
+            >
+              ⛨ Components
+            </button>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
             <p className="text-[8px] text-white/85 sm:text-[9px]">{div.primary} <span className="text-white/40">/ {div.secondary}</span></p>
@@ -110,6 +120,8 @@ export function FpsDivision({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       </div>
+
+      {showComponents && <DivisionComponents division={focus} onClose={() => setShowComponents(false)} />}
     </div>
   );
 }
