@@ -25,10 +25,13 @@ const TIER_COLOR: Record<ArmorTier, string> = { standard: '#9fb4ff', prototype: 
 const STAT_ORDER: ArmorStat[] = ['armor', 'mobility', 'shield', 'recovery'];
 const GROUP_LABEL: Record<ArmorSlot['group'], string> = { plating: 'PLATING', systems: 'SYSTEMS', cosmetic: 'FINISH' };
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+// The Armory shows ONLY the selected division's own components. Outrider (the default)
+// owns the Standard-Issue set; each specialist shows exclusively its own engineering.
+const slotsForDiv = (d: string): ArmorSlot[] => (d === 'outrider' ? ARMOR_SLOTS : divisionSlots(d));
 
 export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: (n: number) => void; onBack: () => void }) {
   const [save, setSave] = useState<MarineSave>(() => loadMarine());
-  const [slotId, setSlotId] = useState(ARMOR_SLOTS[0].id);
+  const [slotId, setSlotId] = useState(() => slotsForDiv(save.division ?? 'outrider')[0]?.id ?? ARMOR_SLOTS[0].id);
   const [sel, setSel] = useState<ArmorPiece | null>(null); // focused piece (buy/equip)
   const [hover, setHover] = useState<ArmorPiece | null>(null); // transient preview
   const [tryOn, setTryOn] = useState<Record<string, ArmorPiece>>({}); // one try-on per slot
@@ -36,8 +39,8 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
   // division or the graduation lock). Defaults to your division / Outrider.
   const [browseDiv, setBrowseDiv] = useState<string>(save.division ?? 'outrider');
 
-  // Recruit slots always; the BROWSED division's own engineering slots are appended.
-  const slots = useMemo(() => [...ARMOR_SLOTS, ...divisionSlots(browseDiv)], [browseDiv]);
+  // ONLY the browsed division's own components (Outrider = the Standard-Issue set).
+  const slots = useMemo(() => slotsForDiv(browseDiv), [browseDiv]);
   const slot = slots.find((s) => s.id === slotId) ?? slots[0];
   const div = divisionById(browseDiv);
   const pieces = useMemo(() => generateArmor(slotId), [slotId]);
@@ -106,7 +109,7 @@ export function FpsArmory({ astro, onSpend, onBack }: { astro: number; onSpend: 
           <button
             key={d.id}
             type="button"
-            onClick={() => { setBrowseDiv(d.id); setSlotId(ARMOR_SLOTS[0].id); setSel(null); setHover(null); setTryOn({}); }}
+            onClick={() => { setBrowseDiv(d.id); setSlotId(slotsForDiv(d.id)[0]?.id ?? ARMOR_SLOTS[0].id); setSel(null); setHover(null); setTryOn({}); }}
             className={`whitespace-nowrap rounded border px-2.5 py-1 text-[7px] uppercase transition-colors sm:text-[8px] ${d.id === browseDiv ? 'text-black' : 'border-white/15 bg-white/[0.03] text-white/55 hover:bg-white/10'}`}
             style={d.id === browseDiv ? { borderColor: hex(d.accent), backgroundColor: hex(d.accent) } : undefined}
           >
