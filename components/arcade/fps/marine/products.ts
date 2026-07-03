@@ -25,6 +25,10 @@ import { GHOST_HARNESS } from './products/ghostPlates';
 import { OUTRIDER_HELMETS, OUTRIDER_VISORS, OUTRIDER_COMMS } from './products/outriderHead';
 import { OUTRIDER_CHESTS, OUTRIDER_PLATES, OUTRIDER_PAULDRONS, OUTRIDER_BACKPACKS, OUTRIDER_CORES } from './products/outriderTorso';
 import { OUTRIDER_LIMBS, OUTRIDER_GLOVES, OUTRIDER_CAPS, OUTRIDER_BOOTS } from './products/outriderLimbs';
+import { VANGUARD_HELMETS } from './products/vanguardHead';
+import { VANGUARD_CHESTS, VANGUARD_PAULDRONS, VANGUARD_HARNESS } from './products/vanguardTorso';
+import { VANGUARD_AMMO, VANGUARD_BACKPACK, VANGUARD_BREACH, VANGUARD_CORE } from './products/vanguardSystems';
+import { VANGUARD_GLOVES, VANGUARD_BOOTS } from './products/vanguardLimbs';
 
 export interface ArmorProduct {
   id: string; // stable template id (stored on the piece's model spec)
@@ -64,6 +68,17 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   gloves: OUTRIDER_GLOVES,
   knees: OUTRIDER_CAPS,
   boots: OUTRIDER_BOOTS,
+  // ── VANGUARD (shock trooper) ─────────────────────────────────────────────────
+  vanguard_helmet: VANGUARD_HELMETS,
+  vanguard_chest: VANGUARD_CHESTS,
+  vanguard_shoulders: VANGUARD_PAULDRONS,
+  vanguard_harness: VANGUARD_HARNESS,
+  vanguard_ammo: VANGUARD_AMMO,
+  vanguard_backpack: VANGUARD_BACKPACK,
+  vanguard_breach: VANGUARD_BREACH,
+  vanguard_core: VANGUARD_CORE,
+  vanguard_gloves: VANGUARD_GLOVES,
+  vanguard_boots: VANGUARD_BOOTS,
 };
 
 export function productsForSlot(slotId: string): ArmorProduct[] | undefined {
