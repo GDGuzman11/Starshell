@@ -13,7 +13,7 @@ import { buildArcThrower, buildIonRepeater, buildLanceBeam } from './energy';
 import { buildMarksman, buildPiercer, buildRailgun } from './snipers';
 import { buildNovaCannon, buildRocketTube, buildSingularity } from './launchers';
 import { buildHandCannon, buildMachinePistol, buildSidearm } from './sidearms';
-import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord, buildAPXH1Oblivion, buildAPXH2Meridian } from './premium';
+import { buildAPX01Revenant, buildAPX02Hydra, buildAPX03Cyclone, buildAPX04Bastion, buildAPX05Aegis, buildAPX06Scavenger, buildAPX07Ironclad, buildAPX08Gyre, buildAPX09Vulcan, buildAPX10Tesla, buildAPXM1Leviathan, buildAPXM2Maelstrom, buildAPXM3Ignis, buildAPXM4Bulwark, buildAPXM5Magnetar, buildAPXM6Servitor, buildAPXM7Kiln, buildAPXM8Piledriver, buildAPXM9Dynamo, buildAPXM10Overlord, buildAPXH1Oblivion, buildAPXH2Meridian, buildAPXH3Inferno, buildAPXH4Glacier, buildAPXH5Contagion, buildAPXH6Sunder, buildAPXH7Helios, buildAPXH8Salvo, buildAPXH9Auger, buildAPXH10Nemesis } from './premium';
 import {
   buildCluster,
   buildConcussion,
@@ -85,6 +85,14 @@ const GUN_BUILDERS: Record<string, Builder> = {
   // PREMIUM heavy siege platforms (Apex tier)
   apxh1: buildAPXH1Oblivion,
   apxh2: buildAPXH2Meridian,
+  apxh3: buildAPXH3Inferno,
+  apxh4: buildAPXH4Glacier,
+  apxh5: buildAPXH5Contagion,
+  apxh6: buildAPXH6Sunder,
+  apxh7: buildAPXH7Helios,
+  apxh8: buildAPXH8Salvo,
+  apxh9: buildAPXH9Auger,
+  apxh10: buildAPXH10Nemesis,
 };
 
 const THROW_BUILDERS: Record<string, Builder> = {
@@ -169,6 +177,14 @@ const GUN_ACCENT: Record<string, number> = {
   apxm10: 0xffd27a, // Overlord gold
   apxh1: 0xb15cff, // Oblivion gravity purple
   apxh2: 0xbfe0ff, // Meridian orbital blue-white
+  apxh3: 0xff7a2a, // Inferno thermobaric orange
+  apxh4: 0x8ff0ff, // Glacier cryo icy-cyan
+  apxh5: 0x7dff9a, // Contagion nanite mint
+  apxh6: 0xffc23a, // Sunder shockwave amber
+  apxh7: 0xf2f6ff, // Helios fusion white
+  apxh8: 0xff5a5a, // Salvo micro-missile red
+  apxh9: 0xffa040, // Auger drill orange-gold
+  apxh10: 0xc8ff3a, // Nemesis radiation yellow-green
 };
 
 /** Build a weapon model. Unknown ids fall back to a plain block (never throws). */

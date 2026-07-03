@@ -832,3 +832,219 @@ export function buildAPXH2Meridian(tier: RenderTier): THREE.Group {
 
   return model([breech, breechCap, slug, counterweight, spine, railL, railR, coilsL, coilsR, muzzle, muzzleGl, ring, anchorL, anchorR, footL, footR, scope, lens, grp, stock, mzAnchor(-0.74, 0.05)]);
 }
+
+// ── the other eight siege platforms — each a different siege program + event ────────
+
+/** APX-H3 "INFERNO" — a THERMOBARIC launcher: twin fuel-air reservoirs feed a wide
+ *  combustion throat through a spinning injector. Event: Thermobaric Firestorm. */
+export function buildAPXH3Inferno(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.burntSteel, tier);
+  const body = metal(COL.gunmetal, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xff7a2a, tier, 2.5);
+
+  const frame = box(0.2, 0.2, 0.44, gun, 0, 0, 0.1);
+  const barrel = cylZ(0.06, 0.4, dark, 0, 0.02, -0.28);
+  const throat = coneZ(0.17, 0.07, 0.26, steel, 0, 0.02, -0.42); // wide combustion throat
+  const throatGlow = cylZ(0.14, 0.03, gl, 0, 0.02, -0.54); throatGlow.name = 'glow';
+  const tankL = capsuleZ(0.062, 0.2, body, 0.14, -0.02, 0.06); // fuel-air reservoirs
+  const tankR = capsuleZ(0.062, 0.2, body, -0.14, -0.02, 0.06);
+  const tankBandL = cylZ(0.066, 0.02, gl, 0.14, -0.02, 0.02); tankBandL.name = 'coil';
+  const tankBandR = cylZ(0.066, 0.02, gl, -0.14, -0.02, 0.02); tankBandR.name = 'coil';
+  const igniter = tagGlow(coilStack(4, 0.045, 0.09, gl, 0, 0.02, -0.24), 'coil'); // ignition coils
+  // spinning fuel INJECTOR impeller at the breech
+  const inj = new THREE.Group(); inj.name = 'spin'; inj.position.set(0, 0.02, 0.02);
+  inj.add(cylZ(0.05, 0.05, steel, 0, 0, 0, 8));
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const bl = box(0.02, 0.06, 0.03, gl, Math.cos(a) * 0.05, Math.sin(a) * 0.05, 0); bl.rotation.z = a + 0.5; inj.add(bl); }
+  const grp = grip(0.084, 0.19, 0.094, dark, 0, -0.17, 0.24);
+  const stock = box(0.12, 0.16, 0.16, body, 0, -0.03, 0.42);
+
+  return model([frame, barrel, throat, throatGlow, tankL, tankR, tankBandL, tankBandR, igniter, inj, grp, stock, mzAnchor(-0.58, 0.02)]);
+}
+
+/** APX-H4 "GLACIER" — a CRYOGENIC siege platform: a rotating condenser fan super-cools the
+ *  charge; frost-rimed barrel + coolant pipes. Event: Cryogenic Ice Field. */
+export function buildAPXH4Glacier(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const body = metal(COL.steel, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x8ff0ff, tier, 2.4);
+
+  const frame = box(0.19, 0.19, 0.42, gun, 0, 0, 0.1);
+  const barrel = cylZ(0.05, 0.5, dark, 0, 0.02, -0.32);
+  const rime = cylZ(0.07, 0.34, body, 0, 0.02, -0.28); // frost-rimed sleeve
+  const coolant = tagGlow(coilStack(6, 0.05, 0.08, gl, 0, 0.02, -0.2), 'coil'); // coolant pipes wrapping
+  const tankL = capsuleZ(0.05, 0.16, steel, 0.13, 0.04, 0.08); // cryo tanks
+  const tankR = capsuleZ(0.05, 0.16, steel, -0.13, 0.04, 0.08);
+  const tankGl = box(0.012, 0.05, 0.14, gl, 0.155, 0.04, 0.08); tankGl.name = 'glow';
+  const tankGr = box(0.012, 0.05, 0.14, gl, -0.155, 0.04, 0.08); tankGr.name = 'glow';
+  // rotating CONDENSER fan (forward-facing) on the flank
+  const fan = new THREE.Group(); fan.name = 'spin'; fan.position.set(0.1, -0.02, 0.12);
+  fan.add(cylZ(0.045, 0.03, steel, 0, 0, 0, 10));
+  for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; const bl = box(0.016, 0.055, 0.012, gl, Math.cos(a) * 0.045, Math.sin(a) * 0.045, 0); bl.rotation.z = a; fan.add(bl); }
+  const muzzle = cylZ(0.07, 0.06, steel, 0, 0.02, -0.56);
+  const muzzleGl = cylZ(0.055, 0.02, gl, 0, 0.02, -0.58); muzzleGl.name = 'glow';
+  const grp = grip(0.08, 0.18, 0.09, dark, 0, -0.16, 0.24);
+  const stock = box(0.11, 0.15, 0.18, gun, 0, -0.03, 0.42);
+
+  return model([frame, barrel, rime, coolant, tankL, tankR, tankGl, tankGr, fan, muzzle, muzzleGl, grp, stock, mzAnchor(-0.6, 0.02)]);
+}
+
+/** APX-H5 "CONTAGION" — a NANITE dispersal cannon: a rotating carousel of nanomachine pods
+ *  vents a swarm through a dispersal aperture. Event: Nanite Swarm. */
+export function buildAPXH5Contagion(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.olive, tier);
+  const body = metal(COL.gunmetal, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0x7dff9a, tier, 2.4);
+
+  const frame = box(0.19, 0.18, 0.4, gun, 0, 0.01, 0.1);
+  const barrel = cylZ(0.045, 0.36, dark, 0, 0.03, -0.28);
+  const aperture = coneZ(0.13, 0.06, 0.18, steel, 0, 0.03, -0.42); // dispersal aperture
+  const apertureGl = cylZ(0.09, 0.02, gl, 0, 0.03, -0.5); apertureGl.name = 'glow';
+  // rotating POD CAROUSEL (forward-facing drum of nanite pods)
+  const carousel = new THREE.Group(); carousel.name = 'spin'; carousel.position.set(0, -0.02, 0.06);
+  carousel.add(cylZ(0.11, 0.12, steel, 0, 0, 0, 14));
+  carousel.add(cylZ(0.07, 0.13, dark, 0, 0, 0, 12));
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; carousel.add(capsuleZ(0.018, 0.05, body, Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0)); const led = box(0.02, 0.02, 0.02, gl, Math.cos(a) * 0.09, Math.sin(a) * 0.09, -0.07); led.name = 'glow'; carousel.add(led); }
+  const vents = tagGlow(ventSlats(4, 0.04, 0.02, 0.02, gl, 0.098, 0.08, 0.14), 'coil');
+  const grp = grip(0.078, 0.17, 0.088, dark, 0, -0.15, 0.22);
+  const stock = box(0.11, 0.14, 0.18, body, 0, -0.02, 0.4);
+
+  return model([frame, barrel, aperture, apertureGl, carousel, vents, grp, stock, mzAnchor(-0.52, 0.03)]);
+}
+
+/** APX-H6 "SUNDER" — a SHOCKWAVE projector: pressure accumulators discharge through a
+ *  concussion dish — it fires force, not a shell. Event: Shockwave Ring. */
+export function buildAPXH6Sunder(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.titanium, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xffc23a, tier, 2.4);
+
+  const frame = box(0.2, 0.2, 0.38, gun, 0, 0, 0.14);
+  const neck = cylZ(0.08, 0.2, steel, 0, 0.02, -0.06);
+  // wide concussion DISH (shallow forward cone) — the emitter
+  const dish = coneZ(0.22, 0.08, 0.16, steel, 0, 0.02, -0.24);
+  const dishRim = cylZ(0.23, 0.03, steel, 0, 0.02, -0.32, 24);
+  const emitterRing = cylZ(0.1, 0.03, gl, 0, 0.02, -0.28); emitterRing.name = 'glow'; // pulsing emitter
+  const emitterCore = capsuleZ(0.05, 0.06, gl, 0, 0.02, -0.16); emitterCore.name = 'glow';
+  // rotating RESONATOR behind the dish
+  const res = new THREE.Group(); res.name = 'spin'; res.position.set(0, 0.02, 0.04);
+  res.add(cylZ(0.075, 0.03, steel, 0, 0, 0, 6));
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; res.add(box(0.024, 0.06, 0.03, gl, Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0)); }
+  const accL = capsuleZ(0.05, 0.14, body, 0.13, -0.02, 0.16); // pressure accumulators
+  const accR = capsuleZ(0.05, 0.14, body, -0.13, -0.02, 0.16);
+  const grp = grip(0.082, 0.18, 0.092, dark, 0, -0.16, 0.26);
+  const stock = box(0.12, 0.16, 0.16, body, 0, -0.02, 0.44);
+
+  return model([frame, neck, dish, dishRim, emitterRing, emitterCore, res, accL, accR, grp, stock, mzAnchor(-0.4, 0.02)]);
+}
+
+/** APX-H7 "HELIOS" — a FUSION cannon: an open containment lattice cradles a blazing fusion
+ *  core focused down a hardened throat; orbiting arms rotate. Event: Fusion Storm. */
+export function buildAPXH7Helios(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.titanium, tier);
+  const body = metal(COL.gunmetal, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xf2f6ff, tier, 3.0);
+
+  const frame = box(0.18, 0.18, 0.4, gun, 0, 0, 0.12);
+  const throat = coneZ(0.12, 0.05, 0.22, steel, 0, 0.02, -0.42); // hardened focusing throat
+  const throatGl = cylZ(0.07, 0.02, gl, 0, 0.02, -0.52); throatGl.name = 'glow';
+  // open fusion CORE (blazing) held in the lattice
+  const core = capsuleZ(0.06, 0.06, gl, 0, 0.03, -0.16); core.name = 'glow';
+  const coreHalo = cylZ(0.1, 0.02, gl, 0, 0.03, -0.16, 20); coreHalo.name = 'glow';
+  // orbiting CONTAINMENT ARMS (rotate around the core)
+  const arms = new THREE.Group(); arms.name = 'spin'; arms.position.set(0, 0.03, -0.16);
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; const arm = box(0.02, 0.02, 0.22, steel, Math.cos(a) * 0.1, Math.sin(a) * 0.1, 0); arm.rotation.z = a; arms.add(arm); const tip = box(0.03, 0.03, 0.03, gl, Math.cos(a) * 0.1, Math.sin(a) * 0.1, -0.09); arms.add(tip); }
+  const collar = cylZ(0.09, 0.05, dark, 0, 0.03, 0.0);
+  const grp = grip(0.078, 0.18, 0.088, dark, 0, -0.15, 0.24);
+  const stock = box(0.1, 0.14, 0.18, body, 0, -0.02, 0.42);
+
+  return model([frame, throat, throatGl, core, coreHalo, arms, collar, grp, stock, mzAnchor(-0.56, 0.02)]);
+}
+
+/** APX-H8 "SALVO" — MICRO-MISSILE artillery: a honeycomb of tubes saturates a zone under a
+ *  rotating radar. Event: Saturation Barrage. */
+export function buildAPXH8Salvo(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.olive, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xff5a5a, tier, 2.4);
+
+  const frame = box(0.26, 0.2, 0.34, gun, 0, 0, 0.16);
+  // honeycomb MISSILE-TUBE cluster (grid of tubes with glowing tips)
+  const tubes = new THREE.Group();
+  const cols = [-0.08, 0, 0.08];
+  const rows = [-0.06, 0.02, 0.1];
+  for (const x of cols) for (const y of rows) { tubes.add(cylZ(0.028, 0.24, dark, x, y, -0.14, 8)); const tip = cylZ(0.026, 0.02, gl, x, y, -0.26, 8); tip.name = 'glow'; tubes.add(tip); }
+  const shroud = box(0.22, 0.22, 0.06, steel, 0, 0.02, -0.02);
+  // rotating RADAR dish on top
+  const radar = new THREE.Group(); radar.name = 'spin'; radar.position.set(0, 0.16, 0.06);
+  radar.add(coneZ(0.08, 0.02, 0.04, steel, 0, 0, 0));
+  radar.add(box(0.012, 0.09, 0.012, gl, 0, 0, -0.02));
+  const grp = grip(0.084, 0.18, 0.094, dark, 0, -0.16, 0.26);
+  const stock = box(0.13, 0.16, 0.16, body, 0, -0.02, 0.44);
+
+  return model([frame, tubes, shroud, radar, grp, stock, mzAnchor(-0.28, 0.02)]);
+}
+
+/** APX-H9 "AUGER" — a DRILL-MISSILE launcher: a rotating penetrator bit burrows before it
+ *  detonates beneath cover. Event: Seismic Rupture. */
+export function buildAPXH9Auger(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.burntSteel, tier);
+  const body = metal(COL.gunmetal, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xffa040, tier, 2.4);
+
+  const frame = box(0.21, 0.2, 0.42, gun, 0, 0, 0.12);
+  const breechGl = box(0.06, 0.06, 0.16, gl, 0, 0.02, 0.14); breechGl.name = 'glow';
+  const housing = cylZ(0.1, 0.34, steel, 0, 0.02, -0.16); // launch housing around the drill
+  // rotating DRILL BIT loaded in the muzzle (helical fins on a tapered core)
+  const drill = new THREE.Group(); drill.name = 'spin'; drill.position.set(0, 0.02, -0.34);
+  drill.add(coneZ(0.02, 0.07, 0.28, steel, 0, 0, 0)); // tapered core, point toward −Z
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2 * 2; const z = -0.1 + (i / 12) * 0.22; const r = 0.05 - (i / 12) * 0.03; const fin = box(0.02, 0.03, 0.02, i % 2 ? gl : dark, Math.cos(a) * r, Math.sin(a) * r, z); fin.rotation.z = a; drill.add(fin); }
+  const tipGl = coneZ(0.008, 0.02, 0.04, gl, 0, 0, -0.16); tipGl.name = 'glow';
+  drill.add(tipGl);
+  const vents = tagGlow(ventSlats(4, 0.045, 0.02, 0.02, gl, 0.108, 0.06, 0.14), 'coil');
+  const grp = grip(0.084, 0.19, 0.094, dark, 0, -0.17, 0.24);
+  const stock = box(0.12, 0.16, 0.18, body, 0, -0.03, 0.44);
+
+  return model([frame, breechGl, housing, drill, vents, grp, stock, mzAnchor(-0.6, 0.02)]);
+}
+
+/** APX-H10 "NEMESIS" — a REACTOR-MELTDOWN siege gun: exposed fuel rods vent an unstable core
+ *  that seeds a radiation field. Event: Radiation Zone. */
+export function buildAPXH10Nemesis(tier: RenderTier): THREE.Group {
+  const gun = metal(COL.gunmetal, tier);
+  const body = metal(COL.burntSteel, tier);
+  const dark = metal(COL.matteBlack, tier);
+  const steel = metal(COL.steel, tier);
+  const gl = accent(0xc8ff3a, tier, 2.6);
+
+  const frame = box(0.22, 0.2, 0.42, gun, 0, 0, 0.1);
+  // hazard-striped plating (alternating dark / glow bands)
+  const stripes = new THREE.Group();
+  for (let i = 0; i < 4; i++) { const b = box(0.05, 0.012, 0.4, i % 2 ? gl : dark, 0.1 - i * 0.02 * 0, 0.11, 0.06); b.position.x = -0.06 + i * 0.04; stripes.add(b); }
+  const barrel = cylZ(0.05, 0.4, dark, 0, 0.02, -0.3);
+  const muzzle = box(0.12, 0.12, 0.1, steel, 0, 0.02, -0.5);
+  const muzzleGl = cylZ(0.05, 0.02, gl, 0, 0.02, -0.54); muzzleGl.name = 'glow';
+  // exposed unstable REACTOR: a glowing meltdown core + venting fuel rods (rotating)
+  const core = capsuleZ(0.06, 0.08, gl, 0, 0.02, 0.06); core.name = 'glow';
+  const rods = new THREE.Group(); rods.name = 'spin'; rods.position.set(0, 0.02, 0.06);
+  rods.add(cylZ(0.1, 0.06, dark, 0, 0, 0, 8));
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; rods.add(cylZ(0.014, 0.14, steel, Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0, 6)); const cap = box(0.024, 0.024, 0.02, gl, Math.cos(a) * 0.09, Math.sin(a) * 0.09, -0.07); cap.name = 'glow'; rods.add(cap); }
+  const vents = tagGlow(ventSlats(4, 0.045, 0.02, 0.02, gl, 0.114, 0.06, 0.18), 'coil');
+  const grp = grip(0.084, 0.19, 0.094, dark, 0, -0.17, 0.24);
+  const stock = box(0.12, 0.16, 0.16, body, 0, -0.03, 0.44);
+
+  return model([frame, stripes, barrel, muzzle, muzzleGl, core, rods, vents, grp, stock, mzAnchor(-0.56, 0.02)]);
+}
