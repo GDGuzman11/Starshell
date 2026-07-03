@@ -166,6 +166,15 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
   const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
   const MAX_RESTARTS = 5;
   const [runActive, setRunActive] = useState(false); // a campaign is in progress (menu shows a live tracker instead of the run config)
+  const [gradReady, setGradReady] = useState(false); // Marine hit Level 5 with no division → one-time graduation
+
+  // Re-check division-graduation eligibility whenever we return to the menu (a
+  // level-clear may have promoted the Marine to Level 5).
+  useEffect(() => {
+    if (mode !== 'menu') return;
+    const m = loadMarine();
+    setGradReady(m.marineLevel >= 5 && !m.division);
+  }, [mode]);
 
   useEffect(() => {
     setIsTouch('ontouchstart' in window);
@@ -799,9 +808,18 @@ export function FpsGame({ initialRun, onRunSave, onRunEnd, onExit }: {
                 </button>
               </>
             )}
-            {/* Arsenal + Armory now live under the Loadout / Marine previews; Division is
-                info-only (Phase C). Central grid keeps Premium. */}
+            {/* Graduation nudge — appears once the Marine reaches Level 5 with no division. */}
+            {gradReady && (
+              <button type="button" onClick={() => setMode('division')} className="mt-4 min-h-[44px] w-full max-w-xs rounded-md border border-[#c8a8ff]/50 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase tracking-[0.1em] text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px] [animation:gdg-fade-in_0.5s_ease-out]">
+                ⬢ Graduation available — choose your division
+              </button>
+            )}
+            {/* Arsenal + Armory now live under the Loadout / Marine previews. Central grid
+                keeps Divisions (info / graduation) + Premium. */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <button type="button" onClick={() => setMode('division')} className="min-h-[40px] rounded-md border border-[#c8a8ff]/40 bg-[#c8a8ff]/10 px-6 font-pixel text-[9px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20 sm:text-[10px]">
+                ⬢ Divisions
+              </button>
               <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
               </button>
