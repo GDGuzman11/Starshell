@@ -23,6 +23,7 @@ import { SpatialGrid } from './fps/level/grid';
 import { buildNavGraph, type NavGraph } from './fps/level/nav';
 import { ProjectileSystem } from './fps/projectiles';
 import { TelegraphSystem } from './fps/telegraph';
+import { ThrowableFx } from './fps/fx/throwableFx';
 
 const RW = 480;
 const RH = 270;
@@ -249,6 +250,9 @@ export function useFpsLoop(
     let composer: ReturnType<typeof makeComposer> | null = null;
     // 3D first-person viewmodel (the selected gun), drawn over the world frame.
     let viewmodel: Viewmodel | null = null;
+    // Handcrafted throwable VFX (trails, detonations, lingering). Rebuilt per level
+    // with the world's scene; cosmetic only (gameplay resolves separately).
+    let throwFx: ThrowableFx | null = null;
     // DYNAMIC render resolution — the internal buffer matches the canvas aspect (so
     // a full-screen game never stretches) at a perf-scaled retro resolution (NEAREST
     // filter retained). renderScale flexes with measured FPS to hold a stable frame.
@@ -373,6 +377,8 @@ export function useFpsLoop(
       pickups.length = 0;
       projectiles.clear();
       telegraphs.clear();
+      throwFx?.dispose();
+      throwFx = null;
       for (const hz of bossHazards) clearMesh(hz.mesh);
       bossHazards.length = 0;
     };
@@ -381,6 +387,7 @@ export function useFpsLoop(
       disposeExtras();
       world?.dispose();
       world = buildWorld(g.level, tier);
+      throwFx = new ThrowableFx(world.scene, tier); // handcrafted throwable VFX for this level
       // (Re)build the spatial grid for this level's boxes.
       grid = SpatialGrid.build(g.level.boxes);
       // (Re)build the enemy nav graph for this level (grid-accelerated).
@@ -1087,12 +1094,21 @@ export function useFpsLoop(
             }
             gr.fuse -= dt;
             gr.mesh.position.set(gr.x, gr.y, gr.z);
+            throwFx?.trail(g.throwable.kind, gr.x, gr.y, gr.z, dt); // cosmetic in-flight trail
             if (gr.fuse <= 0) {
               const t = g.throwable;
               const cx = gr.x;
               const cy = gr.y;
               const cz = gr.z;
               sfx.playThrowable(t.id, 'blast'); // per-throwable detonation (all 12)
+              // FRAG: handcrafted "Battlefield Event" detonation (cosmetic) + a
+              // proximity-scaled camera punch. Other kinds keep their current visual
+              // until each gets its own signature (benchmark rollout).
+              if (t.kind === 'frag') {
+                throwFx?.detonate('frag', cx, cy, cz, t.blast.radius, t.color);
+                const near = Math.max(0, 1 - Math.hypot(cx - p.x, cz - p.z) / (t.blast.radius + 8));
+                if (near > 0) recoilKick = Math.min(0.22, recoilKick + near * 0.14);
+              }
               const blastAt = (bx: number, by: number, bz: number, dmg: number, radius: number): boolean => {
                 let any = false;
                 for (const e of g.enemies) {
@@ -1135,7 +1151,7 @@ export function useFpsLoop(
               }
               if (t.blast.dmg > 0 && t.blast.radius > 0) {
                 anyHit = blastAt(cx, cy, cz, t.blast.dmg, t.blast.radius) || anyHit;
-                spawnFlash(cx, cy, cz, t.blast.radius, t.color);
+                if (t.kind !== 'frag') spawnFlash(cx, cy, cz, t.blast.radius, t.color); // frag draws its own
               }
               // Cluster: a spread of smaller secondary blasts.
               if (t.cluster) {
@@ -1362,6 +1378,7 @@ export function useFpsLoop(
             f.mesh.scale.setScalar(f.r * (0.3 + age * 0.9));
             (f.mesh.material as THREE.MeshBasicMaterial).opacity = 1 - age;
           }
+          throwFx?.update(dt, now); // advance handcrafted throwable particles/decals
 
           // Launcher rounds: streak from muzzle to impact, pulsing, then vanish.
           for (let i = shells.length - 1; i >= 0; i--) {
