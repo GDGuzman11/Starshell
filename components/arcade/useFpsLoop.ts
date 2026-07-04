@@ -1094,20 +1094,24 @@ export function useFpsLoop(
             }
             gr.fuse -= dt;
             gr.mesh.position.set(gr.x, gr.y, gr.z);
-            throwFx?.trail(g.throwable.kind, gr.x, gr.y, gr.z, dt); // cosmetic in-flight trail
+            throwFx?.trail(g.throwable.kind, gr.x, gr.y, gr.z, dt, g.throwable.color); // cosmetic in-flight trail
             if (gr.fuse <= 0) {
               const t = g.throwable;
               const cx = gr.x;
               const cy = gr.y;
               const cz = gr.z;
               sfx.playThrowable(t.id, 'blast'); // per-throwable detonation (all 12)
-              // FRAG: handcrafted "Battlefield Event" detonation (cosmetic) + a
-              // proximity-scaled camera punch. Other kinds keep their current visual
-              // until each gets its own signature (benchmark rollout).
-              if (t.kind === 'frag') {
-                throwFx?.detonate('frag', cx, cy, cz, t.blast.radius, t.color);
-                const near = Math.max(0, 1 - Math.hypot(cx - p.x, cz - p.z) / (t.blast.radius + 8));
-                if (near > 0) recoilKick = Math.min(0.22, recoilKick + near * 0.14);
+              // Handcrafted "Battlefield Event" detonation VFX (cosmetic) + a
+              // proximity-scaled camera punch tuned per kind. All gameplay
+              // resolution below (damage/status/zone/pull/push) is unchanged.
+              {
+                const visR = t.blast.radius || t.zone?.radius || t.status?.radius || 4;
+                throwFx?.detonate(t.kind, cx, cy, cz, visR, t.color);
+                const punch = t.push ? 0.18 : t.blast.dmg >= 200 ? 0.16 : t.blast.dmg > 0 ? 0.1 : t.kind === 'flash' ? 0.06 : 0;
+                if (punch > 0) {
+                  const near = Math.max(0, 1 - Math.hypot(cx - p.x, cz - p.z) / (visR + 8));
+                  if (near > 0) recoilKick = Math.min(0.24, recoilKick + near * punch);
+                }
               }
               const blastAt = (bx: number, by: number, bz: number, dmg: number, radius: number): boolean => {
                 let any = false;
@@ -1127,13 +1131,6 @@ export function useFpsLoop(
                 }
                 return any;
               };
-              const spawnFlash = (bx: number, by: number, bz: number, radius: number, color: number) => {
-                if (!world) return;
-                const fm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color, transparent: true }));
-                fm.position.set(bx, by, bz);
-                world.scene.add(fm);
-                flashes.push({ mesh: fm, born: now, r: radius });
-              };
               let anyHit = false;
               // Gravity: yank enemies toward the center first.
               if (t.pull) {
@@ -1151,7 +1148,6 @@ export function useFpsLoop(
               }
               if (t.blast.dmg > 0 && t.blast.radius > 0) {
                 anyHit = blastAt(cx, cy, cz, t.blast.dmg, t.blast.radius) || anyHit;
-                if (t.kind !== 'frag') spawnFlash(cx, cy, cz, t.blast.radius, t.color); // frag draws its own
               }
               // Cluster: a spread of smaller secondary blasts.
               if (t.cluster) {
@@ -1159,7 +1155,6 @@ export function useFpsLoop(
                   const ox = cx + (Math.random() * 2 - 1) * t.blast.radius;
                   const oz = cz + (Math.random() * 2 - 1) * t.blast.radius;
                   anyHit = blastAt(ox, 0.6, oz, t.blast.dmg * 0.6, t.blast.radius * 0.7) || anyHit;
-                  spawnFlash(ox, 0.8, oz, t.blast.radius * 0.7, t.color);
                 }
               }
               // Concussion: shove enemies away.
@@ -1202,10 +1197,14 @@ export function useFpsLoop(
               // Lingering zones.
               if (t.zone && world) {
                 const z = t.zone;
+                // The gameplay record keeps a (now hidden) mesh for timing/teardown;
+                // the visible lingering effect is handcrafted by throwFx.lingering.
+                throwFx?.lingering(z.kind, cx, cz, z.radius, z.duration * 1000);
                 if (z.kind === 'smoke' || z.kind === 'gas') {
                   const sm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: t.color, transparent: true, opacity: 0.5, depthWrite: false }));
                   sm.position.set(cx, 1.6, cz);
                   sm.scale.setScalar(0.5);
+                  sm.visible = false; // visual handled by throwFx
                   world.scene.add(sm);
                   smokes.push({ x: cx, y: 1.6, z: cz, r: z.radius, until: now + z.duration * 1000, born: now, dur: z.duration * 1000, dps: z.dps ?? 0, mesh: sm });
                   if (z.kind === 'gas') sfx.gas();
@@ -1214,6 +1213,7 @@ export function useFpsLoop(
                   const zm = new THREE.Mesh(ballGeo, new THREE.MeshBasicMaterial({ color: t.color, transparent: true, opacity: 0.42, depthWrite: false }));
                   zm.position.set(cx, 0.3, cz);
                   zm.scale.set(z.radius, 0.3, z.radius);
+                  zm.visible = false; // visual handled by throwFx
                   world.scene.add(zm);
                   zones.push({ kind: z.kind, x: cx, z: cz, r: z.radius, born: now, until: now + z.duration * 1000, dps: z.dps ?? 0, slow: z.slow ?? 0, lure: z.lure ?? false, mesh: zm });
                   if (z.kind === 'fire') sfx.ignite();
