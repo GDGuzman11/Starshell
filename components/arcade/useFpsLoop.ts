@@ -102,6 +102,7 @@ export interface FpsSnapshot {
   mag: number;
   reserve: number;
   reloading: boolean;
+  reloadProgress: number; // 0..1 reload completion (for the reload button's ring)
   ads: boolean;
   scoped: boolean;
   heat?: number; // energy heat 0..1 (heat weapons only)
@@ -331,7 +332,7 @@ export function useFpsLoop(
     const pickups: { kind: 'ammo' | 'shield' | 'health'; x: number; z: number; mesh: THREE.Group; respawnT: number; born: number }[] = [];
     let lastSnap = 0;
     const snap: FpsSnapshot = {
-      health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, ads: false, scoped: false,
+      health: 100, maxHp: 100, armor: 0, maxArmor: 100, pickupAt: 0, weapon: '', family: '', mag: 0, reserve: 0, reloading: false, reloadProgress: 0, ads: false, scoped: false,
       slots: [], throwName: '', throwCount: 0, bosses: [], enemiesLeft: 0, status: 'playing', kills: 0, headshots: 0, shotsFired: 0, shotsHit: 0, dmgDealt: 0, hitAt: 0, headshotAt: 0, fireAt: 0, hurtAt: 0, flashAt: 0, stunAt: 0, fogAt: 0, grappleReady: false, radar: [],
     };
     const prevPos = { x: 0, z: 0 };
@@ -1775,6 +1776,7 @@ export function useFpsLoop(
           snap.mag = g.mags[g.active];
           snap.reserve = g.reserves[g.active];
           snap.reloading = g.reloading > 0;
+          snap.reloadProgress = g.reloading > 0 && gun.reload > 0 ? Math.max(0, Math.min(1, 1 - g.reloading / gun.reload)) : 0;
           snap.ads = g.ads;
           snap.scoped = gun.scoped;
           snap.heat = gun.heat ? heat.current : undefined;

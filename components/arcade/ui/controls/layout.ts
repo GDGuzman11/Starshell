@@ -50,10 +50,10 @@ export const DEFAULT_LAYOUT: ControlLayout = {
     // Right-edge column (up from the thumb).
     { id: 'jump', tier: 1, shape: 'roundsquare', icon: '⤒', label: 'JUMP', color: '#aef5c8', x: 8, y: 42, size: 64 },
     { id: 'reload', tier: 2, shape: 'rectangle', icon: '⟳', label: 'RELOAD', color: '#7fdfff', x: 11, y: 64, size: 50 },
-    // Inner fan (all above the gun's bottom-centre zone; spaced so nothing overlaps).
+    // Swap sits just LEFT of Reload (same row, small gap); the rest fan above the gun.
+    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 24, y: 64, size: 48 },
     { id: 'crouch', tier: 3, shape: 'minicircle', icon: '▼', label: 'CROUCH', color: '#aef5c8', x: 23, y: 40, size: 40 },
-    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 32, y: 53, size: 52 },
-    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 34, y: 70, size: 48 },
+    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 34, y: 50, size: 52 },
     { id: 'grapple', tier: 2, shape: 'angular', icon: '⟰', label: 'GRAPPLE', color: '#ffd27a', x: 45, y: 59, size: 50 },
   ],
 };

@@ -13,6 +13,8 @@ import type { CSSProperties } from 'react';
 import { FpsControls } from '../FpsControls';
 import { ShapeButton } from './ShapeButton';
 import type { ControlLayout, ControlButton } from './layout';
+import { deriveHudState, buttonState } from './combatState';
+import type { FpsSnapshot } from '../../useFpsLoop';
 
 export interface ControlActions {
   onMove: (strafe: number, fwd: number) => void;
@@ -31,18 +33,19 @@ export function TouchControls({
   layout,
   cfg,
   actions,
-  grappleReady,
+  snap,
   crouched,
 }: {
   layout: ControlLayout;
   cfg: { leftHanded: boolean; btnScale: number; joyOpacity: number };
   actions: ControlActions;
-  grappleReady: boolean;
+  snap: FpsSnapshot;
   crouched: boolean;
 }) {
   const fireLast = useRef({ x: 0, y: 0 });
   const left = cfg.leftHanded;
   const scale = cfg.btnScale;
+  const hud = deriveHudState(snap, typeof performance !== 'undefined' ? performance.now() : 0);
 
   // Centre each button on its (x from aim edge, y from bottom) point.
   const posOf = (b: ControlButton): CSSProperties => ({
@@ -83,9 +86,10 @@ export function TouchControls({
             width: fire.size * scale,
             height: fire.size * scale,
             color: fire.color,
+            opacity: buttonState('fire', hud).prominence,
             background: `radial-gradient(circle at 50% 40%, ${fire.color}2a, rgba(6,10,16,0.5))`,
             border: `2px solid ${fire.color}cc`,
-            boxShadow: `0 0 14px ${fire.color}44, inset 0 0 12px ${fire.color}22`,
+            boxShadow: `0 0 14px ${fire.color}${hud.enemyNear ? '77' : '44'}, inset 0 0 12px ${fire.color}22`,
             touchAction: 'none',
             ...posOf(fire),
           }}
@@ -94,17 +98,18 @@ export function TouchControls({
         </button>
       )}
 
-      {/* Shaped action buttons. */}
+      {/* Shaped action buttons, each with live Dynamic-Combat-HUD emphasis. */}
       {layout.buttons.filter((b) => b.id !== 'fire').map((b) => {
         const dyn = b.id === 'crouch' ? { ...b, icon: crouched ? '▲' : '▼', label: crouched ? 'STAND' : 'CROUCH' } : b;
-        const prominence = b.id === 'grapple' && !grappleReady ? 0.4 : 1;
+        const bs = buttonState(b.id, hud);
         return (
           <ShapeButton
             key={b.id}
             btn={dyn}
             scale={scale}
-            prominence={prominence}
-            pulse={b.id === 'grapple' && grappleReady}
+            prominence={bs.prominence}
+            pulse={bs.pulse}
+            cooldown={bs.cooldown}
             onDown={actionFor(b.id)}
             style={posOf(b)}
           />

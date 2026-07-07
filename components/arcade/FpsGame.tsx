@@ -716,7 +716,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
               <TouchControls
                 layout={layout}
                 cfg={{ leftHanded: cfg.leftHanded, btnScale: cfg.btnScale, joyOpacity: cfg.joyOpacity }}
-                grappleReady={snap.grappleReady}
+                snap={snap}
                 crouched={crouched}
                 actions={{
                   onMove: (s, f) => setMoveAxis(s, f),

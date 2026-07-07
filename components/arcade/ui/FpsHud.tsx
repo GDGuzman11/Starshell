@@ -1,6 +1,7 @@
 'use client';
 
 import type { FpsSnapshot } from '../useFpsLoop';
+import { deriveHudState } from './controls/combatState';
 
 // The gun is now a real 3D viewmodel (fps/viewmodel.ts). Flip to true to restore
 // the old flat 2D CSS gun + screen-centre muzzle flash.
@@ -19,16 +20,19 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
   const blind = Math.max(0, 1 - (now - snap.flashAt) / 1400); // flashbang white-out
   const stun = Math.max(0, 1 - (now - snap.stunAt) / 1300); // stun/concussion distortion
   const fog = Math.max(0, 1 - (now - snap.fogAt) / 4500); // Kraken void fog
+  const hud = deriveHudState(snap, now); // dynamic combat HUD emphasis
 
   // Radar geometry: a circular minimap, player centred, forward = up.
   const RAD = 40; // usable px radius
   const RAD_RANGE = 60; // world units shown to the edge
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 font-pixel text-white">
+    <div className="pointer-events-none absolute inset-0 z-30 font-pixel text-white transition-opacity duration-500" style={{ opacity: hud.inCombat ? 1 : 0.62 }}>
       {hurt && (
         <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 60px 20px rgba(255,40,60,0.55)' }} />
       )}
+      {/* boss encounter: a restrained red combat tint */}
+      {hud.boss && <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 100px 26px rgba(255,45,55,0.12)' }} />}
       {blind > 0 && <div aria-hidden className="absolute inset-0 bg-white" style={{ opacity: blind }} />}
       {fog > 0 && (
         <div
@@ -163,8 +167,11 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
         </div>
       )}
 
-      {/* health + overshield (glass) */}
-      <div className={`absolute bottom-4 left-4 rounded-lg border px-2.5 py-1.5 backdrop-blur-sm transition-colors duration-200 ${pickup ? 'border-[#aef5c8]/70 bg-[#aef5c8]/10' : 'border-white/10 bg-black/40'}`}>
+      {/* health + overshield (glass) — becomes visually dominant at low HP */}
+      <div
+        className={`absolute bottom-4 left-4 rounded-lg border px-2.5 py-1.5 backdrop-blur-sm transition-all duration-200 ${hud.lowHealth ? 'origin-bottom-left scale-110 border-[#ff5d6e] bg-[#ff5d6e]/15' : pickup ? 'border-[#aef5c8]/70 bg-[#aef5c8]/10' : 'border-white/10 bg-black/40'}`}
+        style={hud.lowHealth ? { boxShadow: '0 0 14px rgba(255,93,110,0.5)', opacity: 1 } : undefined}
+      >
         <div className="mb-1 flex items-center gap-1.5 text-[7px] text-white/55 sm:text-[8px]">
           <span>HP {Math.round(snap.health)}/{snap.maxHp}</span>
           {snap.armor > 0 && <span className="text-[#5ad0ff]">◆ {Math.round(snap.armor)}</span>}
