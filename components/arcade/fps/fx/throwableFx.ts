@@ -343,34 +343,38 @@ export class ThrowableFx {
   // ── FRAG signature ────────────────────────────────────────────────────────────
   private detonateFrag(x: number, y: number, z: number, r: number): void {
     const cy = y + 0.3;
-    // Twin flash: a white-hot core inside a violent orange bloom.
-    this.sprite(this.soft, 0xfff2d0, true, x, cy, z, 0, 0, 0, r * 0.2, r * 0.5, 1, 0, 90, true);
-    this.sprite(this.soft, 0xffb347, true, x, cy, z, 0, 0, 0, r * 0.45, r * 1.15, 1, 0, 150, true);
-    // Pressure shockwave — a fast flat ring punching past the blast radius.
-    this.ground(this.ring, 0xffd9a0, x, 0.16, z, r * 0.3, r * 1.7, 0.9, 0, 300);
-    // Heat shimmer — a faint quick additive swell.
-    this.sprite(this.soft, 0xffd9a0, true, x, cy, z, 0, 0, 0, r * 0.5, r * 1.05, 0.28, 0, 210);
+    // Layered FIREBALL that expands to ~the damage radius and lingers with real mass —
+    // a white-hot core, a bright orange bloom, a slower deep-flame roll, and rising
+    // black smoke (so it reads as a real explosion, not a firecracker).
+    this.sprite(this.soft, 0xfff2d0, true, x, cy, z, 0, 0, 0, r * 0.3, r * 0.9, 1, 0, 130, true); // white-hot core
+    this.sprite(this.soft, 0xffa542, true, x, cy, z, 0, 0.2, 0, r * 0.5, r * 1.8, 1, 0, 360, true); // orange bloom → ~damage radius
+    this.sprite(this.soft, 0xff6a1e, true, x, cy + 0.2, z, 0, 0.6, 0, r * 0.6, r * 1.9, 0.85, 0, 560, true); // deep flame roll
+    this.sprite(this.soft, 0x2b2620, false, x, cy + 0.3, z, 0, 0.7, 0, r * 0.7, r * 1.7, 0.7, 0, 950, true); // rolling black smoke (mass)
+    // Pressure shockwave — a fast flat ring punching to the blast edge.
+    this.ground(this.ring, 0xffd9a0, x, 0.16, z, r * 0.3, r * 2.0, 0.95, 0, 340);
+    // Heat shimmer — a faint additive swell.
+    this.sprite(this.soft, 0xffd9a0, true, x, cy, z, 0, 0, 0, r * 0.6, r * 1.3, 0.3, 0, 240);
     // Fragments — hundreds of glowing metal shards flung out with gravity + drag.
     this.burst(x, cy, z, Math.round(150 * this.q), 8, 18, 0.35, 0xff7a2a, 0.1, 780, 17, 2.1);
     // Sparks — faster, brighter, shorter-lived.
     this.burst(x, cy, z, Math.round(64 * this.q), 10, 24, 0.15, 0xffe08a, 0.07, 340, 10, 4);
     // Concrete chips kicked off the ground.
     this.burst(x, y + 0.15, z, Math.round(36 * this.q), 4, 11, 0.05, 0x8a7d6a, 0.05, 900, 22, 1.6);
-    // Dust dome — low grey-brown puffs billowing up and out.
-    const dust = Math.round(4 * this.q + 2);
+    // Dust dome — low grey-brown puffs billowing up and out to the blast edge.
+    const dust = Math.round(6 * this.q + 3);
     for (let i = 0; i < dust; i++) {
       const a = (i / dust) * Math.PI * 2 + Math.random();
-      const sp = 0.6 + Math.random() * 0.8;
-      this.sprite(this.soft, 0x6b5f52, false, x, y + 0.2, z, Math.cos(a) * sp, 0.5, Math.sin(a) * sp, r * 0.35, r * 0.95, 0.5, 0, 950 + Math.random() * 300);
+      const sp = 0.9 + Math.random() * 1.1;
+      this.sprite(this.soft, 0x6b5f52, false, x, y + 0.2, z, Math.cos(a) * sp, 0.5, Math.sin(a) * sp, r * 0.5, r * 1.5, 0.5, 0, 1050 + Math.random() * 350);
     }
-    // Lingering smoke column — a couple of dark puffs rising slowly.
-    for (let i = 0; i < 2; i++) {
-      this.sprite(this.soft, 0x4c463f, false, x + (Math.random() - 0.5) * 0.4, y + 0.5, z + (Math.random() - 0.5) * 0.4, 0, 0.5, 0, r * 0.4, r * 0.85, 0.42, 0, 1500 + i * 300);
+    // Lingering smoke column — dark puffs rising slowly.
+    for (let i = 0; i < 3; i++) {
+      this.sprite(this.soft, 0x4c463f, false, x + (Math.random() - 0.5) * 0.5, y + 0.5, z + (Math.random() - 0.5) * 0.5, 0, 0.5, 0, r * 0.5, r * 1.2, 0.42, 0, 1600 + i * 300);
     }
-    // Scorched ground decal.
-    this.ground(this.scorch, 0x120f0c, x, 0.06, z, r * 0.7, r * 0.95, 0.6, 0, 3600);
+    // Scorched ground decal (covers the kill zone).
+    this.ground(this.scorch, 0x120f0c, x, 0.06, z, r * 0.9, r * 1.35, 0.62, 0, 3600);
     // Muzzle-of-hell dynamic light.
-    this.addLight(x, cy, z, 0xff8a3a, 9, 170);
+    this.addLight(x, cy, z, 0xff8a3a, 14, 240);
   }
 
   // ── SMOKE: a small pressure pop; the cloud is the lingering emitter. ───────────

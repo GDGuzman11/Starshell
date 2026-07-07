@@ -50,6 +50,9 @@ const BURST_GAP = 0.07; // intra-burst round spacing (CB-02)
 // are their own mechanic).
 const HEADSHOT_MULT = 2.0;
 const HEAD_BAND = 0.45;
+// Self-damage: the player takes a fraction of a throwable's blast (falloff to the
+// edge) if caught in its AoE — dangerous but not always an instant kill.
+const PLAYER_BLAST_MULT = 0.55;
 const HEAT_SHOTS = 24; // energy shots to overheat (ER-08); vents ~2 s when idle
 const OVERHEAT_LOCK = 1.9; // overheat cooldown lockout seconds
 // How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),
@@ -1111,9 +1114,10 @@ export function useFpsLoop(
               // proximity-scaled camera punch tuned per kind. All gameplay
               // resolution below (damage/status/zone/pull/push) is unchanged.
               {
-                // VISUAL radius is bumped ~1.55× over the gameplay blast radius so
-                // detonations read as big battlefield events (damage radius unchanged).
-                const visR = (t.blast.radius || t.zone?.radius || t.status?.radius || 4) * 1.55;
+                // VISUAL radius roughly MATCHES the gameplay damage radius so the blast
+                // reflects its true area of effect (the meaty layered fireball reads as a
+                // real explosion, not a firecracker). Damage radius itself is unchanged.
+                const visR = (t.blast.radius || t.zone?.radius || t.status?.radius || 4) * 1.15;
                 throwFx?.detonate(t.kind, cx, cy, cz, visR, t.color);
                 const punch = t.push ? 0.18 : t.blast.dmg >= 200 ? 0.16 : t.blast.dmg > 0 ? 0.1 : t.kind === 'flash' ? 0.06 : 0;
                 if (punch > 0) {
@@ -1164,6 +1168,13 @@ export function useFpsLoop(
                   const oz = cz + (Math.random() * 2 - 1) * t.blast.radius;
                   anyHit = blastAt(ox, 0.6, oz, t.blast.dmg * 0.6, t.blast.radius * 0.7) || anyHit;
                 }
+              }
+              // The PLAYER takes AoE damage too if caught in a lethal blast (falloff to
+              // the edge; clusters scatter wider). Armor soaks it via hurtPlayer.
+              if (t.blast.dmg > 0 && t.blast.radius > 0) {
+                const pr = t.blast.radius * (t.cluster ? 1.7 : 1);
+                const pd = Math.hypot(cx - p.x, cz - p.z);
+                if (pd < pr) hurtPlayer(Math.round(t.blast.dmg * (1 - pd / pr) * PLAYER_BLAST_MULT));
               }
               // Concussion: shove enemies away.
               if (t.push) {
@@ -1255,6 +1266,7 @@ export function useFpsLoop(
                   if (e.health <= 0) onEnemyKilled(e);
                 }
               }
+              if (Math.hypot(p.x - s.x, p.z - s.z) < s.r) hurtPlayer(s.dps * dt); // player caught in the gas
             }
             if (now > s.until) {
               clearMesh(s.mesh);
@@ -1274,6 +1286,7 @@ export function useFpsLoop(
                   e.burnDps = z.dps;
                 }
               }
+              if (Math.hypot(p.x - z.x, p.z - z.z) < z.r) hurtPlayer(z.dps * dt); // player caught in the fire
             } else if (z.kind === 'cryo') {
               for (const e of g.enemies) {
                 if (e.health <= 0) continue;
