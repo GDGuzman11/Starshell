@@ -36,21 +36,24 @@ export interface ControlLayout {
 const LAYOUT_V = 1;
 const STORAGE_KEY = 'starshell.controls.layout';
 
-/** DEFAULT — an ergonomic thumb cluster: the Fire pad sits at the aim-thumb rest
- *  (bottom, aim side); Jump is chained just above it; the Tier-2 actions fan up
- *  and inward along the thumb arc; Zoom/Crouch are small and close. */
+/** DEFAULT — Fire is the big PRIMARY pad at the aim-thumb rest (bottom-right); the
+ *  other actions fan as an arc HUGGING the right edge (a right-edge column of the
+ *  most-chained actions + an inner fan), all kept OUT of the bottom-centre so they
+ *  never cover the gun view-model. x = % from the aim edge, y = % from the bottom. */
 export const DEFAULT_LAYOUT: ControlLayout = {
   v: LAYOUT_V,
   name: 'Default',
   buttons: [
-    { id: 'fire', tier: 1, shape: 'firepad', icon: '◎', label: 'FIRE', color: '#ff5d6e', x: 11, y: 15, size: 96 },
-    { id: 'jump', tier: 1, shape: 'roundsquare', icon: '⤒', label: 'JUMP', color: '#aef5c8', x: 9, y: 37, size: 74 },
-    { id: 'reload', tier: 2, shape: 'rectangle', icon: '⟳', label: 'RELOAD', color: '#7fdfff', x: 27, y: 33, size: 58 },
-    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 29, y: 16, size: 54 },
-    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 22, y: 50, size: 58 },
-    { id: 'grapple', tier: 2, shape: 'angular', icon: '⟰', label: 'GRAPPLE', color: '#ffd27a', x: 41, y: 44, size: 56 },
-    { id: 'zoom', tier: 3, shape: 'minicircle', icon: '⊙', label: 'ADS', color: '#7fdfff', x: 44, y: 26, size: 48 },
-    { id: 'crouch', tier: 3, shape: 'minicircle', icon: '▼', label: 'CROUCH', color: '#aef5c8', x: 10, y: 56, size: 48 },
+    // Primary + right-edge column (thumb rest → up the edge).
+    { id: 'fire', tier: 1, shape: 'firepad', icon: '◎', label: 'FIRE', color: '#ff5d6e', x: 8, y: 14, size: 104 },
+    { id: 'jump', tier: 1, shape: 'roundsquare', icon: '⤒', label: 'JUMP', color: '#aef5c8', x: 7, y: 34, size: 70 },
+    { id: 'reload', tier: 2, shape: 'rectangle', icon: '⟳', label: 'RELOAD', color: '#7fdfff', x: 10, y: 52, size: 54 },
+    { id: 'crouch', tier: 3, shape: 'minicircle', icon: '▼', label: 'CROUCH', color: '#aef5c8', x: 12, y: 67, size: 44 },
+    // Inner fan (all above the gun's bottom-centre zone).
+    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 23, y: 41, size: 54 },
+    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 25, y: 59, size: 50 },
+    { id: 'zoom', tier: 3, shape: 'minicircle', icon: '⊙', label: 'ADS', color: '#7fdfff', x: 37, y: 35, size: 44 },
+    { id: 'grapple', tier: 2, shape: 'angular', icon: '⟰', label: 'GRAPPLE', color: '#ffd27a', x: 36, y: 53, size: 52 },
   ],
 };
 
