@@ -25,8 +25,8 @@ export const DIM = {
   wallT: 0.5, // wall thickness
   wallH: 4, // standard wall height
   halfH: 2, // half wall
-  doorW: 2, // door width
-  doorH: 3, // door height
+  doorW: 3.4, // door width (wide enough for enemies to walk in/out comfortably)
+  doorH: 3.2, // door height
   windowH: 1.5,
   windowSill: 1, // sill height
   floorStep: 4, // vertical spacing between floors

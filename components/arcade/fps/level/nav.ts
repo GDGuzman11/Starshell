@@ -184,6 +184,45 @@ export function buildNavGraph(lvl: Level3D, grid?: SpatialGrid): NavGraph {
     connectLocal(b);
   }
 
+  // 4. Building INTERIORS — sample each module's ground floor + put a gateway node
+  //    on each doorway, so bots actually route INSIDE and through openings instead of
+  //    only skirting the outside. (Upper floors are reached via the ramp/ladder nodes
+  //    above; this fixes ground-level entry + interior maneuvering.)
+  for (const m of lvl.modules ?? []) {
+    const ground = m.floors[0];
+    if (ground && Math.abs(ground.y) < 0.6) {
+      const [x0, z0, x1, z1] = ground.rect;
+      const iw = x1 - x0;
+      const id_ = z1 - z0;
+      const cols = Math.max(1, Math.round(iw / 5.5));
+      const rows = Math.max(1, Math.round(id_ / 5.5));
+      for (let rr = 0; rr <= rows; rr++) {
+        for (let cc = 0; cc <= cols; cc++) {
+          const x = x0 + (iw * cc) / cols;
+          const z = z0 + (id_ * rr) / rows;
+          const boxes = grid ? grid.queryAABB(x - R_NAV, z - R_NAV, x + R_NAV, z + R_NAV) : lvl.boxes;
+          if (groundBlocked(boxes, x, z, R_NAV)) continue;
+          connectLocal(addNode(x, 0, z));
+        }
+      }
+    }
+    // Doorway gateways — an explicit passable link from just-inside to just-outside
+    // each ground door (guaranteed traversable even if the lattice misses the gap).
+    for (const d of m.doorways) {
+      if (Math.abs(d.y) > 0.6) continue;
+      const nx = m.cx - d.x;
+      const nz = m.cz - d.z;
+      const l = Math.hypot(nx, nz) || 1;
+      const ux = nx / l;
+      const uz = nz / l;
+      const inside = addNode(d.x + ux * 1.6, 0, d.z + uz * 1.6);
+      const outside = addNode(d.x - ux * 1.6, 0, d.z - uz * 1.6);
+      link(inside, outside, 'walk', 3.2); // the door itself is passable
+      connectLocal(inside);
+      connectLocal(outside);
+    }
+  }
+
   // Ziplines are intentionally NOT added as nav links — bots don't ride them yet
   // (player-only traversal), so routing over one would walk a bot off a rooftop.
   // They path via walk/ladder/ramp; bot zip-riding is a later polish add.

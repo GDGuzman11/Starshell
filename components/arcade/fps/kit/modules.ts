@@ -54,8 +54,8 @@ function edgeRails(boxes: Box[], cx: number, cz: number, W: number, D: number, y
 /** BARRACKS — a big 2-storey building: enclosed ground room (doorways front+back,
  *  windowed sides) with a central interior ramp up to an open railed firing deck. */
 export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 18;
-  const D = 16;
+  const W = 20;
+  const D = 18;
   const hw = W / 2;
   const hd = D / 2;
   doorwayWall(boxes, cx, cz - hd, W, 'x', DIM.wallH, 0); // front −z
@@ -94,7 +94,7 @@ export function barracksModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], 
  *  two central interior ramps switchbacking (front half then back half) up to an
  *  open railed sniper deck on top + a grapple point. */
 export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 18;
+  const W = 20;
   const hw = W / 2;
   const top = 2 * F; // sniper deck at 8 m
   // Corner columns full height.
@@ -141,7 +141,7 @@ export function watchTowerModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[]
  *  four sides (flankable), a central interior ramp up to an open 2nd-floor gallery
  *  deck (railed), a rooftop grapple point, and ground cover. The map's anchor. */
 export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 24;
+  const W = 26;
   const hw = W / 2;
   doorwayWall(boxes, cx, cz - hw, W, 'x', DIM.wallH, 0);
   doorwayWall(boxes, cx, cz + hw, W, 'x', DIM.wallH, 0);
@@ -188,8 +188,8 @@ export function commandCenterModule(boxes: Box[], _ladders: Ladder[], ramps: Ram
  *  front doorway, interior switchback ramps up through floor openings, and a flat
  *  railed roof + grapple point. The bread-and-butter of the city grid. */
 export function apartmentBlockModule(boxes: Box[], _ladders: Ladder[], ramps: Ramp[], gps: GP, cx: number, cz: number, levels = 3): ModuleMeta {
-  const W = 20;
-  const D = 16;
+  const W = 22;
+  const D = 18;
   const hw = W / 2;
   const hd = D / 2;
   const top = levels * F;
@@ -217,7 +217,7 @@ export function apartmentBlockModule(boxes: Box[], _ladders: Ladder[], ramps: Ra
 /** RUIN — a bombed-out Stalingrad shell: perimeter walls blown into gapped
  *  segments of varied height, an exposed 2nd-floor fragment, and rubble heaped
  *  inside + around. Pure cover + a broken climb; no clean roof/grapple. */
-export function ruinModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gps: GP, cx: number, cz: number, rand: () => number, W = 18, D = 16): ModuleMeta {
+export function ruinModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gps: GP, cx: number, cz: number, rand: () => number, W = 20, D = 18): ModuleMeta {
   const hw = W / 2;
   const hd = D / 2;
   const brokenWall = (x: number, z: number, len: number, along: 'x' | 'z') => {
@@ -263,7 +263,7 @@ export function ruinModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gp
 /** BUNKER — ground-level cover: a U of half-walls with a low hard head-cover roof
  *  + a crate. No verticality; a strongpoint to fight from/around. */
 export function bunkerModule(boxes: Box[], _ladders: Ladder[], _ramps: Ramp[], _gps: GP, cx: number, cz: number): ModuleMeta {
-  const W = 10;
+  const W = 12;
   const hw = W / 2;
   const h = DIM.halfH; // 2 m walls
   halfWall(boxes, cx, cz + hw, W, 'x', 0); // back
