@@ -11,6 +11,8 @@
 import * as THREE from 'three';
 import type { RenderTier } from './materials';
 import { buildGun, disposeModel } from './models';
+import { buildEngineeredGun } from './arsenal/partModel';
+import type { EngPart } from './arsenal/parts';
 
 // Rest pose + framing — all one-line tunable (bottom-right, barrel angled inward).
 const REST = { x: 0.2, y: -0.17, z: -0.36, ry: 0.16, rx: 0.03, size: 0.52 };
@@ -58,12 +60,14 @@ export class Viewmodel {
     this.holder.add(this.flash);
   }
 
-  setGun(id: string): void {
+  setGun(id: string, parts?: EngPart[]): void {
     if (this.model) {
       this.holder.remove(this.model);
       disposeModel(this.model);
     }
-    const m = buildGun(id, this.tier);
+    // Build the ENGINEERED model when components are equipped so installed parts are
+    // visible first-person (same builder the loadout preview uses); else the base gun.
+    const m = parts && parts.length > 0 ? buildEngineeredGun(id, this.tier, parts) : buildGun(id, this.tier);
     // Normalize to a consistent on-screen size + centre at the holder origin.
     const bbox = new THREE.Box3().setFromObject(m);
     const size = bbox.getSize(new THREE.Vector3());

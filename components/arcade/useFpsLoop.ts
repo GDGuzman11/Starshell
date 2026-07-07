@@ -15,6 +15,7 @@ import { buildBossModel, buildDestructibleModel } from './fps/boss/models';
 import { poseBossDeath, poseBossModel } from './fps/boss/animator';
 import { MINIONS, buildMinionModel, poseMinion } from './fps/boss/minions';
 import type { GunDef, ThrowDef } from './fps/weapons';
+import type { EngPart } from './fps/arsenal/parts';
 import { sfx } from './engine/audio';
 import { makeComposer } from './fps/postfx';
 import { Viewmodel } from './fps/viewmodel';
@@ -65,6 +66,7 @@ export interface FpsGameState {
   enemies: Enemy[];
   difficulty: Difficulty;
   guns: GunDef[];
+  gunParts?: EngPart[][]; // equipped components per gun (parallel to guns) → shown on the viewmodel
   active: number;
   mags: number[];
   reserves: number[];
@@ -418,7 +420,7 @@ export function useFpsLoop(
       }
       // Build the viewmodel once; (re)load the active gun for this level.
       if (!viewmodel) viewmodel = new Viewmodel(tier, RW / RH);
-      viewmodel.setGun(g.guns[g.active].id);
+      viewmodel.setGun(g.guns[g.active].id, g.gunParts?.[g.active]);
       resize(); // size the new composer/viewmodel to the live canvas
       const mk = (canvas2: HTMLCanvasElement) => {
         const t = new THREE.CanvasTexture(canvas2);
@@ -715,7 +717,7 @@ export function useFpsLoop(
             g.reloading = 0;
             g.fireCd = 0.22;
             zoomLevel.current = 0; // swapping weapons drops you back to the hip
-            viewmodel?.setGun(g.guns[g.active].id);
+            viewmodel?.setGun(g.guns[g.active].id, g.gunParts?.[g.active]);
             sfx.swap();
           }
           const gun = g.guns[g.active];

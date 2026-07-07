@@ -24,7 +24,7 @@ import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, assignSquadHomes, fireteamCount, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
-import { applyEngineering } from './fps/arsenal/parts';
+import { applyEngineering, type EngPart } from './fps/arsenal/parts';
 import { loadArsenal, saveArsenal, equippedParts, serviceFor, recordOperation } from './fps/arsenal/store';
 import { loadMarine, saveMarine, equippedArmorPieces, recordArmorOperation } from './fps/marine/store';
 import { emitProgressChanged } from './lib/progressEvent';
@@ -341,9 +341,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       // Deploy stats = base → per-run GOLD upgrades → PERMANENT engineering parts +
       // the weapon's small familiarity milestone bonus.
       const arsenal = loadArsenal();
+      const gunParts: EngPart[][] = [];
       const guns = [gunById(lo.p1), gunById(lo.p2), gunById(lo.sa)].map((g) => {
         const withGold = applyUpgrades(g, ups[g.id]);
         const parts = equippedParts(arsenal, g.id, g.family);
+        gunParts.push(parts); // keep the parts list so the viewmodel can render the components
         const famDmg = milestoneBonus(serviceFor(arsenal, g.id).xp).dmg;
         return applyEngineering(withGold, parts, famDmg);
       });
@@ -376,6 +378,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
         enemies: mobs,
         difficulty: diff,
         guns,
+        gunParts,
         active: 0,
         mags: guns.map((g) => g.mag),
         reserves: guns.map((g) => g.reserve),
