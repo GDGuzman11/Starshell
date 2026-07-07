@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CRTFrame } from './ui/CRTFrame';
 import { FpsControls } from './ui/FpsControls';
 import { FpsHud } from './ui/FpsHud';
@@ -726,29 +726,35 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                 >
                   FIRE
                 </button>
-                {/* Big action buttons, opposite the joystick, clear of the aim region. */}
-                <div className={`pointer-events-none absolute bottom-4 z-40 flex flex-col gap-2 ${cfg.leftHanded ? 'left-3 items-start' : 'right-3 items-end'}`}>
-                  <div className="flex gap-2">
-                    <TouchBtn onTap={() => { const n = !crouched; setCrouched(n); setCrouch(n); }} label={crouched ? 'STAND' : 'CROUCH'} color="#aef5c8" scale={cfg.btnScale} />
-                    <TouchBtn onTap={reload} label="RELOAD" color="#7fdfff" scale={cfg.btnScale} />
-                    <TouchBtn onTap={() => cycleWeapon(1)} label="WPN ▸" color="#ffffff" scale={cfg.btnScale} />
-                  </div>
-                  <div className="flex gap-2">
-                    <TouchBtn onTap={() => cycleZoom()} label="ZOOM" color="#7fdfff" scale={cfg.btnScale} />
-                    <TouchBtn onTap={() => throwGrenade()} label="NADE" color="#ffae3a" scale={cfg.btnScale} />
-                  </div>
-                  <div className="flex gap-2">
-                    <TouchBtn onTap={() => grapple()} label={snap.grappleReady ? '⟰ GO!' : 'GRAPPLE'} color={snap.grappleReady ? '#ffd27a' : '#7fdfff'} scale={cfg.btnScale} />
-                    <button
-                      type="button"
-                      onPointerDown={jump}
-                      className="pointer-events-auto flex items-center justify-center rounded-2xl border border-[#aef5c8]/40 bg-[#aef5c8]/10 font-pixel text-[9px] text-[#aef5c8] backdrop-blur-sm active:bg-[#aef5c8]/25"
-                      style={{ width: 80 * cfg.btnScale, height: 64 * cfg.btnScale }}
-                    >
-                      JUMP
-                    </button>
-                  </div>
-                </div>
+                {/* COD-style action cluster: a big JUMP anchor at the corner + a thumb ARC
+                    of circular icon buttons fanning up-and-inward, plus a contextual GRAPPLE
+                    that only appears when a rooftop hook is aimable. */}
+                {(() => {
+                  const s = cfg.btnScale;
+                  const left = cfg.leftHanded;
+                  const R = 116 * s; // arc radius
+                  const base = 16; // corner inset for the JUMP anchor
+                  const pos = (r: number, b: number): CSSProperties => (left ? { left: r, bottom: b } : { right: r, bottom: b });
+                  const arc = [
+                    { icon: '⟳', label: 'RELOAD', color: '#7fdfff', onTap: reload },
+                    { icon: '◎', label: 'ADS', color: '#7fdfff', onTap: () => cycleZoom() },
+                    { icon: '✷', label: 'NADE', color: '#ffae3a', onTap: () => throwGrenade() },
+                    { icon: '⇄', label: 'SWAP', color: '#ffffff', onTap: () => cycleWeapon(1) },
+                    { icon: crouched ? '▲' : '▼', label: crouched ? 'STAND' : 'CROUCH', color: '#aef5c8', onTap: () => { const n = !crouched; setCrouched(n); setCrouch(n); } },
+                  ];
+                  return (
+                    <div className={`pointer-events-none absolute bottom-0 z-40 ${left ? 'left-0' : 'right-0'}`} style={{ width: R + 130 * s, height: R + 130 * s }}>
+                      <TouchBtn onTap={jump} icon="⤒" label="JUMP" color="#aef5c8" scale={s} size={74} style={pos(base, base)} />
+                      {arc.map((b, i) => {
+                        const ang = (i / (arc.length - 1)) * (Math.PI * 0.52) + Math.PI * 0.02; // fan from ~up to ~left
+                        return <TouchBtn key={b.label} onTap={b.onTap} icon={b.icon} label={b.label} color={b.color} scale={s} size={50} style={pos(base + 10 + Math.sin(ang) * R, base + 16 + Math.cos(ang) * R)} />;
+                      })}
+                      {snap.grappleReady && (
+                        <TouchBtn onTap={() => grapple()} icon="⟰" label="GRAPPLE" color="#ffd27a" scale={s} size={60} style={pos(base + R * 0.42, base + R * 0.5)} />
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
             {!isTouch && (
@@ -1279,15 +1285,20 @@ function RunStatsCard({
 }
 
 /** A large glass action button for touch (fires on press, not click). */
-function TouchBtn({ onTap, label, color, scale = 1 }: { onTap: () => void; label: string; color: string; scale?: number }) {
+/** A circular COD-style touch button: a big icon glyph + a tiny label, absolutely
+ *  positioned by the caller-supplied `style`. */
+function TouchBtn({ onTap, icon, label, color, scale = 1, size = 54, style }: { onTap: () => void; icon: string; label?: string; color: string; scale?: number; size?: number; style?: CSSProperties }) {
+  const d = size * scale;
   return (
     <button
       type="button"
       onPointerDown={onTap}
-      className="pointer-events-auto flex items-center justify-center rounded-2xl border bg-black/40 font-pixel text-[8px] backdrop-blur-sm active:brightness-150"
-      style={{ borderColor: `${color}66`, color, width: 64 * scale, height: 64 * scale }}
+      aria-label={label ?? icon}
+      className="pointer-events-auto absolute flex flex-col items-center justify-center rounded-full border bg-black/45 font-pixel leading-none backdrop-blur-sm active:brightness-150"
+      style={{ borderColor: `${color}88`, color, width: d, height: d, boxShadow: `0 0 8px ${color}22`, ...style }}
     >
-      {label}
+      <span style={{ fontSize: 17 * scale }}>{icon}</span>
+      {label && <span style={{ fontSize: 6 * scale, marginTop: 2, letterSpacing: 0.5 }}>{label}</span>}
     </button>
   );
 }
