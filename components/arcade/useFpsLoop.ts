@@ -1652,7 +1652,7 @@ export function useFpsLoop(
           const pe = prevEnemyXZ[i] ?? { x: e.x, z: e.z };
           const moveSpeed = Math.hypot(e.x - pe.x, e.z - pe.z) / Math.max(dt, 0.001);
           prevEnemyXZ[i] = { x: e.x, z: e.z };
-          const moving = moveSpeed > 1.4;
+          const moving = moveSpeed > 0.5; // lower gate so strafing/orbiting bots still visibly walk
 
           if (e.boss) {
             if (s instanceof THREE.Sprite) {

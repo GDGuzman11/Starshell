@@ -1592,6 +1592,25 @@ export function updateEnemies(
     const role = CLASS[e.cls];
     const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
 
+    // SEPARATION — spread the squad so they don't single-file the same A* route or
+    // clump into an easy line for the player to pick off. Wider + stronger than the
+    // old standoff-only nudge; blended into every movement branch below.
+    let sepX = 0;
+    let sepZ = 0;
+    for (let j = 0; j < enemies.length; j++) {
+      const a = enemies[j];
+      if (j === i || a.health <= 0 || a.boss) continue;
+      const dx = e.x - a.x;
+      const dz = e.z - a.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < 20.25 && d2 > 0.0001) { // within 4.5 m
+        const d = Math.sqrt(d2);
+        const w = (4.5 - d) / 4.5; // stronger the closer they are
+        sepX += (dx / d) * w;
+        sepZ += (dz / d) * w;
+      }
+    }
+
     // HEALER (engineer): roam to the MOST-WOUNDED squadmate and mend them with a
     // green beam (health first, then shield). Only when someone actually needs it —
     // otherwise it falls through to normal hang-back support behaviour.
@@ -1682,13 +1701,19 @@ export function updateEnemies(
       const distTgt = Math.hypot(tgt.x - e.x, tgt.z - e.z);
       if (nav && distTgt > NAV_NEAR) {
         const tgtY = player.y > e.y + 2 ? player.y : 0;
-        const nf = navFollow(e, nav, lvl, tgt.x, tgt.z, tgtY, P.speed * role.speedMul * slow, dt, grid);
+        // Approach from a SPREAD bearing (per squad slot) so the team surrounds and
+        // corners the player from different sides instead of single-filing to one spot.
+        const off = ((slot[i] % 5) - 2) * 4; // −8..+8 m lateral offset on the goal
+        const pl2 = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
+        const gX = tgt.x + (-(tgt.z - e.z) / pl2) * off;
+        const gZ = tgt.z + ((tgt.x - e.x) / pl2) * off;
+        const nf = navFollow(e, nav, lvl, gX, gZ, tgtY, P.speed * role.speedMul * slow, dt, grid);
         if (nf === 'climb') {
           fireAt(e, sees[i]);
           continue;
         }
         if (nf) {
-          moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * (boosted ? 1.15 : 1) * slow, dt, R, grid);
+          moveEnemy(e, lvl, nf.wx + sepX * 0.5, nf.wz + sepZ * 0.5, P.speed * role.speedMul * (boosted ? 1.15 : 1) * slow, dt, R, grid);
           fireAt(e, sees[i]);
           continue;
         }
@@ -1721,22 +1746,16 @@ export function updateEnemies(
         wx = 0;
         wz = 0;
       }
-      // orbit/strafe once roughly in position
-      const orbit = (md > 0.6 ? 0.25 : 1) * role.strafe * (boosted ? 1.6 : 1);
+      // orbit/strafe once roughly in position. With no live sight, orbit HARDER so the
+      // bot sweeps/scans around the last-known spot ("looking for you") instead of
+      // standing still on it.
+      const scan = !sees[i] ? 1.5 : 1;
+      const orbit = (md > 0.6 ? 0.25 : 1) * role.strafe * (boosted ? 1.6 : 1) * scan;
       wx += -Math.sin(baseAng) * e.side * orbit;
       wz += Math.cos(baseAng) * e.side * orbit;
-      // spacing — push off nearby allies so they don't clump
-      for (let j = 0; j < enemies.length; j++) {
-        if (j === i || enemies[j].health <= 0) continue;
-        const dx = e.x - enemies[j].x;
-        const dz = e.z - enemies[j].z;
-        const d2 = dx * dx + dz * dz;
-        if (d2 < 9 && d2 > 0.0001) {
-          const d = Math.sqrt(d2);
-          wx += (dx / d) * 0.5;
-          wz += (dz / d) * 0.5;
-        }
-      }
+      // spacing — push off nearby allies (shared separation vector) so they don't clump
+      wx += sepX * 0.8;
+      wz += sepZ * 0.8;
       // WALL DISCIPLINE: while shooting, ease off any wall so the firing lane stays
       // clean; if hit but currently blind, BREAK FOR COVER rather than stand exposed.
       if (sees[i]) {
@@ -1778,9 +1797,9 @@ export function updateEnemies(
       if (nf === 'climb') {
         // climb system moved the bot toward a vertical link on the route
       } else if (nf) {
-        moveEnemy(e, lvl, nf.wx, nf.wz, hsp, dt, R, grid);
+        moveEnemy(e, lvl, nf.wx + sepX * 0.5, nf.wz + sepZ * 0.5, hsp, dt, R, grid);
       } else {
-        moveEnemy(e, lvl, gx2 - e.x, gz2 - e.z, hsp, dt, R, grid);
+        moveEnemy(e, lvl, gx2 - e.x + sepX * 0.5, gz2 - e.z + sepZ * 0.5, hsp, dt, R, grid);
       }
     }
   }
