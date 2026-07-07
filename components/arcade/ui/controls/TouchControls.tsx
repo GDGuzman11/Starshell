@@ -12,7 +12,7 @@ import { useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { FpsControls } from '../FpsControls';
 import { ShapeButton } from './ShapeButton';
-import type { ControlLayout, ControlButton } from './layout';
+import { cbColor, type ControlLayout, type ControlButton } from './layout';
 import { deriveHudState, buttonState } from './combatState';
 import type { FpsSnapshot } from '../../useFpsLoop';
 
@@ -37,7 +37,7 @@ export function TouchControls({
   crouched,
 }: {
   layout: ControlLayout;
-  cfg: { leftHanded: boolean; btnScale: number; joyOpacity: number };
+  cfg: { leftHanded: boolean; btnScale: number; joyOpacity: number; highContrast?: boolean; colorblind?: boolean };
   actions: ControlActions;
   snap: FpsSnapshot;
   crouched: boolean;
@@ -45,6 +45,8 @@ export function TouchControls({
   const fireLast = useRef({ x: 0, y: 0 });
   const left = cfg.leftHanded;
   const scale = cfg.btnScale;
+  const hc = !!cfg.highContrast;
+  const cb = !!cfg.colorblind;
   const hud = deriveHudState(snap, typeof performance !== 'undefined' ? performance.now() : 0);
 
   // Centre each button on its (x from aim edge, y from bottom) point.
@@ -85,11 +87,11 @@ export function TouchControls({
           style={{
             width: fire.size * scale,
             height: fire.size * scale,
-            color: fire.color,
-            opacity: buttonState('fire', hud).prominence,
-            background: `radial-gradient(circle at 50% 40%, ${fire.color}2a, rgba(6,10,16,0.5))`,
-            border: `2px solid ${fire.color}cc`,
-            boxShadow: `0 0 14px ${fire.color}${hud.enemyNear ? '77' : '44'}, inset 0 0 12px ${fire.color}22`,
+            color: cbColor(fire.color, cb),
+            opacity: hc ? Math.max(0.65, buttonState('fire', hud).prominence) : buttonState('fire', hud).prominence,
+            background: `radial-gradient(circle at 50% 40%, ${cbColor(fire.color, cb)}2a, rgba(6,10,16,${hc ? 0.7 : 0.5}))`,
+            border: `${hc ? 3 : 2}px solid ${cbColor(fire.color, cb)}${hc ? 'ff' : 'cc'}`,
+            boxShadow: `0 0 14px ${cbColor(fire.color, cb)}${hud.enemyNear ? '77' : '44'}, inset 0 0 12px ${cbColor(fire.color, cb)}22`,
             touchAction: 'none',
             ...posOf(fire),
           }}
@@ -105,8 +107,9 @@ export function TouchControls({
         return (
           <ShapeButton
             key={b.id}
-            btn={dyn}
+            btn={{ ...dyn, color: cbColor(dyn.color, cb) }}
             scale={scale}
+            highContrast={hc}
             prominence={bs.prominence}
             pulse={bs.pulse}
             cooldown={bs.cooldown}

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CRTFrame } from './ui/CRTFrame';
 import { TouchControls } from './ui/controls/TouchControls';
+import { LayoutEditor } from './ui/controls/LayoutEditor';
 import { loadLayout, type ControlLayout, DEFAULT_LAYOUT } from './ui/controls/layout';
 import { FpsHud } from './ui/FpsHud';
 import { FpsLoadout } from './screens/FpsLoadout';
@@ -151,8 +152,9 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [iosNoFs, setIosNoFs] = useState(false); // iPhone Safari: no web-fullscreen API at all
   const [iosHint, setIosHint] = useState(false); // show the "Add to Home Screen" instructions
   const [showSettings, setShowSettings] = useState(false);
-  const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85 });
+  const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85, highContrast: false, colorblind: false });
   const [layout, setLayout] = useState<ControlLayout>(DEFAULT_LAYOUT);
+  const [showEditor, setShowEditor] = useState(false);
   const [dev, setDev] = useState(false); // dev tools (npm run dev only)
   const [god, setGodState] = useState(false); // dev god-mode (invincible)
   const godRef = useRef(false);
@@ -715,7 +717,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             {isTouch && (
               <TouchControls
                 layout={layout}
-                cfg={{ leftHanded: cfg.leftHanded, btnScale: cfg.btnScale, joyOpacity: cfg.joyOpacity }}
+                cfg={{ leftHanded: cfg.leftHanded, btnScale: cfg.btnScale, joyOpacity: cfg.joyOpacity, highContrast: cfg.highContrast, colorblind: cfg.colorblind }}
                 snap={snap}
                 crouched={crouched}
                 actions={{
@@ -1065,11 +1067,26 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                   <Toggle label="Left-handed" on={cfg.leftHanded} onToggle={() => setCfg((c) => ({ ...c, leftHanded: !c.leftHanded }))} />
                   <Slider label="Joystick Opacity" value={cfg.joyOpacity} min={0.2} max={1} step={0.1} onChange={(v) => setCfg((c) => ({ ...c, joyOpacity: v }))} />
                   <Slider label="Button Size" value={cfg.btnScale} min={0.8} max={1.5} step={0.1} onChange={(v) => setCfg((c) => ({ ...c, btnScale: v }))} />
+                  <Toggle label="High Contrast" on={cfg.highContrast} onToggle={() => setCfg((c) => ({ ...c, highContrast: !c.highContrast }))} />
+                  <Toggle label="Colourblind-safe" on={cfg.colorblind} onToggle={() => setCfg((c) => ({ ...c, colorblind: !c.colorblind }))} />
+                  <button type="button" onClick={() => { setShowSettings(false); setShowEditor(true); }} className="flex min-h-[38px] w-full items-center justify-between rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-3 font-pixel text-[8px] uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20 sm:text-[9px]">
+                    <span>Edit Controls Layout</span>
+                    <span>▸</span>
+                  </button>
                 </>
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {showEditor && (
+        <LayoutEditor
+          initial={layout}
+          cfg={{ leftHanded: cfg.leftHanded, btnScale: cfg.btnScale, highContrast: cfg.highContrast, colorblind: cfg.colorblind }}
+          onSave={(l) => setLayout(l)}
+          onExit={() => setShowEditor(false)}
+        />
       )}
     </div>
   );

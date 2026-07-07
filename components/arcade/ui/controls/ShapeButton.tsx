@@ -28,8 +28,12 @@ export function ShapeButton({
   pulse = false,
   cooldown = 0,
   disabled = false,
+  highContrast = false,
   onDown,
   onUp,
+  onSelect,
+  onDragMove,
+  selected = false,
   style,
 }: {
   btn: ControlButton;
@@ -38,8 +42,12 @@ export function ShapeButton({
   pulse?: boolean; // subtle attention pulse
   cooldown?: number; // 0..1 → radial progress ring (e.g. reload)
   disabled?: boolean;
+  highContrast?: boolean;
   onDown: () => void;
   onUp?: () => void;
+  onSelect?: () => void; // editor: select this button
+  onDragMove?: (clientX: number, clientY: number) => void; // editor: drag to move
+  selected?: boolean; // editor: highlighted
   style?: CSSProperties; // absolute positioning from the layer
 }) {
   const S = SHAPES[btn.shape];
@@ -47,27 +55,35 @@ export function ShapeButton({
   const w = h * (S.w / S.h);
   const c = btn.color;
   const clipped = !!S.clip;
-  const op = disabled ? 0.4 : Math.max(0.28, prominence) * (btn.opacity ?? 1);
+  const editing = !!onDragMove;
+  const minOp = highContrast ? 0.62 : 0.28;
+  const op = disabled ? 0.4 : editing ? 1 : Math.max(minOp, prominence) * (btn.opacity ?? 1);
+  const bw = highContrast ? 2.5 : 1.5;
 
   return (
     <button
       type="button"
       aria-label={btn.label || btn.id}
-      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); onDown(); }}
+      onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); if (editing) onSelect?.(); else onDown(); }}
+      onPointerMove={editing ? (e) => onDragMove?.(e.clientX, e.clientY) : undefined}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      className={`pointer-events-auto absolute z-40 flex select-none flex-col items-center justify-center font-pixel leading-none transition-transform active:scale-90 ${pulse && !disabled ? 'animate-pulse' : ''}`}
+      className={`pointer-events-auto absolute z-40 flex select-none flex-col items-center justify-center font-pixel leading-none transition-transform ${editing ? 'cursor-move' : 'active:scale-90'} ${pulse && !disabled && !editing ? 'animate-pulse' : ''}`}
       style={{
         width: w,
         height: h,
         color: c,
         opacity: op,
         filter: disabled ? 'grayscale(0.8)' : undefined,
-        background: `radial-gradient(circle at 50% 38%, ${c}22, rgba(6,10,16,0.62))`,
-        border: clipped ? undefined : `1.5px solid ${c}cc`,
+        background: `radial-gradient(circle at 50% 38%, ${c}${highContrast ? '33' : '22'}, rgba(6,10,16,${highContrast ? 0.75 : 0.62}))`,
+        border: clipped ? undefined : `${bw}px solid ${c}${highContrast ? 'ff' : 'cc'}`,
         borderRadius: S.radius,
         clipPath: S.clip,
-        boxShadow: clipped ? `inset 0 0 0 1.5px ${c}88, 0 0 10px ${c}44` : `0 0 10px ${c}33, inset 0 0 8px ${c}18`,
+        boxShadow: selected
+          ? `0 0 0 2px #fff, 0 0 14px ${c}aa`
+          : clipped
+            ? `inset 0 0 0 ${bw}px ${c}${highContrast ? 'dd' : '88'}, 0 0 10px ${c}${highContrast ? '66' : '44'}`
+            : `0 0 10px ${c}${highContrast ? '55' : '33'}, inset 0 0 8px ${c}18`,
         touchAction: 'none',
         ...style,
       }}

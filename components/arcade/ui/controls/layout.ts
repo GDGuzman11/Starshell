@@ -115,3 +115,53 @@ export function saveLayout(layout: ControlLayout): void {
     /* ignore */
   }
 }
+
+// ── custom presets (named layouts the player saves) ──────────────────────────
+const PRESETS_KEY = 'starshell.controls.presets';
+export interface SavedPreset {
+  name: string;
+  layout: ControlLayout;
+}
+export function loadCustomPresets(): SavedPreset[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(PRESETS_KEY);
+    const arr = raw ? (JSON.parse(raw) as SavedPreset[]) : [];
+    return Array.isArray(arr) ? arr.filter((p) => p?.name && p?.layout?.buttons) : [];
+  } catch {
+    return [];
+  }
+}
+export function saveCustomPreset(name: string, layout: ControlLayout): SavedPreset[] {
+  const list = loadCustomPresets().filter((p) => p.name !== name);
+  list.push({ name, layout: { ...layout, name } });
+  try {
+    window.localStorage.setItem(PRESETS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+  return list;
+}
+export function deleteCustomPreset(name: string): SavedPreset[] {
+  const list = loadCustomPresets().filter((p) => p.name !== name);
+  try {
+    window.localStorage.setItem(PRESETS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+  return list;
+}
+
+// ── colour-blind-safe palette (Okabe-Ito) — remaps the button accents when on ──
+const CB_MAP: Record<string, string> = {
+  '#ff5d6e': '#d55e00', // fire red → vermillion
+  '#aef5c8': '#0072b2', // jump/crouch green → blue (separates from red)
+  '#7fdfff': '#56b4e9', // cyan → sky blue
+  '#ffae3a': '#e69f00', // orange
+  '#ffd27a': '#f0e442', // grapple → yellow
+  '#c8a8ff': '#cc79a7', // purple → reddish purple
+  '#ffffff': '#ffffff',
+};
+export function cbColor(color: string, on: boolean): string {
+  return on ? CB_MAP[color.toLowerCase()] ?? color : color;
+}
