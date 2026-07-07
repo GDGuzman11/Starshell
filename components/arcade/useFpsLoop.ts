@@ -52,7 +52,7 @@ const HEADSHOT_MULT = 2.0;
 const HEAD_BAND = 0.45;
 // Self-damage: the player takes a fraction of a throwable's blast (falloff to the
 // edge) if caught in its AoE — dangerous but not always an instant kill.
-const PLAYER_BLAST_MULT = 0.55;
+const PLAYER_BLAST_MULT = 0.4;
 const HEAT_SHOTS = 24; // energy shots to overheat (ER-08); vents ~2 s when idle
 const OVERHEAT_LOCK = 1.9; // overheat cooldown lockout seconds
 // How many zoom steps a weapon has past the hip: snipers get 3 (3× scope),

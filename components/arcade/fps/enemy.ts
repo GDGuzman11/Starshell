@@ -158,9 +158,47 @@ export interface HuntMemory {
   aggression: number; // 0 (camps) … 1 (rushes), EMA of player speed
   preferRange: number; // running avg distance the player fights at
   losses: number; // bots downed across the run
+  alertPos?: { x: number; z: number } | null; // legion-wide last-known player pos (global alert)
+  alertT?: number; // when the legion alert was last refreshed
 }
 export function makeHuntMemory(): HuntMemory {
-  return { heat: new Float32Array(HGRID * HGRID), aggression: 0.5, preferRange: 16, losses: 0 };
+  return { heat: new Float32Array(HGRID * HGRID), aggression: 0.5, preferRange: 16, losses: 0, alertPos: null, alertT: 0 };
+}
+/** How long a legion-wide alert stays hot after the last sighting (ms). */
+const GLOBAL_ALERT_MS = 6000;
+
+/** Give each squad its OWN territory to hold when unalerted — spread across the map,
+ *  preferring building centres — so multiple groups occupy DIFFERENT areas instead of
+ *  all converging on one spot. Greedy farthest-point spread. Call once per level after
+ *  the squads are created. */
+export function assignSquadHomes(lvl: Level3D, squads: Squad[]): void {
+  const cands: { x: number; z: number }[] = (lvl.modules ?? []).map((m) => ({ x: m.cx, z: m.cz }));
+  // Top up with a coarse grid if there aren't enough buildings for every squad.
+  if (cands.length < squads.length) {
+    const h = lvl.size / 2 - 12;
+    const g = Math.max(2, Math.ceil(Math.sqrt(squads.length)) + 1);
+    for (let a = 0; a < g; a++) for (let b = 0; b < g; b++) cands.push({ x: -h + (a / (g - 1)) * 2 * h, z: -h + (b / (g - 1)) * 2 * h });
+  }
+  const chosen: { x: number; z: number }[] = [];
+  if (cands.length) {
+    chosen.push(cands[Math.floor(cands.length / 2)]);
+    while (chosen.length < squads.length) {
+      let best = cands[0];
+      let bd = -1;
+      for (const c of cands) {
+        let md = Infinity;
+        for (const ch of chosen) md = Math.min(md, (c.x - ch.x) ** 2 + (c.z - ch.z) ** 2);
+        if (md > bd) {
+          bd = md;
+          best = c;
+        }
+      }
+      chosen.push(best);
+    }
+  }
+  squads.forEach((sq, s) => {
+    sq.home = chosen[s] ?? { x: 0, z: 0 };
+  });
 }
 function heatCell(x: number, z: number, size: number): number {
   const gx = Math.min(HGRID - 1, Math.max(0, Math.floor(((x + size / 2) / size) * HGRID)));
@@ -179,6 +217,7 @@ export interface Squad {
   lastKnown: { x: number; z: number } | null;
   t: number;
   mem?: HuntMemory; // persistent learning (same object across a run's levels)
+  home?: { x: number; z: number } | null; // this squad's own territory (patrols/garrisons here when unalerted)
   hot?: { x: number; z: number } | null; // learned favourite ground (hottest cell)
   planT?: number; // re-plan / heat-decay cooldown
   lastAlive?: number; // alive bot count last frame (to detect losses)
@@ -844,11 +883,20 @@ export function updateEnemies(
       squad.lastKnown = { x: player.x, z: player.z };
       squad.t = now;
       if (mem) {
+        // NOTIFY THE LEGION: the instant one bot sights the player, every squad learns
+        // the spot (independent patrol UNTIL first contact, then all converge to chase).
+        mem.alertPos = { x: player.x, z: player.z };
+        mem.alertT = now;
         // Learn the range the player chooses to fight at (informs vantage choice).
         const d = Math.hypot(player.x - enemies[i].x, player.z - enemies[i].z);
         mem.preferRange += (d - mem.preferRange) * 0.04;
       }
     }
+  }
+  // Adopt the legion alert unless this squad has a fresher sighting of its own.
+  if (mem?.alertPos && now - (mem.alertT ?? 0) < GLOBAL_ALERT_MS && (squad.lastKnown == null || (mem.alertT ?? 0) > squad.t)) {
+    squad.lastKnown = mem.alertPos;
+    squad.t = mem.alertT!;
   }
   const haveIntel = squad.lastKnown != null && now - squad.t < 5000; // lose track sooner
 
@@ -1661,7 +1709,7 @@ export function updateEnemies(
     // nav graph and eases off walls while holding. Falls back to its spawn perch
     // when there's no nav graph.
     if (e.cls === 'marksman') {
-      const focusS = tgt ?? squad.hot ?? { x: player.x, z: player.z };
+      const focusS = tgt ?? squad.home ?? squad.hot ?? { x: player.x, z: player.z };
       e.perchT = (e.perchT ?? 0) - dt;
       if (nav && !sees[i] && (e.perchT <= 0 || !e.perch)) {
         const v = bestVantage(nav, lvl, grid, e.x, e.z, focusS.x, focusS.z, mem?.preferRange ?? 18);
@@ -1781,12 +1829,11 @@ export function updateEnemies(
     } else if (e.onDeck) {
       climbToward(e, lvl, 0, P.speed * 0.5, dt, grid); // no target: come down off the deck
     } else {
-      // COORDINATED HUNT — no sighting, no live intel. The squad searches with a
-      // PLAN: head for the player's learned favourite ground (heat) and FAN OUT by
-      // slot so they sweep in from spread bearings (a pincer). The tank drives to
-      // the centre to harass; the others surround, tighter the more bots the player
-      // has dropped (learned). Still NO fire — no line of sight.
-      const focus = squad.hot ?? { x: player.x, z: player.z };
+      // INDEPENDENT PATROL — no sighting, no live intel, no legion alert. The squad
+      // holds its OWN territory (a building/area assigned at spawn), members FANNING
+      // OUT by slot so they garrison + watch it from spread bearings rather than
+      // clumping. Groups occupy DIFFERENT parts of the map. Still NO fire — no LoS.
+      const focus = squad.home ?? squad.hot ?? { x: player.x, z: player.z };
       const N = Math.max(1, aliveCount);
       const bearing = (slot[i] / N) * Math.PI * 2 + now / 9000;
       const ring = e.cls === 'tank' ? 0 : 10 - coord * 4 + (slot[i] % 3) * 4;

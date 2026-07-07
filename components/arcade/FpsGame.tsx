@@ -21,7 +21,7 @@ import { resolveLevel, buildBossArena, campaignTotalLevels, isBossLevel, isGaunt
 import { LevelEditor } from './screens/LevelEditor';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
-import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, fireteamCount, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
+import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, assignSquadHomes, fireteamCount, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
 import { gunById, throwById } from './fps/weapons';
 import { applyUpgrades, basicUpg, freshUpg, costFor, MAX_LEVEL, type Upg, type UpgradeKey } from './fps/customize';
 import { applyEngineering } from './fps/arsenal/parts';
@@ -369,6 +369,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       // must match spawnEnemies' level ramp. All squads share the persistent HuntMemory.
       const mem = (huntMemRef.current ??= makeHuntMemory());
       const squadStates: Squad[] = Array.from({ length: isBoss ? 1 : fireteamCount(squads, level) }, () => ({ lastKnown: null, t: 0, mem }));
+      if (!isBoss) assignSquadHomes(lvl, squadStates); // spread each squad to its own territory
       gameRef.current = {
         level: lvl,
         player,

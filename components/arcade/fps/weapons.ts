@@ -112,18 +112,18 @@ export interface ThrowDef {
 }
 
 export const THROWABLES: ThrowDef[] = [
-  { id: 'frag', name: 'FRAG', kind: 'frag', count: 10, fuse: 1.4, color: 0xffae3a, blast: { dmg: 220, radius: 6.5 } },
+  { id: 'frag', name: 'FRAG', kind: 'frag', count: 10, fuse: 1.4, color: 0xffae3a, blast: { dmg: 360, radius: 6.5 } },
   { id: 'smoke', name: 'SMOKE', kind: 'smoke', count: 10, fuse: 1.0, color: 0x9aa3b8, blast: { dmg: 0, radius: 0 }, zone: { kind: 'smoke', radius: 5.5, duration: 8, blocksLoS: true } },
-  { id: 'incendiary', name: 'MOLOTOV', kind: 'incendiary', count: 10, fuse: 1.1, color: 0xff5a2a, blast: { dmg: 50, radius: 4 }, zone: { kind: 'fire', radius: 4.5, duration: 6, dps: 55 } },
-  { id: 'cryo', name: 'CRYO BOMB', kind: 'cryo', count: 10, fuse: 1.3, color: 0x7fdfff, blast: { dmg: 40, radius: 4.5 }, status: { radius: 5.5, duration: 4.5, slow: 0.6 }, zone: { kind: 'cryo', radius: 5, duration: 4.5, slow: 0.5 } },
-  { id: 'shock', name: 'EMP SHOCK', kind: 'shock', count: 10, fuse: 1.2, color: 0x9af0ff, blast: { dmg: 70, radius: 5 }, status: { radius: 5.5, duration: 2.4, stun: 2.4 } },
+  { id: 'incendiary', name: 'MOLOTOV', kind: 'incendiary', count: 10, fuse: 1.1, color: 0xff5a2a, blast: { dmg: 95, radius: 4 }, zone: { kind: 'fire', radius: 4.5, duration: 6, dps: 90 } },
+  { id: 'cryo', name: 'CRYO BOMB', kind: 'cryo', count: 10, fuse: 1.3, color: 0x7fdfff, blast: { dmg: 80, radius: 4.5 }, status: { radius: 5.5, duration: 4.5, slow: 0.6 }, zone: { kind: 'cryo', radius: 5, duration: 4.5, slow: 0.5 } },
+  { id: 'shock', name: 'EMP SHOCK', kind: 'shock', count: 10, fuse: 1.2, color: 0x9af0ff, blast: { dmg: 120, radius: 5 }, status: { radius: 5.5, duration: 2.4, stun: 2.4 } },
   { id: 'flash', name: 'FLASHBANG', kind: 'flash', count: 10, fuse: 1.4, color: 0xffffff, blast: { dmg: 0, radius: 0 }, status: { radius: 10, duration: 4.5, blind: 4.5 } },
-  { id: 'cluster', name: 'CLUSTER', kind: 'cluster', count: 10, fuse: 1.3, color: 0xffd27a, blast: { dmg: 90, radius: 4 }, cluster: 5 },
-  { id: 'gas', name: 'TOXIN', kind: 'gas', count: 10, fuse: 1.2, color: 0x9cff6a, blast: { dmg: 0, radius: 0 }, zone: { kind: 'gas', radius: 5.5, duration: 7, dps: 34, blocksLoS: true } },
-  { id: 'gravity', name: 'SINGULARITY', kind: 'gravity', count: 10, fuse: 1.6, color: 0xc08bff, blast: { dmg: 220, radius: 7 }, pull: 5 },
-  { id: 'concussion', name: 'CONCUSSION', kind: 'concussion', count: 10, fuse: 1.1, color: 0xffe9a8, blast: { dmg: 75, radius: 6 }, status: { radius: 6, duration: 1.3, stun: 1.3 }, push: 5 },
+  { id: 'cluster', name: 'CLUSTER', kind: 'cluster', count: 10, fuse: 1.3, color: 0xffd27a, blast: { dmg: 150, radius: 4 }, cluster: 5 },
+  { id: 'gas', name: 'TOXIN', kind: 'gas', count: 10, fuse: 1.2, color: 0x9cff6a, blast: { dmg: 0, radius: 0 }, zone: { kind: 'gas', radius: 5.5, duration: 7, dps: 60, blocksLoS: true } },
+  { id: 'gravity', name: 'SINGULARITY', kind: 'gravity', count: 10, fuse: 1.6, color: 0xc08bff, blast: { dmg: 360, radius: 7 }, pull: 5 },
+  { id: 'concussion', name: 'CONCUSSION', kind: 'concussion', count: 10, fuse: 1.1, color: 0xffe9a8, blast: { dmg: 130, radius: 6 }, status: { radius: 6, duration: 1.3, stun: 1.3 }, push: 5 },
   { id: 'decoy', name: 'DECOY', kind: 'decoy', count: 10, fuse: 0.5, color: 0xaef5c8, blast: { dmg: 0, radius: 0 }, zone: { kind: 'decoy', radius: 1.2, duration: 6, lure: true } },
-  { id: 'plasma', name: 'PLASMA ORB', kind: 'plasma', count: 10, fuse: 1.0, color: 0xff5d6e, blast: { dmg: 340, radius: 5 } },
+  { id: 'plasma', name: 'PLASMA ORB', kind: 'plasma', count: 10, fuse: 1.0, color: 0xff5d6e, blast: { dmg: 480, radius: 5 } },
 ];
 export function throwById(id: string): ThrowDef {
   return THROWABLES.find((t) => t.id === id) ?? THROWABLES[0];
