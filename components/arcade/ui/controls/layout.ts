@@ -44,16 +44,17 @@ export const DEFAULT_LAYOUT: ControlLayout = {
   v: LAYOUT_V,
   name: 'Default',
   buttons: [
-    // Primary + right-edge column (thumb rest → up the edge).
-    { id: 'fire', tier: 1, shape: 'firepad', icon: '◎', label: 'FIRE', color: '#ff5d6e', x: 8, y: 14, size: 104 },
-    { id: 'jump', tier: 1, shape: 'roundsquare', icon: '⤒', label: 'JUMP', color: '#aef5c8', x: 7, y: 34, size: 70 },
-    { id: 'reload', tier: 2, shape: 'rectangle', icon: '⟳', label: 'RELOAD', color: '#7fdfff', x: 10, y: 52, size: 54 },
-    { id: 'crouch', tier: 3, shape: 'minicircle', icon: '▼', label: 'CROUCH', color: '#aef5c8', x: 12, y: 67, size: 44 },
-    // Inner fan (all above the gun's bottom-centre zone).
-    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 23, y: 41, size: 54 },
-    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 25, y: 59, size: 50 },
-    { id: 'zoom', tier: 3, shape: 'minicircle', icon: '⊙', label: 'ADS', color: '#7fdfff', x: 37, y: 35, size: 44 },
-    { id: 'grapple', tier: 2, shape: 'angular', icon: '⟰', label: 'GRAPPLE', color: '#ffd27a', x: 36, y: 53, size: 52 },
+    // Fire = big primary at the thumb rest; Zoom sits just to its LEFT (crosshair only).
+    { id: 'fire', tier: 1, shape: 'firepad', icon: '◎', label: 'FIRE', color: '#ff5d6e', x: 8, y: 15, size: 94 },
+    { id: 'zoom', tier: 3, shape: 'minicircle', icon: '⌖', label: '', color: '#7fdfff', x: 22, y: 15, size: 42 },
+    // Right-edge column (up from the thumb).
+    { id: 'jump', tier: 1, shape: 'roundsquare', icon: '⤒', label: 'JUMP', color: '#aef5c8', x: 8, y: 42, size: 64 },
+    { id: 'reload', tier: 2, shape: 'rectangle', icon: '⟳', label: 'RELOAD', color: '#7fdfff', x: 11, y: 64, size: 50 },
+    // Inner fan (all above the gun's bottom-centre zone; spaced so nothing overlaps).
+    { id: 'crouch', tier: 3, shape: 'minicircle', icon: '▼', label: 'CROUCH', color: '#aef5c8', x: 23, y: 40, size: 40 },
+    { id: 'throw', tier: 2, shape: 'hexagon', icon: '✷', label: 'NADE', color: '#ffae3a', x: 32, y: 53, size: 52 },
+    { id: 'swap', tier: 2, shape: 'capsule', icon: '⇄', label: 'SWAP', color: '#ffffff', x: 34, y: 70, size: 48 },
+    { id: 'grapple', tier: 2, shape: 'angular', icon: '⟰', label: 'GRAPPLE', color: '#ffd27a', x: 45, y: 59, size: 50 },
   ],
 };
 

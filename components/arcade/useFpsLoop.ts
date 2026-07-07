@@ -154,7 +154,8 @@ export function useFpsLoop(
   const throwReq = useRef(false);
   const jumpReq = useRef(false);
   const grappleReq = useRef(false);
-  const prevFire = useRef(false);
+  const prevFire = useRef(false); // previous AUTO-fire state (auto rising edge)
+  const prevManualFire = useRef(false); // previous MANUAL trigger state (manual rising edge)
   // Fire-mode transient state (reset on weapon switch): burst rounds left, charge held,
   // energy heat (0..1) + overheat lockout seconds.
   const burstLeft = useRef(0);
@@ -864,12 +865,17 @@ export function useFpsLoop(
             }
           }
 
-          const fireInput = fireHeld.current || autoFire;
+          const manualFire = fireHeld.current;
+          const fireInput = manualFire || autoFire;
           // COMBAT LOCK: no shooting (either side) until the match-intro countdown
           // finishes (~2.8 s). Movement is free; firing is held.
           const locked = g.elapsed < 2.8;
-          const wantShot = !locked && (gun.auto ? fireInput : fireInput && !prevFire.current);
-          prevFire.current = fireInput;
+          // Semi-auto fires on the rising edge of EITHER source tracked SEPARATELY, so a
+          // manual trigger pull ALWAYS registers even while auto-fire is already holding
+          // the input (auto-fire never blocks the manual fire button).
+          const wantShot = !locked && (gun.auto ? fireInput : (manualFire && !prevManualFire.current) || (autoFire && !prevFire.current));
+          prevFire.current = autoFire;
+          prevManualFire.current = manualFire;
 
           // Sustained-fire audio (Ripper / Lance Beam): ONE loop while held with
           // ammo, instead of a per-shot sound. Handles start/stop + weapon switches.

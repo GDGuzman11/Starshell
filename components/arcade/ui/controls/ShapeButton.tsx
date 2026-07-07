@@ -52,7 +52,7 @@ export function ShapeButton({
   return (
     <button
       type="button"
-      aria-label={btn.label}
+      aria-label={btn.label || btn.id}
       onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); onDown(); }}
       onPointerUp={onUp}
       onPointerCancel={onUp}
@@ -81,7 +81,7 @@ export function ShapeButton({
         />
       )}
       <span style={{ fontSize: (btn.shape === 'firepad' ? 26 : 16) * scale }}>{btn.icon}</span>
-      {btn.shape !== 'firepad' && <span style={{ fontSize: 6.5 * scale, marginTop: 2, letterSpacing: 0.5 }}>{btn.label}</span>}
+      {btn.shape !== 'firepad' && btn.label && <span style={{ fontSize: 6.5 * scale, marginTop: 2, letterSpacing: 0.5 }}>{btn.label}</span>}
     </button>
   );
 }
