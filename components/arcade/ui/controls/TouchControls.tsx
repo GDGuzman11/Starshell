@@ -78,7 +78,7 @@ export function TouchControls({
           onPointerMove={(e) => { actions.onLook(e.clientX - fireLast.current.x, e.clientY - fireLast.current.y); fireLast.current = { x: e.clientX, y: e.clientY }; }}
           onPointerUp={() => actions.setFire(false)}
           onPointerCancel={() => actions.setFire(false)}
-          className="pointer-events-auto absolute flex items-center justify-center rounded-full font-pixel active:scale-95"
+          className="pointer-events-auto absolute z-40 flex items-center justify-center rounded-full font-pixel active:scale-95"
           style={{
             width: fire.size * scale,
             height: fire.size * scale,

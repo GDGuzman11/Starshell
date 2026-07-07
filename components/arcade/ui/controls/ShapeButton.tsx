@@ -56,7 +56,7 @@ export function ShapeButton({
       onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); onDown(); }}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      className={`pointer-events-auto absolute flex select-none flex-col items-center justify-center font-pixel leading-none transition-transform active:scale-90 ${pulse && !disabled ? 'animate-pulse' : ''}`}
+      className={`pointer-events-auto absolute z-40 flex select-none flex-col items-center justify-center font-pixel leading-none transition-transform active:scale-90 ${pulse && !disabled ? 'animate-pulse' : ''}`}
       style={{
         width: w,
         height: h,
