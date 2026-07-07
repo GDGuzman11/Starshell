@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CRTFrame } from './ui/CRTFrame';
-import { FpsControls } from './ui/FpsControls';
+import { TouchControls } from './ui/controls/TouchControls';
+import { loadLayout, type ControlLayout, DEFAULT_LAYOUT } from './ui/controls/layout';
 import { FpsHud } from './ui/FpsHud';
 import { FpsLoadout } from './screens/FpsLoadout';
 import { OrientationGate } from './mobile/OrientationGate';
@@ -151,6 +152,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [iosHint, setIosHint] = useState(false); // show the "Add to Home Screen" instructions
   const [showSettings, setShowSettings] = useState(false);
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85 });
+  const [layout, setLayout] = useState<ControlLayout>(DEFAULT_LAYOUT);
   const [dev, setDev] = useState(false); // dev tools (npm run dev only)
   const [god, setGodState] = useState(false); // dev god-mode (invincible)
   const godRef = useRef(false);
@@ -227,6 +229,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     try {
       const raw = localStorage.getItem('starshell.cfg');
       if (raw) setCfg((c) => ({ ...c, ...JSON.parse(raw) }));
+      setLayout(loadLayout());
     } catch {
       /* ignore */
     }
@@ -710,52 +713,24 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
               MENU
             </button>
             {isTouch && (
-              <>
-                <FpsControls onMove={(s, f) => setMoveAxis(s, f)} onLook={(dx, dy) => addLook(dx, dy)} leftHanded={cfg.leftHanded} opacity={cfg.joyOpacity} />
-                {/* Manual FIRE — hold to shoot (a reliable fallback when auto-fire won't
-                    engage, e.g. sniping). Sits on the movement side, clear of the aim thumb. */}
-                <button
-                  type="button"
-                  aria-label="Fire"
-                  onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); setFire(true); }}
-                  onPointerUp={() => setFire(false)}
-                  onPointerCancel={() => setFire(false)}
-                  onPointerLeave={() => setFire(false)}
-                  className={`pointer-events-auto absolute bottom-24 z-40 flex items-center justify-center rounded-full border border-[#ff5d6e]/50 bg-[#ff5d6e]/15 font-pixel text-[9px] text-[#ff5d6e] backdrop-blur-sm active:bg-[#ff5d6e]/35 ${cfg.leftHanded ? 'right-4' : 'left-4'}`}
-                  style={{ width: 78 * cfg.btnScale, height: 78 * cfg.btnScale }}
-                >
-                  FIRE
-                </button>
-                {/* COD-style action cluster: a big JUMP anchor at the corner + a thumb ARC
-                    of circular icon buttons fanning up-and-inward, plus a contextual GRAPPLE
-                    that only appears when a rooftop hook is aimable. */}
-                {(() => {
-                  const s = cfg.btnScale;
-                  const left = cfg.leftHanded;
-                  const R = 116 * s; // arc radius
-                  const base = 16; // corner inset for the JUMP anchor
-                  const pos = (r: number, b: number): CSSProperties => (left ? { left: r, bottom: b } : { right: r, bottom: b });
-                  const arc = [
-                    { icon: '⟳', label: 'RELOAD', color: '#7fdfff', onTap: reload },
-                    { icon: '◎', label: 'ADS', color: '#7fdfff', onTap: () => cycleZoom() },
-                    { icon: '✷', label: 'NADE', color: '#ffae3a', onTap: () => throwGrenade() },
-                    { icon: '⇄', label: 'SWAP', color: '#ffffff', onTap: () => cycleWeapon(1) },
-                    { icon: crouched ? '▲' : '▼', label: crouched ? 'STAND' : 'CROUCH', color: '#aef5c8', onTap: () => { const n = !crouched; setCrouched(n); setCrouch(n); } },
-                  ];
-                  return (
-                    <div className={`pointer-events-none absolute bottom-0 z-40 ${left ? 'left-0' : 'right-0'}`} style={{ width: R + 130 * s, height: R + 130 * s }}>
-                      <TouchBtn onTap={jump} icon="⤒" label="JUMP" color="#aef5c8" scale={s} size={74} style={pos(base, base)} />
-                      {arc.map((b, i) => {
-                        const ang = (i / (arc.length - 1)) * (Math.PI * 0.52) + Math.PI * 0.02; // fan from ~up to ~left
-                        return <TouchBtn key={b.label} onTap={b.onTap} icon={b.icon} label={b.label} color={b.color} scale={s} size={50} style={pos(base + 10 + Math.sin(ang) * R, base + 16 + Math.cos(ang) * R)} />;
-                      })}
-                      {snap.grappleReady && (
-                        <TouchBtn onTap={() => grapple()} icon="⟰" label="GRAPPLE" color="#ffd27a" scale={s} size={60} style={pos(base + R * 0.42, base + R * 0.5)} />
-                      )}
-                    </div>
-                  );
-                })()}
-              </>
+              <TouchControls
+                layout={layout}
+                cfg={{ leftHanded: cfg.leftHanded, btnScale: cfg.btnScale, joyOpacity: cfg.joyOpacity }}
+                grappleReady={snap.grappleReady}
+                crouched={crouched}
+                actions={{
+                  onMove: (s, f) => setMoveAxis(s, f),
+                  onLook: (dx, dy) => addLook(dx, dy),
+                  setFire,
+                  jump,
+                  reload,
+                  swap: () => cycleWeapon(1),
+                  throwGrenade: () => throwGrenade(),
+                  grapple: () => grapple(),
+                  zoom: () => cycleZoom(),
+                  crouch: () => { const n = !crouched; setCrouched(n); setCrouch(n); },
+                }}
+              />
             )}
             {!isTouch && (
               <p className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 font-pixel text-[6px] text-white/35">
@@ -1285,20 +1260,3 @@ function RunStatsCard({
 }
 
 /** A large glass action button for touch (fires on press, not click). */
-/** A circular COD-style touch button: a big icon glyph + a tiny label, absolutely
- *  positioned by the caller-supplied `style`. */
-function TouchBtn({ onTap, icon, label, color, scale = 1, size = 54, style }: { onTap: () => void; icon: string; label?: string; color: string; scale?: number; size?: number; style?: CSSProperties }) {
-  const d = size * scale;
-  return (
-    <button
-      type="button"
-      onPointerDown={onTap}
-      aria-label={label ?? icon}
-      className="pointer-events-auto absolute flex flex-col items-center justify-center rounded-full border bg-black/45 font-pixel leading-none backdrop-blur-sm active:brightness-150"
-      style={{ borderColor: `${color}88`, color, width: d, height: d, boxShadow: `0 0 8px ${color}22`, ...style }}
-    >
-      <span style={{ fontSize: 17 * scale }}>{icon}</span>
-      {label && <span style={{ fontSize: 6 * scale, marginTop: 2, letterSpacing: 0.5 }}>{label}</span>}
-    </button>
-  );
-}
