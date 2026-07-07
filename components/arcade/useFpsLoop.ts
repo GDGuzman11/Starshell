@@ -87,6 +87,7 @@ export interface FpsGameState {
   squads: Squad[]; // one shared-intel object per squad (independent squads)
   maxHp: number;
   god?: boolean; // dev: invincible (health stays full)
+  revive?: boolean; // Nano-Revive: survive one lethal hit this level (then consumed)
   elapsed: number; // seconds since the level started (combat lock + boss grace)
 }
 
@@ -643,7 +644,17 @@ export function useFpsLoop(
           }
           if (amount > 0) p.health = Math.max(0, p.health - amount);
           snap.hurtAt = now;
-          if (p.health <= 0) g.status = 'lost';
+          if (p.health <= 0) {
+            if (g.revive) {
+              // Nano-Revive: eat the lethal hit, restore to 40% + a shield, consume it.
+              g.revive = false;
+              p.health = Math.max(1, Math.round(g.maxHp * 0.4));
+              p.armor = Math.min(p.maxArmor, 40);
+              snap.flashAt = now; // a bright pulse marks the save
+            } else {
+              g.status = 'lost';
+            }
+          }
         };
         // An enemy died → tally the kill and, ~1 in 3 kills, drop ammo or overshield
         // for the player (bosses / deployables never drop). Big fights stay supplied.

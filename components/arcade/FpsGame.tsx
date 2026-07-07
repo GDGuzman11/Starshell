@@ -7,7 +7,7 @@ import { FpsControls } from './ui/FpsControls';
 import { FpsHud } from './ui/FpsHud';
 import { FpsLoadout } from './screens/FpsLoadout';
 import { OrientationGate } from './mobile/OrientationGate';
-import { FpsShop } from './screens/FpsShop';
+import { FpsShop, SHOP_ITEMS, NO_BUFFS, type NextBuffs } from './screens/FpsShop';
 import { FpsCustomize } from './screens/FpsCustomize';
 import { FpsArsenal } from './screens/FpsArsenal';
 import { FpsArmory } from './screens/FpsArmory';
@@ -38,7 +38,6 @@ import { THEME_LIST } from './fps/kit/themes';
 type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal' | 'armory' | 'division' | 'premium';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
-const ARMOR_COST = 100;
 // Final gauntlet: the 5 TOUGHEST bosses (by HP), one per round, ordered hardest-last.
 const GAUNTLET_BOSSES: BossKind[] = ['leviathan', 'monolith', 'infestor', 'behemoth', 'colossus'];
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
@@ -101,7 +100,24 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [portrait, setPortrait] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
   const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar01', p2: 'rt06', sa: 'sp01', th: 'frag' }); // Standard Issue recruit kit
-  const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg> }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
+  const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg>; buffs?: NextBuffs }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
+  // Buy a shop item: deduct scaled gold, raise armour or arm a next-level buff.
+  const buyItem = (id: string) =>
+    setRun((r) => {
+      const item = SHOP_ITEMS.find((i) => i.id === id);
+      if (!item) return r;
+      const cost = item.cost(r.level);
+      if (r.gold < cost) return r;
+      const b: NextBuffs = { ...NO_BUFFS, ...(r.buffs ?? {}) };
+      let maxHp = r.maxHp;
+      if (id === 'armor') maxHp += 25;
+      else if (id === 'stim') b.dmg += 0.15;
+      else if (id === 'shield') b.overshield += 40;
+      else if (id === 'ammo') b.reserveMul += 0.5;
+      else if (id === 'nades') b.nades += 3;
+      else if (id === 'revive') b.revive = true;
+      return { ...r, gold: r.gold - cost, maxHp, buffs: b };
+    });
   const [loadoutReturn, setLoadoutReturn] = useState<'campaign' | 'shop'>('campaign');
   // Cumulative run stats (across all levels of one campaign) for the match-end card.
   const [runStats, setRunStats] = useState({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
@@ -327,8 +343,9 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   }, [pseudoFs]);
 
   const startLevel = useCallback(
-    (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>, presetLevel?: Level3D) => {
+    (level: number, lo: Loadout, maxHp: number, ups: Record<string, Upg>, presetLevel?: Level3D, buffs?: NextBuffs) => {
       resolvedRef.current = false;
+      const B: NextBuffs = { ...NO_BUFFS, ...(buffs ?? {}) }; // this-deploy consumable buffs
       const seed = (Date.now() ^ Math.floor(Math.random() * 0xffff)) & 0x7fffffff;
       const total = campaignTotalLevels(); // flexible campaign length (follows authored levels)
       const forcedBoss = bossOverrideRef.current; // dev: warp straight into a specific boss
@@ -347,7 +364,8 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
         const parts = equippedParts(arsenal, g.id, g.family);
         gunParts.push(parts); // keep the parts list so the viewmodel can render the components
         const famDmg = milestoneBonus(serviceFor(arsenal, g.id).xp).dmg;
-        return applyEngineering(withGold, parts, famDmg);
+        const applied = applyEngineering(withGold, parts, famDmg);
+        return B.dmg > 0 ? { ...applied, dmg: Math.round(applied.dmg * (1 + B.dmg)) } : applied; // Combat Stim
       });
       const thrown = throwById(lo.th);
       // DIVISION identity + equipped ARMOR → the deploy combat bonus (bounded; heavy
@@ -357,7 +375,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       const deployHp = maxHp + cb.maxHp;
       const player = makePlayer3(lvl.spawn);
       player.health = deployHp;
-      player.armor = Math.min(player.maxArmor, cb.overshield); // start with overshield
+      player.armor = Math.min(player.maxArmor, cb.overshield + B.overshield); // overshield (+ Overshield Cell)
       player.speedMul = cb.moveMul;
       // The FINAL level is the GAUNTLET: one ENHANCED boss per round (Xeno → Warlord →
       // Kraken). Regular boss levels (every 5th) cycle through the three boss kinds.
@@ -381,12 +399,13 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
         gunParts,
         active: 0,
         mags: guns.map((g) => g.mag),
-        reserves: guns.map((g) => g.reserve),
+        reserves: guns.map((g) => Math.round(g.reserve * (1 + B.reserveMul))), // Ammo Cache
         ads: false,
         reloading: 0,
         fireCd: 0,
         throwable: thrown,
-        throwCount: thrown.count,
+        throwCount: thrown.count + B.nades, // Grenade Crate
+        revive: B.revive, // Nano-Revive: survive one lethal hit
         status: 'playing',
         kills: 0,
         headshots: 0,
@@ -956,10 +975,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             level={run.level}
             gold={run.gold}
             maxHp={run.maxHp}
-            onBuyArmor={() => setRun((r) => (r.gold >= ARMOR_COST ? { ...r, gold: r.gold - ARMOR_COST, maxHp: r.maxHp + 25 } : r))}
+            buffs={run.buffs ?? NO_BUFFS}
+            onBuy={buyItem}
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
-            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); setRun((r) => ({ ...r, level: next })); persistSlot(next, run.gold, run.maxHp, run.upgrades, lastLoadout); startLevel(next, lastLoadout, run.maxHp, run.upgrades); }}
+            onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); const b = run.buffs; setRun((r) => ({ ...r, level: next, buffs: NO_BUFFS })); persistSlot(next, run.gold, run.maxHp, run.upgrades, lastLoadout); startLevel(next, lastLoadout, run.maxHp, run.upgrades, undefined, b); }}
             onExit={() => { setRunActive(false); setMode('menu'); }}
           />
         )}
