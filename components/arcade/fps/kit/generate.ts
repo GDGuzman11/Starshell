@@ -42,10 +42,10 @@ export function makeModularArena(count: number, seed: number): Level3D {
   const clearOf = (x: number, z: number, rad: number) => Math.hypot(x - spawn.x, z - spawn.z) < rad || Math.hypot(x - enemySpawn.x, z - enemySpawn.z) < rad;
 
   // Arena boundary.
-  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
-  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
+  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
+  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
 
   // City grid: blocks separated by streets; the centre column/row are open avenues.
   const BLOCK = 22;
@@ -202,10 +202,10 @@ export function buildFromLayout(layout: LevelLayout): Level3D {
   const enemySpawn = layout.enemySpawn ? { x: cellToWorld(layout.enemySpawn.gx), z: cellToWorld(layout.enemySpawn.gz) } : { x: 0, z: half * 0.86 };
 
   // Arena boundary.
-  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
-  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
+  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
+  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
 
   const occupied: { x: number; z: number; rad: number }[] = [];
   for (const pl of layout.placements) {

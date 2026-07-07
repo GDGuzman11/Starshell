@@ -351,9 +351,9 @@ export class ThrowableFx {
     // Heat shimmer — a faint quick additive swell.
     this.sprite(this.soft, 0xffd9a0, true, x, cy, z, 0, 0, 0, r * 0.5, r * 1.05, 0.28, 0, 210);
     // Fragments — hundreds of glowing metal shards flung out with gravity + drag.
-    this.burst(x, cy, z, Math.round(120 * this.q), 7, 15, 0.35, 0xff7a2a, 0.09, 720, 18, 2.2);
+    this.burst(x, cy, z, Math.round(150 * this.q), 8, 18, 0.35, 0xff7a2a, 0.1, 780, 17, 2.1);
     // Sparks — faster, brighter, shorter-lived.
-    this.burst(x, cy, z, Math.round(48 * this.q), 9, 20, 0.15, 0xffe08a, 0.06, 320, 10, 4);
+    this.burst(x, cy, z, Math.round(64 * this.q), 10, 24, 0.15, 0xffe08a, 0.07, 340, 10, 4);
     // Concrete chips kicked off the ground.
     this.burst(x, y + 0.15, z, Math.round(36 * this.q), 4, 11, 0.05, 0x8a7d6a, 0.05, 900, 22, 1.6);
     // Dust dome — low grey-brown puffs billowing up and out.

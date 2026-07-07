@@ -345,7 +345,10 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
         if (rh > surf) surf = rh;
       }
     }
-    if (surf > -Infinity && p.y <= surf + RAMP_SNAP && surf >= 0) {
+    // Only snap when the feet are in a BAND around the surface (just above it, or
+    // swept down onto/along it this frame). Without the lower bound, standing UNDER
+    // a raised ramp glued you up onto it (the "walk under a ramp → teleport" bug).
+    if (surf > -Infinity && surf >= 0 && p.y <= surf + RAMP_SNAP && (p.y >= surf - STEP_UP || prevY >= surf - 1e-3)) {
       p.y = surf;
       p.vy = 0;
       p.onGround = true;
@@ -357,6 +360,14 @@ export function stepPlayer(p: Player3, lvl: Level3D, input: MoveInput, dt: numbe
     if (p.vy < 0) p.vy = 0;
     p.onGround = true;
   }
+
+  // Hard arena clamp — a safety net so the player can NEVER leave the box even if a
+  // wall is somehow breached (the borders are indestructible, but this guarantees it).
+  const bound = lvl.size / 2 - R;
+  if (p.x > bound) p.x = bound;
+  else if (p.x < -bound) p.x = -bound;
+  if (p.z > bound) p.z = bound;
+  else if (p.z < -bound) p.z = -bound;
 
   // Jump pad — launch on contact.
   if (p.onGround) {

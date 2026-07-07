@@ -23,6 +23,7 @@ export interface Box {
   hp?: number; // structural HP (lazy-init on first hit); destructible by gunfire
   maxHp?: number;
   dead?: boolean; // destroyed: skipped by collision / LoS / shots, mesh hidden
+  indestructible?: boolean; // arena borders: block shots/LoS but never take damage or break
 }
 
 export interface Ladder {
@@ -360,10 +361,10 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     Math.hypot(x - playerSpawn.x, z - playerSpawn.z) < 11 ||
     Math.hypot(x - enemySpawn.x, z - enemySpawn.z) < 11;
 
-  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0 });
-  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
-  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0 });
+  boxes.push({ x: 0, y: WALL_H / 2, z: -half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: 0, y: WALL_H / 2, z: half, sx: size, sy: WALL_H, sz: 0.6, tex: 0, indestructible: true });
+  boxes.push({ x: -half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
+  boxes.push({ x: half, y: WALL_H / 2, z: 0, sx: 0.6, sy: WALL_H, sz: size, tex: 0, indestructible: true });
 
   const placed: { x: number; z: number; rad: number }[] = [];
   const towers3: { x: number; z: number; half: number }[] = [];

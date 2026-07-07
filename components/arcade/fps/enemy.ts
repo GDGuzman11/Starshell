@@ -301,6 +301,10 @@ function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number
   const nz = e.z + dz * sp;
   if (!blocked(lvl, nx, e.z, r, grid)) e.x = nx;
   if (!blocked(lvl, e.x, nz, r, grid)) e.z = nz;
+  // Hard arena clamp — enemies can never leave the box (matches the player clamp).
+  const bound = lvl.size / 2 - r;
+  if (e.x > bound) e.x = bound; else if (e.x < -bound) e.x = -bound;
+  if (e.z > bound) e.z = bound; else if (e.z < -bound) e.z = -bound;
   e.step += speed * dt * 1.3; // advance the running gait
   // Follow ground elevation (ramps up/down, trench floors). Only when NOT on an
   // elevated deck (the box-climbing system owns those) and only within a small

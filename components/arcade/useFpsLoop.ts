@@ -123,7 +123,7 @@ export interface FpsSnapshot {
   radar: { x: number; z: number; boss: boolean; kind?: 'ammo' | 'shield' | 'health' }[]; // enemies + pickups, player-relative
 }
 
-interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; mesh: THREE.Mesh }
+interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; mesh: THREE.Mesh; landed?: boolean; age?: number }
 interface SmokeFx extends Smoke { until: number; born: number; dur: number; dps: number; mesh: THREE.Mesh }
 interface Flash { mesh: THREE.Mesh; born: number; r: number }
 interface Zone { kind: 'fire' | 'cryo' | 'decoy'; x: number; z: number; r: number; born: number; until: number; dps: number; slow: number; lure: boolean; mesh: THREE.Mesh }
@@ -507,7 +507,7 @@ export function useFpsLoop(
     // hidden + flagged dead (collision / LoS / shots skip it) with a rubble burst.
     const boxMaxHp = (b: Box) => Math.min(1600, 130 + b.sx * b.sy * b.sz * 22);
     const damageBox = (b: Box, dmg: number, hx: number, hy: number, hz: number, tNow: number) => {
-      if (b.dead) return;
+      if (b.dead || b.indestructible) return; // arena borders block shots but never break
       if (b.hp == null) b.hp = b.maxHp = boxMaxHp(b);
       b.hp -= dmg;
       if (world) {
@@ -1087,15 +1087,21 @@ export function useFpsLoop(
               gr.vy *= -0.4;
               gr.vx *= 0.7;
               gr.vz *= 0.7;
+              gr.landed = true; // touched the ground → the fuse can start
             } else if (grHitsBox(gr.x, ny, gr.z)) {
               gr.vy *= -0.5;
+              gr.landed = true; // rested on a surface (deck/roof)
             } else {
               gr.y = ny;
             }
-            gr.fuse -= dt;
+            // The grenade must CONTACT a surface before the fuse ticks, so it detonates
+            // on the ground (or a deck) instead of mid-air. A long fallback covers the
+            // rare case it never settles.
+            gr.age = (gr.age ?? 0) + dt;
+            if (gr.landed) gr.fuse -= dt;
             gr.mesh.position.set(gr.x, gr.y, gr.z);
             throwFx?.trail(g.throwable.kind, gr.x, gr.y, gr.z, dt, g.throwable.color); // cosmetic in-flight trail
-            if (gr.fuse <= 0) {
+            if (gr.fuse <= 0 || (gr.age ?? 0) > 6) {
               const t = g.throwable;
               const cx = gr.x;
               const cy = gr.y;
@@ -1105,7 +1111,9 @@ export function useFpsLoop(
               // proximity-scaled camera punch tuned per kind. All gameplay
               // resolution below (damage/status/zone/pull/push) is unchanged.
               {
-                const visR = t.blast.radius || t.zone?.radius || t.status?.radius || 4;
+                // VISUAL radius is bumped ~1.55× over the gameplay blast radius so
+                // detonations read as big battlefield events (damage radius unchanged).
+                const visR = (t.blast.radius || t.zone?.radius || t.status?.radius || 4) * 1.55;
                 throwFx?.detonate(t.kind, cx, cy, cz, visR, t.color);
                 const punch = t.push ? 0.18 : t.blast.dmg >= 200 ? 0.16 : t.blast.dmg > 0 ? 0.1 : t.kind === 'flash' ? 0.06 : 0;
                 if (punch > 0) {
