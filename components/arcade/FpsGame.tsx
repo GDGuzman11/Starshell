@@ -152,6 +152,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [iosNoFs, setIosNoFs] = useState(false); // iPhone Safari: no web-fullscreen API at all
   const [iosHint, setIosHint] = useState(false); // show the "Add to Home Screen" instructions
   const [showSettings, setShowSettings] = useState(false);
+  const [paused, setPaused] = useState(false); // in-match pause (freezes the loop in place)
   const [cfg, setCfg] = useState({ aimAssist: true, invertY: false, leftHanded: false, joyOpacity: 1, btnScale: 1, masterVol: 0.85, highContrast: false, colorblind: false });
   const [layout, setLayout] = useState<ControlLayout>(DEFAULT_LAYOUT);
   const [showEditor, setShowEditor] = useState(false);
@@ -184,7 +185,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
 
   const portraitPaused = isTouch && portrait; // landscape-only on phones
   const onSnapshot = useCallback((s: FpsSnapshot) => setSnap(s), []);
-  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !portraitPaused && recovery == null, onSnapshot);
+  const { setMoveAxis, addLook, cycleWeapon, cycleZoom, setSensitivity, setAimAssist, setInvertY, setFire, setCrouch, throwGrenade, jump, reload, grapple } = useFpsLoop(canvasRef, gameRef, mode === 'play' && !paused && !portraitPaused && recovery == null, onSnapshot);
   const [crouched, setCrouched] = useState(false);
   const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
   const MAX_RESTARTS = 5;
@@ -637,7 +638,9 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   useEffect(() => {
     if (mode !== 'play') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMode(sandboxRef.current ? 'editor' : 'menu');
+      if (e.key !== 'Escape') return;
+      if (sandboxRef.current) { setMode('editor'); return; }
+      setPaused((p) => !p); // Esc toggles pause (the browser auto-frees the pointer)
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -711,8 +714,13 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
         {mode === 'play' && snap && snap.status === 'playing' && (
           <>
             <FpsHud snap={snap} level={run.level} gold={run.gold} astro={astro} isTouch={isTouch} />
-            <button type="button" onClick={() => setMode('menu')} className="absolute right-3 top-3 z-50 font-pixel text-[8px] text-white/55 transition-colors hover:text-white">
-              MENU
+            <button
+              type="button"
+              aria-label="Pause"
+              onClick={() => setPaused(true)}
+              className="pointer-events-auto absolute right-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-white/25 bg-black/45 font-pixel text-[13px] text-white/75 backdrop-blur-sm transition-colors hover:text-white active:scale-95"
+            >
+              ⏸
             </button>
             {isTouch && (
               <TouchControls
@@ -738,6 +746,29 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
               <p className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 font-pixel text-[6px] text-white/35">
                 CLICK=FIRE · RMB ZOOM · WASD · SPACE JUMP · C CROUCH · 1-3/SCROLL SWAP · R RELOAD · G THROW · F GRAPPLE (AIM A ROOFTOP RING) · LADDERS/ZIPS WALK IN
               </p>
+            )}
+            {/* PAUSE overlay — freezes the match in place. Hidden while Settings/Editor are
+                open (they layer above), then reappears (still paused) when they close. */}
+            {paused && !showSettings && !showEditor && (
+              <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center gap-2 bg-black/70 px-6 text-center font-pixel backdrop-blur-[2px]">
+                <p className="text-[16px] text-[#7fdfff] sm:text-[20px]">PAUSED</p>
+                <p className="text-[7px] tracking-[0.2em] text-white/45">LEVEL {run.level} · {snap.enemiesLeft} ENEMIES LEFT</p>
+                <div className="mt-3 flex w-full max-w-[240px] flex-col gap-2">
+                  <button type="button" onClick={() => { setPaused(false); if (!isTouch) canvasRef.current?.requestPointerLock?.(); }} className="min-h-[46px] rounded-md border border-[#aef5c8]/50 bg-[#aef5c8]/12 px-6 text-[12px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/22">
+                    ▸ Resume
+                  </button>
+                  <button type="button" disabled={restarts >= MAX_RESTARTS} onClick={() => { setRestarts((n) => n + 1); setPaused(false); startLevel(run.level, lastLoadout, run.maxHp, run.upgrades); }} className="min-h-[42px] rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-6 text-[10px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 disabled:cursor-not-allowed disabled:opacity-30">
+                    ⟲ Restart Level · {MAX_RESTARTS - restarts} left
+                  </button>
+                  <button type="button" onClick={() => setShowSettings(true)} className="min-h-[42px] rounded-md border border-white/20 bg-white/5 px-6 text-[10px] uppercase text-white/75 transition-colors hover:bg-white/10">
+                    ⚙ Settings
+                  </button>
+                  <button type="button" onClick={() => { setPaused(false); setMode('menu'); }} className="min-h-[42px] rounded-md border border-[#ff5d6e]/45 bg-[#ff5d6e]/10 px-6 text-[10px] uppercase text-[#ff5d6e] transition-colors hover:bg-[#ff5d6e]/20">
+                    ⌂ Quit to Lobby
+                  </button>
+                </div>
+                {restarts >= MAX_RESTARTS && <p className="mt-1 text-[6px] tracking-[0.15em] text-white/35">no level restarts left · push on or quit</p>}
+              </div>
             )}
           </>
         )}
@@ -1265,10 +1296,10 @@ function RunStatsCard({
             </button>
           )}
           <button type="button" onClick={onRestart} className="min-h-[44px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-4 font-pixel text-[9px] uppercase text-[#aef5c8] hover:bg-[#aef5c8]/20 sm:text-[11px]">
-            Restart Run
+            Restart from Level 1
           </button>
           <button type="button" onClick={onMenu} className="min-h-[44px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[9px] uppercase text-white/70 hover:bg-white/10 sm:text-[11px]">
-            Menu
+            Quit to Lobby
           </button>
         </div>
       </div>
