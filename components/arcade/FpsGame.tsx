@@ -75,13 +75,14 @@ function saveBest(level: number) {
  * squad-coordinated adaptive aliens, across a 20-level campaign with a gold
  * armory between levels.
  */
-export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScore, onExit }: {
+export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScore, onExit, standalone }: {
   initialRun?: RunSlot | null; // resume this slot on mount (account-backed)
   initialScreen?: string | null; // open straight to a screen on mount (e.g. 'division')
   onRunSave?: (slot: RunSlot) => void; // persist the run slot at level transitions
   onRunEnd?: (id: string) => void; // the run completed → drop the slot
   onScore?: (s: ScorePayload) => void; // a run resolved (win/loss) → submit to the leaderboard
   onExit?: () => void; // back to the pilot console (site only)
+  standalone?: boolean; // running as the installed app → hide web-only "Exit to /" links
 } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -680,9 +681,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             >
               {fsActive ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}
             </button>
-            <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
-              ◂ EXIT
-            </Link>
+            {!standalone && (
+              <Link href="/" className="font-pixel text-[8px] text-white/50 transition-colors hover:text-white sm:text-[9px]">
+                ◂ EXIT
+              </Link>
+            )}
           </div>
         </div>
       )}
@@ -692,9 +695,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
 
         {fullBleed && mode === 'menu' && (
           <>
-            <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
-              ◂ EXIT
-            </Link>
+            {!standalone && (
+              <Link href="/" className="absolute left-3 top-3 z-[60] font-pixel text-[8px] text-white/60 transition-colors hover:text-white">
+                ◂ EXIT
+              </Link>
+            )}
             {/* Video-style maximize button (phones). Real fullscreen where the browser
                 supports it (Android); iPhone has no web-fullscreen API → show the
                 Add-to-Home-Screen path. Hidden when already launched standalone. */}
@@ -885,10 +890,16 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                 ⬢ Graduation available — choose your division
               </button>
             )}
-            {/* Arsenal + Armory live under the Loadout / Marine previews; Combat Divisions
-                now lives on the pilot console (main page). Central grid keeps Premium. */}
+            {/* Arsenal + Armory show as side panels on wide screens; on phones/tablets
+                (below xl) they'd be unreachable, so surface them as buttons here too. */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
+              <button type="button" onClick={() => setMode('armory')} className="min-h-[40px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-5 font-pixel text-[9px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:text-[10px] xl:hidden">
+                ⛨ Armory
+              </button>
+              <button type="button" onClick={() => setMode('arsenal')} className="min-h-[40px] rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-5 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 sm:text-[10px] xl:hidden">
+                ◆ Arsenal
+              </button>
+              <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-5 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
               </button>
             </div>

@@ -12,7 +12,7 @@ export default function Page() {
       id="content"
       className="flex min-h-[100svh] w-full flex-col items-center justify-center bg-black px-3 py-6 sm:px-6"
     >
-      <FpsGame />
+      <FpsGame standalone />
     </main>
   );
 }
