@@ -1,0 +1,262 @@
+[
+  {
+    "id": "gen-gen-outrider-sniper-001",
+    "name": "SALVAGE VANGUARD",
+    "family": "sniper",
+    "division": "outrider",
+    "stats": {
+      "dmg": 400,
+      "rate": 1.45,
+      "mag": 10,
+      "reserve": 30,
+      "reload": 3.1,
+      "auto": false,
+      "scoped": true,
+      "hipFov": 80,
+      "adsFov": 28,
+      "color": 6841394
+    },
+    "audio": {
+      "family": "launcher",
+      "vol": 0.82,
+      "pitch": 0.72,
+      "jitter": 0.07,
+      "len": 1.3,
+      "bass": 0.74,
+      "grit": 0.68
+    },
+    "model": {
+      "template": "longPrecision",
+      "palette": {
+        "body": [
+          7229490,
+          5264450,
+          1644319
+        ],
+        "accent": 10346751
+      },
+      "slots": [
+        {
+          "slot": "barrel",
+          "len": 1.85,
+          "girth": 0.72,
+          "segs": 5,
+          "vents": 2,
+          "muzzle": 1,
+          "taper": -0.15,
+          "emissive": 0
+        },
+        {
+          "slot": "receiver",
+          "len": 1.1,
+          "girth": 1.05,
+          "segs": 4,
+          "vents": 1,
+          "muzzle": 0,
+          "taper": 0.05,
+          "emissive": 0.12
+        },
+        {
+          "slot": "stock",
+          "len": 1.2,
+          "girth": 0.85,
+          "segs": 3,
+          "vents": 0,
+          "muzzle": 0,
+          "taper": -0.1,
+          "emissive": 0
+        },
+        {
+          "slot": "magazine",
+          "len": 0.7,
+          "girth": 0.95,
+          "segs": 2,
+          "vents": 0,
+          "muzzle": 0,
+          "taper": 0,
+          "emissive": 0.08
+        },
+        {
+          "slot": "optic",
+          "len": 0.75,
+          "girth": 0.78,
+          "segs": 3,
+          "vents": 0,
+          "muzzle": 0,
+          "taper": -0.05,
+          "emissive": 0.22,
+          "moving": "glow"
+        }
+      ]
+    },
+    "componentTheme": {
+      "body": [
+        7229490,
+        5264450,
+        1644319
+      ],
+      "accent": 10346751,
+      "nameVocab": [
+        "Outrider",
+        "Salvage",
+        "Vanguard",
+        "Ranger",
+        "Field",
+        "Trailblazer",
+        "Standard",
+        "Drifter",
+        "Service"
+      ],
+      "geometryBias": {
+        "girth": 0.6,
+        "vents": 0.55,
+        "emissive": 0.3,
+        "animated": 0.2,
+        "muzzle": 0.4
+      },
+      "statBias": {
+        "dmg": 0.7,
+        "rate": -0.2,
+        "mag": -0.3,
+        "reload": 0.1,
+        "handling": 0.3
+      }
+    },
+    "lore": "Cobbled from a decommissioned regiment's stock and field-welded into a long-rifle by a lone outrider who trusted salvaged steel over anything the supply line ever promised.",
+    "dna": {
+      "primary": "Frontier Salvaged",
+      "secondary": "Military Standard",
+      "featureHash": "81zvdy"
+    }
+  },
+  {
+    "id": "gen-gen-mg-outrider-rustcascade-001",
+    "name": "RUST OUTRIDER",
+    "family": "mg",
+    "division": "outrider",
+    "stats": {
+      "dmg": 52,
+      "rate": 0.11,
+      "mag": 55,
+      "reserve": 220,
+      "reload": 2.8,
+      "auto": true,
+      "scoped": false,
+      "hipFov": 80,
+      "adsFov": 58,
+      "color": 6710886
+    },
+    "audio": {
+      "family": "heavy",
+      "vol": 0.82,
+      "pitch": 0.78,
+      "jitter": 0.13,
+      "len": 0.7,
+      "bass": 0.74,
+      "grit": 0.81
+    },
+    "model": {
+      "template": "bullpupMg",
+      "palette": {
+        "body": [
+          7229488,
+          5655873,
+          1644319
+        ],
+        "accent": 10477823
+      },
+      "slots": [
+        {
+          "slot": "receiver",
+          "len": 1.7,
+          "girth": 1.2,
+          "segs": 5,
+          "vents": 2,
+          "muzzle": 0,
+          "taper": 0.05,
+          "emissive": 0.15
+        },
+        {
+          "slot": "barrel",
+          "len": 1.9,
+          "girth": 0.95,
+          "segs": 4,
+          "vents": 3,
+          "muzzle": 2,
+          "taper": -0.15,
+          "emissive": 0.1
+        },
+        {
+          "slot": "magazine",
+          "len": 1.1,
+          "girth": 1.3,
+          "segs": 3,
+          "vents": 1,
+          "muzzle": 0,
+          "taper": 0,
+          "emissive": 0.2,
+          "moving": "coil"
+        },
+        {
+          "slot": "cooling",
+          "len": 0.8,
+          "girth": 1.1,
+          "segs": 6,
+          "vents": 4,
+          "muzzle": 0,
+          "taper": 0.1,
+          "emissive": 0.35,
+          "moving": "glow"
+        },
+        {
+          "slot": "stock",
+          "len": 1.2,
+          "girth": 0.85,
+          "segs": 2,
+          "vents": 1,
+          "muzzle": 0,
+          "taper": -0.05,
+          "emissive": 0.05
+        }
+      ]
+    },
+    "componentTheme": {
+      "body": [
+        7229488,
+        5655873,
+        1644319
+      ],
+      "accent": 10477823,
+      "nameVocab": [
+        "Outrider",
+        "Salvage",
+        "Trailblazer",
+        "Flux",
+        "Ranger",
+        "Field",
+        "Drifter",
+        "Cascade"
+      ],
+      "geometryBias": {
+        "girth": 0.65,
+        "vents": 0.72,
+        "emissive": 0.38,
+        "animated": 0.42,
+        "muzzle": 0.55
+      },
+      "statBias": {
+        "dmg": 0.3,
+        "rate": 0.4,
+        "mag": 0.5,
+        "reload": -0.2,
+        "handling": 0.1
+      }
+    },
+    "lore": "Welded from salvaged LMG frames and jury-rigged with unstable flux-coils scavenged from a crashed prototype depot, the RUST OUTRIDER hums with barely-contained energy that its field engineers choose to call a feature.",
+    "dna": {
+      "primary": "Frontier Salvaged",
+      "secondary": "Experimental",
+      "featureHash": "1k6ldk"
+    }
+  }
+]

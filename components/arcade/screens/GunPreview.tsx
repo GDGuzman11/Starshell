@@ -13,7 +13,7 @@ import { accentOf, buildModel, disposeModel } from '../fps/models';
 import { buildEngineeredGun } from '../fps/arsenal/partModel';
 import type { EngPart } from '../fps/arsenal/parts';
 
-export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: string; equipped?: EngPart[]; previewPart?: EngPart | null; onExpand?: () => void }) {
+export function GunPreview({ gunId, equipped, previewPart, onExpand, fireNonce = 0 }: { gunId: string; equipped?: EngPart[]; previewPart?: EngPart | null; onExpand?: () => void; fireNonce?: number }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -24,6 +24,11 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
   const spinRef = useRef<THREE.Object3D[]>([]);
   const glowRef = useRef<{ mat: THREE.MeshStandardMaterial; base: number }[]>([]);
   const reducedRef = useRef(false);
+  // Test-fire animation: a recoil impulse + a muzzle flash at the 'muzzle' marker.
+  const recoilRef = useRef(0);
+  const modelBaseZRef = useRef(0);
+  const flashRef = useRef<THREE.Mesh | null>(null);
+  const flashStartRef = useRef(0);
   // click-and-hold to rotate (full 2-axis for weapons); tap = expand. Once the user grabs it,
   // `paused` latches so the auto-spin stops and the model stays in the posed angle.
   const dragRef = useRef({ active: false, lastX: 0, lastY: 0, startX: 0, startY: 0, moved: false, paused: false });
@@ -73,6 +78,23 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
       if (!reducedRef.current && pivot && !dragRef.current.paused) pivot.rotation.y += dt * 0.5;
       for (const s of spinRef.current) s.rotation.z += dt * 3.2;
       for (const g of glowRef.current) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t * 3)));
+      // recoil kick (decays) — a backward jolt + muzzle rise
+      const m = modelRef.current;
+      if (m) {
+        if (recoilRef.current > 0.001) recoilRef.current = Math.max(0, recoilRef.current - dt * 5);
+        m.position.z = modelBaseZRef.current + recoilRef.current * 0.1;
+        m.rotation.x = recoilRef.current * 0.16;
+      }
+      // muzzle flash fade (~110ms)
+      const fm = flashRef.current;
+      if (fm && fm.visible) {
+        const e = (performance.now() - flashStartRef.current) / 110;
+        if (e >= 1) fm.visible = false;
+        else {
+          (fm.material as THREE.MeshBasicMaterial).opacity = (1 - e) * 0.95;
+          fm.scale.setScalar(0.5 + e * 2.4);
+        }
+      }
       renderer.render(scene, camera);
     };
     tick();
@@ -131,6 +153,19 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
     // Tint the accent light + collect animated parts.
     const accent = accentOf(gunId);
     accentLightRef.current?.color.setHex(accent);
+
+    // Test-fire scaffolding: remember the centred Z + drop a muzzle-flash sprite at the
+    // 'muzzle' marker so a fire impulse can flash it.
+    modelBaseZRef.current = m.position.z;
+    const muzzle = m.getObjectByName('muzzle');
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    flash.position.copy(muzzle ? muzzle.position : new THREE.Vector3(0, 0, -0.4));
+    flash.visible = false;
+    m.add(flash);
+    flashRef.current = flash;
     const spins: THREE.Object3D[] = [];
     const glows: { mat: THREE.MeshStandardMaterial; base: number }[] = [];
     m.traverse((o) => {
@@ -143,6 +178,17 @@ export function GunPreview({ gunId, equipped, previewPart, onExpand }: { gunId: 
     spinRef.current = spins;
     glowRef.current = glows;
   }, [gunId, equipped, previewPart]);
+
+  // Test-fire trigger: bump `fireNonce` to kick recoil + flash the muzzle.
+  useEffect(() => {
+    if (fireNonce <= 0) return;
+    recoilRef.current = 1;
+    const fm = flashRef.current;
+    if (fm) {
+      fm.visible = true;
+      flashStartRef.current = performance.now();
+    }
+  }, [fireNonce]);
 
   return (
     <div

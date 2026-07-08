@@ -10,6 +10,8 @@
 import { useMemo, useState } from 'react';
 import { GunPreview } from './GunPreview';
 import { GUNS, gunById } from '../fps/weapons';
+import { loadMarine } from '../fps/marine/store';
+import { isWeaponForDivision, weaponDivision } from '../fps/gen/registry';
 import { categoriesForFamily } from '../fps/arsenal/categories';
 import { partsForCategory, applyEngineering, TIERS, type EngPart, type Tier } from '../fps/arsenal/parts';
 import { MANUFACTURERS } from '../fps/arsenal/manufacturers';
@@ -30,6 +32,9 @@ const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend: (n: number) => void; onBack: () => void }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
   const bosses = save.bosses;
+  // Division-tagged generated weapons only show for that division (untagged = universal).
+  const marineDiv = useMemo(() => loadMarine().division ?? 'outrider', []);
+  const guns = useMemo(() => GUNS.filter((g) => isWeaponForDivision(g.id, marineDiv)), [marineDiv]);
   const [weaponId, setWeaponId] = useState('ar01');
   const gun = gunById(weaponId);
   const cats = categoriesForFamily(gun.family);
@@ -107,7 +112,7 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
           </p>
         </div>
         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          {GUNS.map((g) => (
+          {guns.map((g) => (
             <button
               key={g.id}
               type="button"
@@ -116,6 +121,7 @@ export function FpsArsenal({ astro, onSpend, onBack }: { astro: number; onSpend:
             >
               {g.name}
               {hasSlots(g.id) && <span className="ml-1 text-[#aef5c8]">◆</span>}
+              {weaponDivision(g.id) && <span className="ml-1 text-[#ffd27a]">⬡</span>}
             </button>
           ))}
         </div>

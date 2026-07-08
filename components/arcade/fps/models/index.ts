@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
+import { generatedAccent, generatedGun, isGenerated } from '../gen/registry';
 import { ACCENT } from './parts';
 import { buildAssaultX, buildCarbine, buildPulseAR } from './rifles';
 import { buildAR01Pulse, buildCB02Ranger, buildER08Ion, buildGC03Hammer, buildMP05Viper, buildPM09Meteor, buildRC12Thunder, buildRT06Bulldog, buildSP01Service, buildVX04Tempest } from './standard';
@@ -192,10 +193,13 @@ const GUN_ACCENT: Record<string, number> = {
   otr02: 0xffb84a, // Stiletto marksman amber
 };
 
-/** Build a weapon model. Unknown ids fall back to a plain block (never throws). */
+/** Build a weapon model. Unknown ids fall back to a plain block (never throws).
+ *  Generated (DNA) weapons are assembled parametrically from their blueprint. */
 export function buildGun(id: string, tier: RenderTier): THREE.Group {
   const b = GUN_BUILDERS[id];
   if (b) return b(tier);
+  const gen = generatedGun(id, tier);
+  if (gen) return gen;
   const g = new THREE.Group();
   g.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.1), new THREE.MeshStandardMaterial({ color: 0x555555 })));
   return g;
@@ -212,11 +216,11 @@ export function buildThrowable(id: string, tier: RenderTier): THREE.Group {
 
 /** Build any weapon OR throwable model by id (used by the loadout preview). */
 export function buildModel(id: string, tier: RenderTier): THREE.Group {
-  return GUN_BUILDERS[id] ? buildGun(id, tier) : buildThrowable(id, tier);
+  return GUN_BUILDERS[id] || isGenerated(id) ? buildGun(id, tier) : buildThrowable(id, tier);
 }
 
 export function accentOf(id: string): number {
-  return GUN_ACCENT[id] ?? THROW_ACCENT[id] ?? 0xffffff;
+  return GUN_ACCENT[id] ?? generatedAccent(id) ?? THROW_ACCENT[id] ?? 0xffffff;
 }
 
 /** Free all geometries + materials under a model group (call before discarding). */

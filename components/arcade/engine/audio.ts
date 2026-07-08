@@ -8,8 +8,8 @@
  * compressor. Profiles are migrated family-by-family; ids without one yet fall
  * back to the legacy `gun()` sound.
  */
-type WType = 'ballistic' | 'energy' | 'heavy' | 'beam' | 'electric' | 'gravity' | 'launcher' | 'barrel';
-interface WProfile {
+export type WType = 'ballistic' | 'energy' | 'heavy' | 'beam' | 'electric' | 'gravity' | 'launcher' | 'barrel';
+export interface WProfile {
   type: WType;
   vol: number;
   pitch: number;
@@ -390,6 +390,11 @@ class Sfx {
 
   // ── public weapon API ───────────────────────────────────────────────────────
   /** Fire sound for a gun; falls back to legacy gun() until its family lands. */
+  /** Register a generated weapon's audio profile so `playWeaponFire`/`playReload`
+   *  synthesise it like any built-in gun (used by the DNA weapon generator). */
+  registerWeaponAudio(id: string, profile: WProfile): void {
+    WEAPON_AUDIO[id] = profile;
+  }
   playWeaponFire(id: string, family: string): void {
     this.ensure();
     if (!this.ctx || this.muted) return;

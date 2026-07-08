@@ -6,6 +6,9 @@ import { GunPreview } from './GunPreview';
 import { loadArsenal, saveArsenal, isWeaponUnlocked, unlockWeapon, equippedParts, type ArsenalSave } from '../fps/arsenal/store';
 import { applyEngineering } from '../fps/arsenal/parts';
 import { unlockWeaponPrice } from '../fps/arsenal/economy';
+import { loadMarine } from '../fps/marine/store';
+import { isWeaponForDivision, weaponDivision } from '../fps/gen/registry';
+import { GEN_DIVISIONS, type GenDivisionId } from '../fps/gen/divisions';
 
 // Normalization bounds for the stat bars (computed once over the whole arsenal).
 const DMG_MAX = Math.max(...GUNS.map((g) => g.dmg));
@@ -48,6 +51,10 @@ export function FpsLoadout({
   onBack: () => void;
 }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
+  const marineDiv = useMemo(() => loadMarine().division ?? 'outrider', []);
+  // A weapon is offered if it's unlocked AND allowed for the marine's division
+  // (untagged = universal; division-tagged generated weapons only for that division).
+  const offered = (g: GunDef) => isWeaponUnlocked(save, g.id) && isWeaponForDivision(g.id, marineDiv);
   const [p1, setP1] = useState(initial.p1);
   const [p2, setP2] = useState(initial.p2);
   const [sa, setSa] = useState(initial.sa);
@@ -122,9 +129,9 @@ export function FpsLoadout({
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
           {/* Loadout lists only weapons you OWN (recruit gear is always owned; others must be
               unlocked first). */}
-          <Picker label="PRIMARY" items={PRIMARIES.filter((g) => isWeaponUnlocked(save, g.id))} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="HEAVY" items={SECONDARIES.filter((g) => isWeaponUnlocked(save, g.id))} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="SIDEARM" items={SIDEARMS.filter((g) => isWeaponUnlocked(save, g.id))} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="PRIMARY" items={PRIMARIES.filter(offered)} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="HEAVY" items={SECONDARIES.filter(offered)} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="SIDEARM" items={SIDEARMS.filter(offered)} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
           <div>
             <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -187,7 +194,10 @@ function Picker({ label, items, value, focus, onPick, save, astro, gateOpen }: {
         {items.map((g) => {
           const unlocked = isWeaponUnlocked(save, g.id);
           const price = unlockWeaponPrice(g);
-          const sub = unlocked ? `${g.family} · ${g.dmg}` : !gateOpen ? `🔒 LVL ${UNLOCK_GATE_LEVEL}+` : `🔒 ◈${price}`;
+          const dv = weaponDivision(g.id);
+          const divName = dv ? GEN_DIVISIONS[dv as GenDivisionId]?.name : null;
+          const base = unlocked ? `${g.family} · ${g.dmg}` : !gateOpen ? `🔒 LVL ${UNLOCK_GATE_LEVEL}+` : `🔒 ◈${price}`;
+          const sub = divName ? `${base} · ⬡${divName}` : base;
           return <Chip key={g.id} label={g.name} sub={sub} on={value === g.id} ring={focus === g.id} locked={!unlocked} afford={astro >= price && gateOpen} color="#7fdfff" onClick={() => onPick(g.id)} />;
         })}
       </div>

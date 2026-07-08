@@ -17,6 +17,8 @@ import type { Family } from '../weapons';
 import { categoriesForFamily, type Category, type SlotKind } from './categories';
 import { MANUFACTURERS, MANUFACTURER_IDS, type ManufacturerId } from './manufacturers';
 import { priceFor, legendaryGate, type PartGate } from './economy';
+import type { ComponentTheme } from '../gen/blueprint';
+import { getComponentTheme } from '../gen/themeStore';
 
 export type Tier = 'military' | 'prototype' | 'legendary';
 export const TIERS: Tier[] = ['military', 'prototype', 'legendary'];
@@ -108,9 +110,13 @@ function hashStr(s: string): number {
 
 const TIER_MAG: Record<Tier, number> = { military: 1, prototype: 1.7, legendary: 2.6 }; // stat + price scale
 const cache = new Map<string, EngPart[]>();
+const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
-/** Generate one category's 60 parts (20 per tier), deterministic per weapon+category. */
-function buildCategory(weaponId: string, family: Family, cat: Category): EngPart[] {
+/** Generate one category's 60 parts (20 per tier), deterministic per weapon+category.
+ *  A DNA `theme` (generated weapons) biases the whole tree: palette from the DNA colours,
+ *  names seeded with the DNA vocabulary, geometry + stat lean following the DNA — so a
+ *  weapon's components look and feel like their parent. */
+function buildCategory(weaponId: string, family: Family, cat: Category, theme?: ComponentTheme): EngPart[] {
   const roles = SLOT_ROLES[cat.slot];
   const noun = SLOT_NOUN[cat.slot];
   const out: EngPart[] = [];
@@ -136,7 +142,10 @@ function buildCategory(weaponId: string, family: Family, cat: Category): EngPart
       const r = rng(hashStr(`${weaponId}|${cat.id}|${tier}|${i}`));
       const mag = TIER_MAG[tier];
       // primary stat gets the main lift; a light tradeoff keeps parts non-strictly-better.
-      const base = (0.02 + r() * 0.04) * mag; // 2-6% (×tier)
+      // DNA stat lean: a weapon whose DNA favours this category's primary stat grows
+      // slightly stronger parts for it (kept light so parts stay balanced).
+      const lean = theme ? 1 + 0.2 * clamp(theme.statBias[cat.primary] ?? 0, -1, 1) : 1;
+      const base = (0.02 + r() * 0.04) * mag * lean; // 2-6% (×tier, ×DNA lean)
       const stats: PartStats = {};
       stats[cat.primary] = +(base + man.bias[cat.primary === 'handling' ? 'handling' : cat.primary]).toFixed(3);
       // a small secondary bump (prototype/legendary) + a military tradeoff
@@ -149,25 +158,30 @@ function buildCategory(weaponId: string, family: Family, cat: Category): EngPart
         stats[sec] = +((0.015 + r() * 0.03) * (mag - 1)).toFixed(3);
       }
       const shortMfr = man.name.split(' ')[0];
+      // DNA naming: seed higher-tier names with a word from the DNA vocabulary. The
+      // (manufacturer, role) pair is already unique per part, so names never collide.
+      const themeWord = theme && theme.nameVocab.length ? theme.nameVocab[(r() * theme.nameVocab.length) | 0] : null;
       const name =
         tier === 'military'
           ? `${shortMfr} ${role} ${noun}`
           : tier === 'prototype'
-            ? `${shortMfr} ${role} ${noun} ${PROTO_TOKENS[(r() * PROTO_TOKENS.length) | 0]}`
-            : `${shortMfr} ${LEGEND_TOKENS[(r() * LEGEND_TOKENS.length) | 0]} ${role} ${noun}`;
+            ? `${shortMfr} ${role} ${noun} ${themeWord ?? PROTO_TOKENS[(r() * PROTO_TOKENS.length) | 0]}`
+            : `${shortMfr} ${themeWord ?? LEGEND_TOKENS[(r() * LEGEND_TOKENS.length) | 0]} ${role} ${noun}`;
       const animated = tier !== 'military';
+      // DNA geometry lean: nudge girth / vents / emissive / muzzle toward the DNA's look.
+      const gb = theme?.geometryBias;
       const model: PartModelSpec = {
         slot: cat.slot,
         len: +(0.7 + r() * 0.8 + (tier === 'legendary' ? 0.15 : 0)).toFixed(2),
-        girth: +(0.8 + r() * 0.5).toFixed(2),
+        girth: +clamp(0.8 + r() * 0.5 + (gb?.girth ?? 0) * 0.3, 0.6, 1.4).toFixed(2),
         segs: 1 + ((r() * 4) | 0) + (tier === 'legendary' ? 2 : tier === 'prototype' ? 1 : 0),
-        vents: (r() * 4) | 0,
-        muzzle: (r() * 4) | 0,
+        vents: Math.round(clamp(((r() * 4) | 0) + (gb?.vents ?? 0) * 2, 0, 5)),
+        muzzle: gb?.muzzle != null ? Math.round(clamp((((r() * 4) | 0) + gb.muzzle) / 2, 0, 3)) : (r() * 4) | 0,
         taper: +((r() - 0.5) * 0.6).toFixed(2),
-        emissive: +(tier === 'military' ? r() * 0.3 : 0.4 + r() * 0.6).toFixed(2),
+        emissive: +clamp((tier === 'military' ? r() * 0.3 : 0.4 + r() * 0.6) + (gb?.emissive ?? 0) * 0.3, 0, 1).toFixed(2),
         animated,
-        accent: man.accent,
-        body: man.body,
+        accent: theme ? theme.accent : man.accent,
+        body: theme && theme.body.length ? theme.body[idx % theme.body.length] : man.body,
       };
       const price = priceFor(tier, base + (stats[sec] ?? 0));
       out.push({
@@ -190,12 +204,15 @@ function buildCategory(weaponId: string, family: Family, cat: Category): EngPart
   return out;
 }
 
-/** All 300 engineering parts for a weapon (memoized). */
-export function generateParts(weaponId: string, family: Family): EngPart[] {
+/** All 300 engineering parts for a weapon (memoized). Generated weapons pass (or look
+ *  up) a DNA `theme` so their component tree inherits the parent's identity; built-in
+ *  weapons pass nothing and are unchanged. */
+export function generateParts(weaponId: string, family: Family, theme?: ComponentTheme): EngPart[] {
   const hit = cache.get(weaponId);
   if (hit) return hit;
+  const th = theme ?? getComponentTheme(weaponId);
   const parts: EngPart[] = [];
-  for (const cat of categoriesForFamily(family)) parts.push(...buildCategory(weaponId, family, cat));
+  for (const cat of categoriesForFamily(family)) parts.push(...buildCategory(weaponId, family, cat, th));
   cache.set(weaponId, parts);
   return parts;
 }
