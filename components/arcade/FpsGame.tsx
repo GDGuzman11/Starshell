@@ -206,7 +206,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   }, [initialScreen]);
 
   useEffect(() => {
-    setIsTouch('ontouchstart' in window);
+    setIsTouch('ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0));
     try {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       setAstro(Number(localStorage.getItem('starshell.astro') || 0));
@@ -1100,12 +1100,14 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                   <Slider label="Button Size" value={cfg.btnScale} min={0.8} max={1.5} step={0.1} onChange={(v) => setCfg((c) => ({ ...c, btnScale: v }))} />
                   <Toggle label="High Contrast" on={cfg.highContrast} onToggle={() => setCfg((c) => ({ ...c, highContrast: !c.highContrast }))} />
                   <Toggle label="Colourblind-safe" on={cfg.colorblind} onToggle={() => setCfg((c) => ({ ...c, colorblind: !c.colorblind }))} />
-                  <button type="button" onClick={() => { setShowSettings(false); setShowEditor(true); }} className="flex min-h-[38px] w-full items-center justify-between rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-3 font-pixel text-[8px] uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20 sm:text-[9px]">
-                    <span>Edit Controls Layout</span>
-                    <span>▸</span>
-                  </button>
                 </>
               )}
+              {/* Always available so it's reachable even if touch isn't detected. Drag the
+                  buttons in place, then Save & Use to persist the layout permanently. */}
+              <button type="button" onClick={() => { setShowSettings(false); setShowEditor(true); }} className="flex min-h-[40px] w-full items-center justify-between rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-3 font-pixel text-[8px] uppercase text-[#7fdfff] hover:bg-[#7fdfff]/20 sm:text-[9px]">
+                <span>✥ Edit Controls Layout · drag &amp; save</span>
+                <span>▸</span>
+              </button>
             </div>
           </div>
         </div>
