@@ -52,9 +52,11 @@ export function FpsLoadout({
 }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
   const marineDiv = useMemo(() => loadMarine().division ?? 'outrider', []);
-  // A weapon is offered if it's unlocked AND allowed for the marine's division
-  // (untagged = universal; division-tagged generated weapons only for that division).
-  const offered = (g: GunDef) => isWeaponUnlocked(save, g.id) && isWeaponForDivision(g.id, marineDiv);
+  // A weapon is OFFERED in the loadout if it's allowed for the marine's division
+  // (untagged = universal; division-tagged only for that division). Owned/recruit guns
+  // equip on click; LOCKED guns show with a 🔒 + AstroDiamond price and are BOUGHT on
+  // click (see tryPick — needs level 5 + enough ◈). This is the weapon shop.
+  const offered = (g: GunDef) => isWeaponForDivision(g.id, marineDiv);
   const [p1, setP1] = useState(initial.p1);
   const [p2, setP2] = useState(initial.p2);
   const [sa, setSa] = useState(initial.sa);
@@ -127,8 +129,8 @@ export function FpsLoadout({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
-          {/* Loadout lists only weapons you OWN (recruit gear is always owned; others must be
-              unlocked first). */}
+          {/* Each pool shows your division's weapons: recruit/owned equip on tap; locked
+              ones show 🔒 + a ◈ price and are bought on tap (level 5 + enough AstroDiamonds). */}
           <Picker label="PRIMARY" items={PRIMARIES.filter(offered)} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
           <Picker label="HEAVY" items={SECONDARIES.filter(offered)} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
           <Picker label="SIDEARM" items={SIDEARMS.filter(offered)} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
