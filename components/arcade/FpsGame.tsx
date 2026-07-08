@@ -1082,8 +1082,9 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
           className="fixed inset-0 z-[210] flex items-center justify-center bg-black/85 px-4 backdrop-blur-md"
           style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#0a0c14]/90 p-5">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="max-h-[88dvh] w-full max-w-sm touch-pan-y overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-[#0a0c14]/90 px-5 pb-5">
+            {/* Pinned header so DONE stays reachable while the list is scrolled/dragged. */}
+            <div className="sticky top-0 z-10 -mx-5 mb-3 flex items-center justify-between border-b border-white/5 bg-[#0a0c14] px-5 pb-2 pt-4">
               <p className="font-pixel text-[12px] text-[#7fdfff]">SETTINGS</p>
               <button type="button" onClick={() => setShowSettings(false)} className="min-h-[32px] font-pixel text-[9px] text-white/55 hover:text-white">
                 DONE
