@@ -24,11 +24,14 @@ export function buildSidearm(tier: RenderTier): THREE.Group {
   slide.name = 'bolt';
   const barrel = cylZ(0.016, 0.06, dark, 0, 0.04, -0.14);
   const frame = box(0.045, 0.04, 0.16, dark, 0, 0.0, 0.0);
+  frame.name = 'base:frame';
   const grp = grip(0.05, 0.14, 0.06, dark, 0, -0.09, 0.06);
+  grp.name = 'base:grip';
   const mag = box(0.04, 0.04, 0.05, dark, 0, -0.15, 0.06);
   mag.name = 'mag';
   const guard = box(0.03, 0.05, 0.03, dark, 0, -0.03, 0.0);
   const sight = box(0.012, 0.015, 0.015, dot, 0, 0.08, 0.06);
+  sight.name = 'base:sight';
   return model([slide, barrel, frame, grp, mag, guard, sight, muzzleAt(-0.17, 0.04)]);
 }
 
@@ -43,7 +46,9 @@ export function buildHandCannon(tier: RenderTier): THREE.Group {
   cylinder.name = 'spin';
   const cylFace = cylX(0.04, 0.092, body, 0, 0.02, 0.04);
   const frame = box(0.04, 0.1, 0.12, body, 0, 0.0, 0.06);
+  frame.name = 'base:frame';
   const grp = grip(0.06, 0.17, 0.08, dark, 0, -0.11, 0.12, 0.28); // oversized grip
+  grp.name = 'base:grip';
   const hammer = box(0.02, 0.04, 0.03, dark, 0, 0.09, 0.12);
   const tip = box(0.04, 0.04, 0.02, dot, 0, 0.05, -0.28);
   return model([barrel, rib, cylinder, cylFace, frame, grp, hammer, tip, muzzleAt(-0.29, 0.05)]);

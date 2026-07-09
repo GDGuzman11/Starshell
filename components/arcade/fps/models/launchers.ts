@@ -22,11 +22,13 @@ export function buildRocketTube(tier: RenderTier): THREE.Group {
   const dark = metal(COL.matteBlack, tier);
   const hot = accent(ACCENT.orange, tier);
   const tube = cylZ(0.08, 0.78, body, 0, 0.02, -0.06); // one big tube
+  tube.name = 'base:tube';
   const mouth = cylZ(0.095, 0.06, dark, 0, 0.02, -0.44); // flared muzzle
   const rearMouth = cylZ(0.095, 0.06, dark, 0, 0.02, 0.32); // rear loading
   const warhead = coneZ(0.0, 0.05, 0.12, hot, 0, 0.02, -0.42); // loaded warhead tip
-  warhead.name = 'mag';
+  warhead.name = 'base:warhead';
   const sight = box(0.02, 0.06, 0.04, hot, 0, 0.12, -0.18); // top sight
+  sight.name = 'base:sight';
   const sideGrip = grip(0.05, 0.12, 0.07, dark, 0, -0.1, -0.04);
   const rearGrip = grip(0.05, 0.11, 0.06, dark, 0, -0.09, 0.2);
   const heatBand = cylZ(0.085, 0.03, hot, 0, 0.02, -0.28);
@@ -39,7 +41,8 @@ export function buildNovaCannon(tier: RenderTier): THREE.Group {
   const dark = metal(COL.matteBlack, tier);
   const plasma = accent(ACCENT.red, tier, 1.8);
   const block = box(0.16, 0.16, 0.34, body, 0, 0, 0.12); // heavy body
-  const battery = box(0.2, 0.18, 0.14, dark, 0, -0.01, 0.3); // oversized battery
+  const battery = box(0.2, 0.18, 0.14, dark, 0, -0.01, 0.3); // oversized battery = core
+  battery.name = 'base:core';
   const fins = finStack(6, 0.045, 0.18, 0.16, dark, 0, 0.02, 0.0); // heavy cooling fins
   const chamber = capsuleZ(0.09, 0.1, plasma, 0, 0.01, -0.26); // front energy chamber
   chamber.name = 'coil';

@@ -164,6 +164,24 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T)
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
 }
 
+/** Rotary slots where a spinning/cyclic ring reads as REAL machinery: a rotary barrel
+ *  cluster, a cooling fan, a feed drum/sprocket, or energy-containment rings on the
+ *  core/reactor/emitter. A `spin`/`coil` tag anywhere else (a magazine, stock, optic,
+ *  grip…) would look absurd, so it is downgraded. */
+const ROTARY_SLOTS: SlotKind[] = ['barrel', 'tube', 'cooling', 'feed', 'core', 'reactor', 'emitter'];
+
+/** Keep a moving tag only where its motion makes physical sense — the realism rule:
+ *  `spin`/`coil` only on rotary mechanisms; `bolt` (reciprocates) only on a bolt/slide;
+ *  `glow` (a static emissive pulse, no motion) anywhere. So we never spin a magazine or
+ *  a stock. Applied at parse so it covers AI, fallback AND baked-JSON blueprints. */
+function sanitizeMoving(slot: SlotKind, tag: MovingPartTag | undefined): MovingPartTag | undefined {
+  if (!tag) return undefined;
+  if (tag === 'spin' || tag === 'coil') return ROTARY_SLOTS.includes(slot) ? tag : 'glow';
+  if (tag === 'bolt') return slot === 'bolt' || slot === 'slide' ? 'bolt' : undefined;
+  if (tag === 'muzzle') return undefined; // 'muzzle' is an anchor, not a per-slot motion
+  return 'glow';
+}
+
 /** A colour can arrive as a number (0xRRGGBB) or a "#rrggbb"/"rrggbb" string. */
 function color(v: unknown, fallback: number): number {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.round(v) & 0xffffff;
@@ -214,17 +232,21 @@ export function parseWeaponBlueprint(raw: unknown): WeaponBlueprint | null {
   const accent = color(rmp.accent, 0x49a6ff);
 
   const rawSlots = Array.isArray(rm.slots) ? (rm.slots as Record<string, unknown>[]) : [];
-  const slots: BlueprintSlot[] = rawSlots.slice(0, 8).map((s) => ({
-    slot: oneOf<SlotKind>(s.slot, VALID_SLOTS, 'barrel'),
-    len: clamp(num(s.len, 1), 0.5, 2),
-    girth: clamp(num(s.girth, 1), 0.6, 1.4),
-    segs: Math.round(clamp(num(s.segs, 2), 0, 8)),
-    vents: Math.round(clamp(num(s.vents, 1), 0, 5)),
-    muzzle: Math.round(clamp(num(s.muzzle, 0), 0, 3)),
-    taper: clamp(num(s.taper, 0), -0.3, 0.3),
-    emissive: clamp(num(s.emissive, 0.2), 0, 1),
-    moving: typeof s.moving === 'string' ? oneOf(s.moving, MOVING_PART_TAGS, 'glow') : undefined,
-  }));
+  const slots: BlueprintSlot[] = rawSlots.slice(0, 8).map((s) => {
+    const slot = oneOf<SlotKind>(s.slot, VALID_SLOTS, 'barrel');
+    const rawMoving = typeof s.moving === 'string' ? oneOf(s.moving, MOVING_PART_TAGS, 'glow') : undefined;
+    return {
+      slot,
+      len: clamp(num(s.len, 1), 0.5, 2),
+      girth: clamp(num(s.girth, 1), 0.6, 1.4),
+      segs: Math.round(clamp(num(s.segs, 2), 0, 8)),
+      vents: Math.round(clamp(num(s.vents, 1), 0, 5)),
+      muzzle: Math.round(clamp(num(s.muzzle, 0), 0, 3)),
+      taper: clamp(num(s.taper, 0), -0.3, 0.3),
+      emissive: clamp(num(s.emissive, 0.2), 0, 1),
+      moving: sanitizeMoving(slot, rawMoving),
+    };
+  });
 
   const bp: WeaponBlueprint = {
     id: slugId(name, r.id),

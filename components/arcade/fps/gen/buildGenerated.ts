@@ -62,9 +62,13 @@ export function buildGeneratedGun(bp: WeaponBlueprint, tier: RenderTier): THREE.
     if (a.rot) mesh.rotation.set(a.rot[0], a.rot[1], a.rot[2]);
     // Tag moving/emissive parts so the animators (preview spin, viewmodel recoil,
     // glow pulse) can find them. 'coil' maps to 'spin' visually (rotating rings).
+    // A STATIC slot instead gets a `base:<slot>` tag (magazine → 'mag') so a bought
+    // engineering component REPLACES it (fit-to-slot), exactly like the hand-built
+    // guns; a moving mechanism keeps its animation and falls back to overlay.
     if (s.moving === 'spin' || s.moving === 'coil') mesh.name = 'spin';
     else if (s.moving === 'glow') mesh.name = 'glow';
     else if (s.moving === 'bolt') mesh.name = 'bolt';
+    else mesh.name = s.slot === 'magazine' ? 'mag' : `base:${s.slot}`;
     parts.push(mesh);
   }
 

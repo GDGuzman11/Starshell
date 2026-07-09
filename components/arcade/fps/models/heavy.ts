@@ -22,11 +22,14 @@ export function buildNovaSMG(tier: RenderTier): THREE.Group {
   const hot = accent(ACCENT.red, tier);
   const shell = box(0.09, 0.12, 0.34, body, 0, 0, 0.04); // compact bullpup shell
   const shroud = cylZ(0.05, 0.26, dark, 0, 0.02, -0.24); // fat suppressor shroud
+  shroud.name = 'base:barrel';
   const shroudRib = finStack(3, 0.06, 0.11, 0.005, body, 0, 0.02, -0.16);
+  shroudRib.name = 'base:cooling';
   const mag = box(0.06, 0.16, 0.09, dark, 0, -0.12, 0.16); // magazine BEHIND grip (bullpup)
   mag.name = 'mag';
   const grp = grip(0.06, 0.13, 0.07, dark, 0, -0.11, 0.0);
   const stock = box(0.07, 0.1, 0.05, body, 0, 0.0, 0.22); // compact stock
+  stock.name = 'base:stability';
   const eye = box(0.03, 0.03, 0.03, hot, 0, 0.08, 0.06);
   return model([shell, shroud, shroudRib, mag, grp, stock, eye, muzzleAt(-0.4, 0.02)]);
 }
@@ -38,10 +41,13 @@ export function buildSiegeLMG(tier: RenderTier): THREE.Group {
   const warn = accent(ACCENT.red, tier, 1.2);
   const receiver = box(0.16, 0.14, 0.42, body, 0, 0, 0.04); // wide receiver
   const barrel = cylZ(0.05, 0.5, dark, 0, 0.02, -0.36); // very thick barrel
+  barrel.name = 'base:barrel';
   const barrelFins = finStack(5, 0.05, 0.13, 0.13, dark, 0, 0.02, -0.2);
+  barrelFins.name = 'base:cooling';
   const drum = cylX(0.13, 0.08, dark, 0, -0.16, 0.06); // drum magazine
   drum.name = 'mag';
   const drumFace = cylX(0.09, 0.082, warn, 0, -0.16, 0.06);
+  drumFace.name = 'mag';
   // carry handle: arch over the top
   const handleTop = box(0.04, 0.025, 0.2, body, 0, 0.14, 0.02);
   const handleF = box(0.04, 0.06, 0.03, body, 0, 0.11, -0.08);
