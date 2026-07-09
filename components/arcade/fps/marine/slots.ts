@@ -41,6 +41,11 @@ export interface ArmorSlot {
    *  reads as the marine's armour rather than sitting on top. Additive slots
    *  (belt, comms, backpack…) leave this false and overlay at `anchor`. */
   replace?: boolean;
+  /** Additive (overlay) slot sizing: fit the piece into a box of these dimensions
+   *  centred at `anchor` (body-part local), so every piece for the slot sizes to the
+   *  same body region regardless of its authored bulk. It still sits ON the body — a
+   *  belt/pack/module is an add-on, not a shell replacement. */
+  fitBox?: [number, number, number];
 }
 
 /**
@@ -51,23 +56,23 @@ export interface ArmorSlot {
 export const ARMOR_SLOTS: ArmorSlot[] = [
   // ── plating ─────────────────────────────────────────────────────────────────
   { id: 'helmet', label: 'Helmet', parts: ['head'], anchor: [0, 0.1, 0], family: 'helmet', primary: 'armor', group: 'plating', replace: true },
-  { id: 'neck', label: 'Neck Guard', parts: ['torso'], anchor: [0, 0.52, 0.02], family: 'plate', primary: 'armor', group: 'plating' },
+  { id: 'neck', label: 'Neck Guard', parts: ['torso'], anchor: [0, 0.52, 0.02], family: 'plate', primary: 'armor', group: 'plating', fitBox: [0.34, 0.12, 0.3] },
   { id: 'chest', label: 'Chest Plate', parts: ['torso'], anchor: [0, 0.3, 0.16], family: 'chest', primary: 'armor', group: 'plating', replace: true },
-  { id: 'back', label: 'Back Plate', parts: ['torso'], anchor: [0, 0.32, -0.16], family: 'plate', primary: 'armor', group: 'plating' },
+  { id: 'back', label: 'Back Plate', parts: ['torso'], anchor: [0, 0.32, -0.16], family: 'plate', primary: 'armor', group: 'plating', fitBox: [0.4, 0.34, 0.1] },
   { id: 'shoulders', label: 'Shoulders', parts: ['torso'], anchor: [0, 0.48, 0], family: 'pauldron', primary: 'armor', group: 'plating', replace: true },
   { id: 'upperArms', label: 'Upper Arms', parts: ['armL', 'armR'], anchor: [0, -0.2, 0], family: 'limb', primary: 'armor', group: 'plating', replace: true },
   { id: 'forearms', label: 'Forearms', parts: ['armL', 'armR'], anchor: [0, -0.4, 0], family: 'limb', primary: 'mobility', group: 'plating', replace: true },
-  { id: 'gloves', label: 'Gloves', parts: ['armL', 'armR'], anchor: [0, -0.54, 0.02], family: 'glove', primary: 'mobility', group: 'plating' },
-  { id: 'belt', label: 'Utility Belt', parts: ['torso'], anchor: [0, 0.02, 0.02], family: 'plate', primary: 'recovery', group: 'plating' },
-  { id: 'hip', label: 'Hip Armor', parts: ['torso'], anchor: [0, -0.04, 0], family: 'plate', primary: 'armor', group: 'plating' },
+  { id: 'gloves', label: 'Gloves', parts: ['armL', 'armR'], anchor: [0, -0.54, 0.02], family: 'glove', primary: 'mobility', group: 'plating', fitBox: [0.16, 0.14, 0.18] },
+  { id: 'belt', label: 'Utility Belt', parts: ['torso'], anchor: [0, 0.02, 0.02], family: 'plate', primary: 'recovery', group: 'plating', fitBox: [0.46, 0.1, 0.32] },
+  { id: 'hip', label: 'Hip Armor', parts: ['torso'], anchor: [0, -0.04, 0], family: 'plate', primary: 'armor', group: 'plating', fitBox: [0.44, 0.16, 0.32] },
   { id: 'thighs', label: 'Thigh Armor', parts: ['legL', 'legR'], anchor: [0, -0.28, 0.03], family: 'limb', primary: 'mobility', group: 'plating', replace: true },
-  { id: 'knees', label: 'Knees', parts: ['legL', 'legR'], anchor: [0, -0.48, 0.05], family: 'cap', primary: 'mobility', group: 'plating' },
+  { id: 'knees', label: 'Knees', parts: ['legL', 'legR'], anchor: [0, -0.48, 0.05], family: 'cap', primary: 'mobility', group: 'plating', fitBox: [0.16, 0.16, 0.18] },
   { id: 'shins', label: 'Shin Guards', parts: ['legL', 'legR'], anchor: [0, -0.7, 0.04], family: 'limb', primary: 'mobility', group: 'plating', replace: true },
   { id: 'boots', label: 'Boots', parts: ['legL', 'legR'], anchor: [0, -0.88, 0.06], family: 'boot', primary: 'mobility', group: 'plating', replace: true },
   // ── systems ─────────────────────────────────────────────────────────────────
-  { id: 'backpack', label: 'Backpack', parts: ['torso'], anchor: [0, 0.34, -0.24], family: 'backpack', primary: 'shield', group: 'systems' },
-  { id: 'core', label: 'Power Core', parts: ['torso'], anchor: [0, 0.16, 0.16], family: 'core', primary: 'shield', group: 'systems' },
-  { id: 'comms', label: 'Comms Module', parts: ['head'], anchor: [0.1, 0.22, -0.05], family: 'comms', primary: 'recovery', group: 'systems' },
+  { id: 'backpack', label: 'Backpack', parts: ['torso'], anchor: [0, 0.34, -0.24], family: 'backpack', primary: 'shield', group: 'systems', fitBox: [0.34, 0.42, 0.2] },
+  { id: 'core', label: 'Power Core', parts: ['torso'], anchor: [0, 0.16, 0.16], family: 'core', primary: 'shield', group: 'systems', fitBox: [0.2, 0.2, 0.14] },
+  { id: 'comms', label: 'Comms Module', parts: ['head'], anchor: [0.1, 0.22, -0.05], family: 'comms', primary: 'recovery', group: 'systems', fitBox: [0.14, 0.16, 0.16] },
   // ── cosmetic ────────────────────────────────────────────────────────────────
   { id: 'coating', label: 'Armor Coating', parts: ['torso'], anchor: [0, 0, 0], family: 'coating', primary: 'armor', cosmetic: true, group: 'cosmetic' },
   { id: 'insignia', label: 'Insignia', parts: ['torso'], anchor: [0, 0.34, 0.155], family: 'insignia', primary: 'armor', cosmetic: true, group: 'cosmetic' },

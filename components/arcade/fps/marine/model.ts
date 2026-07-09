@@ -60,7 +60,18 @@ export function buildMarine(equipped: ArmorPiece[], rt: RenderTier, divisionId?:
           continue;
         }
       }
-      // ADDITIVE slot (or a body that has no such shell): overlay at the anchor.
+      // ADDITIVE slot with a region box: size the piece to that body region but still
+      // overlay ON the body — a belt/pack/module is an add-on, not a shell replacement.
+      // 'fill' (clamped per-axis) suits these — many are flat plates, and the clamp keeps
+      // a thin piece from ballooning when a region axis is much deeper than the plate.
+      if (slot.fitBox) {
+        const c = new THREE.Vector3(slot.anchor[0], slot.anchor[1], slot.anchor[2]);
+        const boxT = new THREE.Box3().setFromCenterAndSize(c, new THREE.Vector3(slot.fitBox[0], slot.fitBox[1], slot.fitBox[2]));
+        fitToSlot(mesh, boxT, 'fill');
+        target.add(mesh);
+        continue;
+      }
+      // No region box (coating/insignia): overlay at the anchor, unscaled.
       mesh.position.set(slot.anchor[0], slot.anchor[1], slot.anchor[2]);
       target.add(mesh);
     }

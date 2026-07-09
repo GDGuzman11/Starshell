@@ -57,6 +57,17 @@ export function fitToSlot(part: THREE.Object3D, target: THREE.Box3, mode: FitMod
 export function fitByCore(part: THREE.Object3D, target: THREE.Box3, coreName: string): void {
   let core: THREE.Object3D | undefined;
   part.traverse((o) => { if (!core && o.name === coreName) core = o; });
+  if (!core) {
+    // No explicit core tag → treat the largest-volume mesh as the body, so an
+    // accessory (an antenna, a pack strap) never drives the fit.
+    let bestV = -1;
+    part.traverse((o) => {
+      if (!(o as THREE.Mesh).isMesh) return;
+      const s = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+      const v = s.x * s.y * s.z;
+      if (v > bestV) { bestV = v; core = o; }
+    });
+  }
   if (!core) return fitToSlot(part, target, 'fill');
   const cb = new THREE.Box3().setFromObject(core);
   if (cb.isEmpty()) return fitToSlot(part, target, 'fill');
