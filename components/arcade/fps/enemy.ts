@@ -6,7 +6,7 @@
  * off. Break line of sight and they advance on your last-known spot, then give
  * up. Difficulty scales reaction, accuracy, speed, damage, and view range.
  */
-import { segBlocked, segHitsSphere, type Vec3 } from './combat';
+import { rayWallBox, segBlocked, segHitsSphere, type Vec3 } from './combat';
 import type { Box, Ladder, Level3D } from './level3d';
 import type { SpatialGrid } from './level/grid';
 import { type NavGraph, type NavNode, nearestNode, pathTo } from './level/nav';
@@ -275,6 +275,10 @@ const CLASS: Record<EnemyClass, ClassDef> = {
 export const SQUAD_ROLES: EnemyClass[] = ['commander', 'marksman', 'rifleman', 'tank', 'engineer'];
 export const SQUAD_SIZE = SQUAD_ROLES.length;
 const HEAL_RATE = 55; // HP/s a healer restores to a nearby wounded ally
+/** Heavy-firepower classes that will SHOOT breakable cover to flush the player out when
+ *  they know where you are but a wall is in the way. Line units (riflemen/scouts) won't,
+ *  so cover still matters most of the time. */
+const BREAKERS = new Set<EnemyClass>(['tank', 'breacher', 'suppressor', 'commander']);
 
 const R = 0.45; // collision radius
 const EYE_H = 1.4;
@@ -861,6 +865,17 @@ export interface EnemyTracer {
   to: Vec3;
   color: number;
 }
+/** A breakable-cover shot: a heavy enemy chipping a destructible box to flush the
+ *  player out. The loop applies it via `damageBox` (which owns wall HP + VFX). */
+export interface WallHit {
+  box: Box;
+  dmg: number;
+  from: Vec3; // shooter eye (for the tracer)
+  x: number; // impact point on the wall
+  y: number;
+  z: number;
+  color: number;
+}
 
 /** A ground telegraph the boss wants shown this frame (the loop spawns it into the
  *  TelegraphSystem; the boss resolves its own damage on landing, so the telegraph
@@ -906,7 +921,7 @@ export function updateEnemies(
   grid?: SpatialGrid,
   nav?: NavGraph,
   elapsed = 0, // seconds since level start (start-of-match combat lock + boss grace)
-): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean } {
+): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean; wallHits: WallHit[] } {
   const P = PARAMS[diff];
   // Combat lock: nobody fires until the intro countdown ends. Boss grace: on a boss
   // level the player gets 10 s to find cover before anything can SEE them.
@@ -920,6 +935,7 @@ export function updateEnemies(
   let damage = 0;
   let seen = false;
   const tracers: EnemyTracer[] = [];
+  const wallHits: WallHit[] = [];
   const bossShots: BossShot[] = [];
   const bossTelegraphs: BossTelegraph[] = [];
   let bossFog = false;
@@ -1029,7 +1045,30 @@ export function updateEnemies(
       damage += 16;
       return;
     }
-    if (!canSee) return;
+    if (!canSee) {
+      // BREAK COVER: a heavy class that KNOWS where you are but can't get a clean shot
+      // (a wall in the way) fires at that wall to flush you out. Only breakable boxes,
+      // rate-limited by the weapon (wall HP is high, so it takes seconds) — cover still
+      // works, it just isn't permanent against a tank/breacher/suppressor/commander.
+      if (BREAKERS.has(e.cls) && haveIntel && dist < 30) {
+        const tgt = squad.lastKnown ?? e.lastSeen;
+        if (tgt) {
+          const eeye: Vec3 = [e.x, e.y + EYE_H, e.z];
+          let dx = tgt.x - e.x;
+          let dz = tgt.z - e.z;
+          const dl = Math.hypot(dx, dz) || 1;
+          const dir: Vec3 = [dx / dl, 0, dz / dl];
+          const wb = rayWallBox(eeye, dir, lvl, dl);
+          if (wb.box && !wb.box.indestructible && !wb.box.dead) {
+            const W = WEAPONS[e.weapon];
+            e.fireCd = W.rate;
+            e.muzzle = 0.12;
+            wallHits.push({ box: wb.box, dmg: W.dmg * P.dmgMul, from: eeye, x: eeye[0] + dir[0] * wb.t, y: eeye[1] + dir[1] * wb.t, z: eeye[2] + dir[2] * wb.t, color: W.color });
+          }
+        }
+      }
+      return;
+    }
     const isSniper = e.cls === 'marksman' && dist > 12;
     const W = isSniper ? SNIPER_W : e.cls === 'marksman' ? WEAPONS.rifle : WEAPONS[e.weapon];
     // RANGE GATE: assault weapons never fire past their effective band — they hold
@@ -1950,5 +1989,5 @@ export function updateEnemies(
       }
     }
   }
-  return { damage, tracers, seen, bossShots, bossTelegraphs, bossFog };
+  return { damage, tracers, seen, bossShots, bossTelegraphs, bossFog, wallHits };
 }

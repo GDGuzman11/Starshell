@@ -1553,6 +1553,11 @@ export function useFpsLoop(
             if (!group || !group.length) continue;
             const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
             for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + eyeH - 0.1, p.z], tr.color);
+            // Heavy enemies chipping breakable cover to flush the player out.
+            for (const wh of res.wallHits) {
+              damageBox(wh.box, wh.dmg, wh.x, wh.y, wh.z, now);
+              addTracer(wh.from, [wh.x, wh.y, wh.z], wh.color);
+            }
             if (world && res.bossShots.length) {
               for (const bs of res.bossShots) {
                 projectiles.spawn({ kind: bs.kind, scene: world.scene, x: bs.x, y: bs.y, z: bs.z, dir: bs.dir, speed: bs.speed, dmg: bs.dmg, color: bs.color, splash: bs.splash, gravity: bs.gravity, radius: bs.gravity ? 0.32 : 0.42 });
