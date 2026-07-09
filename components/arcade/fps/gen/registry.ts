@@ -107,10 +107,6 @@ export function isWeaponForDivision(id: string, marineDivision: string | null | 
   return d === (marineDivision ?? 'outrider');
 }
 
-export function getBlueprint(id: string): WeaponBlueprint | undefined {
-  return REGISTRY.get(id);
-}
-
 export function generatedGun(id: string, tier: RenderTier): THREE.Group | null {
   const bp = REGISTRY.get(id);
   return bp ? buildGeneratedGun(bp, tier) : null;

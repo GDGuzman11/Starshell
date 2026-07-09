@@ -39,30 +39,6 @@ const vantage: B = (spec, rt) => {
   return g;
 };
 
-// ── VISORS ────────────────────────────────────────────────────────────────────
-const rangefinderVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl } = kit(spec, rt);
-  gl(box(0.24 * b, 0.04 * b, 0.02, glow, 0, 0, 0.02)); // narrow long slit
-  g.add(box(0.26 * b, 0.02, 0.03, dark, 0, 0.04 * b, 0.02)); // frame
-  g.add(box(0.05 * b, 0.05 * b, 0.06, dark, 0.1 * b, 0, 0.03)); // rangefinder housing
-  gl(cylZ(0.02 * b, 0.03, glow, 0.1 * b, 0, 0.06, 12)); // rangefinder lens
-  return g;
-};
-const scopeVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl, moving } = kit(spec, rt);
-  gl(box(0.22 * b, 0.04 * b, 0.02, glow, 0, 0, 0.02)); // slit
-  g.add(box(0.24 * b, 0.02, 0.03, dark, 0, 0.04 * b, 0.02)); // frame
-  moving(cylZ(0.03 * b, 0.03, glow, 0, 0, 0.05, 12)); // flip-down scope optic
-  return g;
-};
-const opticVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl } = kit(spec, rt);
-  gl(box(0.26 * b, 0.035 * b, 0.02, glow, 0, 0, 0.02)); // wide thin slit
-  g.add(box(0.28 * b, 0.02, 0.03, dark, 0, 0.04 * b, 0.02)); // frame
-  for (const s of [-1, 1]) g.add(box(0.03 * b, 0.04 * b, 0.05, dark, s * 0.12 * b, 0, 0.02)); // side ballistic sensors
-  return g;
-};
-
 // ── TARGETING MODULES (comms) ─────────────────────────────────────────────────
 const targeter: B = (spec, rt) => {
   const { g, b, dark, glow, moving } = kit(spec, rt);
@@ -88,11 +64,6 @@ export const PHANTOM_HELMETS: ArmorProduct[] = [
   { id: 'longshot', name: 'Longshot', noun: 'Helm', build: longshot },
   { id: 'deadeye', name: 'Deadeye', noun: 'Helm', build: deadeye },
   { id: 'vantage', name: 'Vantage', noun: 'Helm', build: vantage },
-];
-export const PHANTOM_VISORS: ArmorProduct[] = [
-  { id: 'rangefindervisor', name: 'Rangefinder', noun: 'Visor', build: rangefinderVisor },
-  { id: 'scopevisor', name: 'Scope', noun: 'Visor', build: scopeVisor },
-  { id: 'opticvisor', name: 'Optic', noun: 'Visor', build: opticVisor },
 ];
 export const PHANTOM_TARGETING: ArmorProduct[] = [
   { id: 'targeter', name: 'Targeter', noun: 'Module', build: targeter },

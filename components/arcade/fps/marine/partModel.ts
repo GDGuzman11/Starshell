@@ -22,7 +22,6 @@ import { buildBoot } from './boots';
 import { buildLimb } from './limbs';
 import { buildGlove } from './gloves';
 import { buildCore } from './cores';
-import { buildVisor } from './visors';
 import { productForPiece } from './products';
 import type { ArmorModelSpec } from './parts';
 
@@ -81,10 +80,6 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
     case 'chest': {
       // Art-directed per-division chest geometry (Armor Overhaul, slice 2).
       g.add(buildChest(spec, rt));
-      break;
-    }
-    case 'visor': {
-      g.add(buildVisor(spec, rt)); // per-division visor (Armor Overhaul, slice 7c)
       break;
     }
     case 'plate': {

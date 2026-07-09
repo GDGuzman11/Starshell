@@ -107,7 +107,6 @@ export function divisionStats(id: string | null | undefined): DivisionStats {
 // items would collide). Coords are local to the named body-part group.
 const FAM: Record<ArmorFamily, { parts: BodyPart[]; anchor: [number, number, number] }> = {
   helmet: { parts: ['head'], anchor: [0, 0.1, 0] },
-  visor: { parts: ['head'], anchor: [0, 0.08, 0.15] },
   chest: { parts: ['torso'], anchor: [0, 0.3, 0.16] },
   plate: { parts: ['torso'], anchor: [0, 0.3, 0.16] },
   pauldron: { parts: ['torso'], anchor: [0, 0.48, 0] },

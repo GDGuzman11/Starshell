@@ -41,28 +41,6 @@ const warrant: B = (spec, rt) => {
   return g;
 };
 
-// ── VISORS ────────────────────────────────────────────────────────────────────
-const stdVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl } = kit(spec, rt);
-  gl(box(0.24 * b, 0.06 * b, 0.02, glow, 0, 0, 0.02)); // band
-  g.add(box(0.26 * b, 0.02, 0.03, dark, 0, 0.05 * b, 0.02)); // frame
-  return g;
-};
-const wideVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl } = kit(spec, rt);
-  gl(box(0.28 * b, 0.055 * b, 0.02, glow, 0, 0, 0.02)); // wide band
-  g.add(box(0.3 * b, 0.02, 0.03, dark, 0, 0.05 * b, 0.02)); // frame
-  for (const s of [-1, 1]) g.add(box(0.03 * b, 0.05 * b, 0.04, dark, s * 0.15 * b, 0, 0.01)); // side sensors
-  return g;
-};
-const tacnetVisor: B = (spec, rt) => {
-  const { g, b, dark, glow, gl, moving } = kit(spec, rt);
-  gl(box(0.24 * b, 0.05 * b, 0.02, glow, 0, 0, 0.02)); // band
-  g.add(box(0.26 * b, 0.02, 0.03, dark, 0, 0.05 * b, 0.02)); // frame
-  moving(cylZ(0.03 * b, 0.02, glow, 0.08 * b, 0, 0.03, 10)); // targeting optic
-  return g;
-};
-
 // ── COMMS ─────────────────────────────────────────────────────────────────────
 const mast: B = (spec, rt) => {
   const { g, b, dark, glow, gl } = kit(spec, rt);
@@ -88,11 +66,6 @@ export const OUTRIDER_HELMETS: ArmorProduct[] = [
   { id: 'sentinel', name: 'Sentinel', noun: 'Helm', build: sentinel },
   { id: 'ranger', name: 'Ranger', noun: 'Helm', build: ranger },
   { id: 'warrant', name: 'Warrant', noun: 'Helm', build: warrant },
-];
-export const OUTRIDER_VISORS: ArmorProduct[] = [
-  { id: 'stdvisor', name: 'Standard', noun: 'Visor', build: stdVisor },
-  { id: 'widevisor', name: 'Wide', noun: 'Visor', build: wideVisor },
-  { id: 'tacnet', name: 'Tacnet', noun: 'Visor', build: tacnetVisor },
 ];
 export const OUTRIDER_COMMS: ArmorProduct[] = [
   { id: 'mast', name: 'Mast', noun: 'Comms', build: mast },

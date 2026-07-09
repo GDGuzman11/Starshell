@@ -21,7 +21,7 @@ export type BodyPart = 'head' | 'torso' | 'armL' | 'armR' | 'legL' | 'legR';
 
 /** Geometry family the piece renderer switches on (see partModel.ts). */
 export type ArmorFamily =
-  | 'helmet' | 'visor' | 'chest' | 'plate' | 'pauldron' | 'limb' | 'cap'
+  | 'helmet' | 'chest' | 'plate' | 'pauldron' | 'limb' | 'cap'
   | 'glove' | 'boot' | 'backpack' | 'core' | 'comms' | 'insignia' | 'coating';
 
 export interface ArmorSlot {
@@ -73,16 +73,11 @@ export const ARMOR_SLOTS: ArmorSlot[] = [
   { id: 'insignia', label: 'Insignia', parts: ['torso'], anchor: [0, 0.34, 0.155], family: 'insignia', primary: 'armor', cosmetic: true, group: 'cosmetic' },
 ];
 
-export const ARMOR_SLOT_IDS = ARMOR_SLOTS.map((s) => s.id);
-
 // A slot REGISTRY so the generator can resolve any slot by id — recruit slots plus
 // the Combat Division slots that divisions.ts registers at import time.
 const REGISTRY: ArmorSlot[] = [...ARMOR_SLOTS];
 export function registerArmorSlots(slots: ArmorSlot[]): void {
   for (const s of slots) if (!REGISTRY.some((r) => r.id === s.id)) REGISTRY.push(s);
-}
-export function allArmorSlots(): ArmorSlot[] {
-  return REGISTRY;
 }
 export function slotById(id: string): ArmorSlot | undefined {
   return REGISTRY.find((s) => s.id === id);

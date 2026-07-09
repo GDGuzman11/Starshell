@@ -76,14 +76,13 @@ export interface ArmorPiece {
 
 // ── naming pools ──────────────────────────────────────────────────────────────
 const SLOT_NOUN: Record<string, string> = {
-  helmet: 'Helm', visor: 'Visor', neck: 'Gorget', chest: 'Cuirass', back: 'Backplate',
+  helmet: 'Helm', neck: 'Gorget', chest: 'Cuirass', back: 'Backplate',
   shoulders: 'Pauldrons', upperArms: 'Rerebrace', forearms: 'Vambrace', gloves: 'Gauntlets',
   belt: 'Harness', hip: 'Faulds', thighs: 'Cuisse', knees: 'Poleyns', shins: 'Greaves',
   boots: 'Sabatons', backpack: 'Pack', core: 'Core', comms: 'Array', coating: 'Coating', insignia: 'Crest',
 };
 const SLOT_ROLES: Record<string, string[]> = {
   helmet: ['Recruit', 'Sentry', 'Bulwark', 'Recon', 'Assault', 'Guardian', 'Vanguard', 'Iron', 'Combat', 'Field', 'Warden', 'Sentinel', 'Ranger', 'Storm'],
-  visor: ['Recon', 'Wide', 'Thermal', 'Tactical', 'Hawk', 'Night', 'Combat', 'Ranger', 'Optic', 'Scanner', 'Falcon', 'Vista', 'Eagle', 'Overwatch'],
   neck: ['Reinforced', 'Sealed', 'Combat', 'Guardian', 'Iron', 'Layered', 'Field', 'Bulwark', 'Storm', 'Warden', 'Riot', 'Anchor', 'Ridge', 'Collar'],
   chest: ['Reinforced', 'Bulwark', 'Assault', 'Combat', 'Iron', 'Guardian', 'Storm', 'Vanguard', 'Layered', 'Riot', 'Warden', 'Aegis', 'Titan', 'Fortress'],
   back: ['Reinforced', 'Sealed', 'Combat', 'Layered', 'Iron', 'Guardian', 'Field', 'Storm', 'Bulwark', 'Warden', 'Ridge', 'Anchor', 'Spine', 'Carapace'],

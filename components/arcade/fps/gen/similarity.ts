@@ -58,9 +58,3 @@ export function nearestMatch(
   }
   return best;
 }
-
-/** True if `bp` is too close to something we already have (default 0.85). */
-export function isDuplicate(bp: WeaponBlueprint, existing: WeaponBlueprint[], threshold = 0.85): boolean {
-  const near = nearestMatch(bp, existing);
-  return near != null && near.score >= threshold;
-}

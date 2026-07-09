@@ -90,15 +90,6 @@ export function saveLayout(name: string, layout: LevelLayout): string {
   }
 }
 
-export function deleteLayout(id: string): void {
-  try {
-    localStorage.removeItem(layoutKey(id));
-    localStorage.setItem(INDEX_KEY, JSON.stringify(listLayouts().filter((m) => m.id !== id)));
-  } catch {
-    /* ignore */
-  }
-}
-
 // ── Campaign timeline (the ordered list of authored levels) ──────────────────
 
 /** Load the editor's campaign timeline (validated). Empty if none / unusable. */

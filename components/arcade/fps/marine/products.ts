@@ -22,7 +22,7 @@ import { GHOST_BOOTS } from './products/ghostBoots';
 import { GHOST_DRONE, GHOST_CORE } from './products/ghostCores';
 import { GHOST_SCANNER, GHOST_COMM } from './products/ghostComms';
 import { GHOST_HARNESS } from './products/ghostPlates';
-import { OUTRIDER_HELMETS, OUTRIDER_VISORS, OUTRIDER_COMMS } from './products/outriderHead';
+import { OUTRIDER_HELMETS, OUTRIDER_COMMS } from './products/outriderHead';
 import { OUTRIDER_CHESTS, OUTRIDER_PLATES, OUTRIDER_PAULDRONS, OUTRIDER_BACKPACKS, OUTRIDER_CORES } from './products/outriderTorso';
 import { OUTRIDER_LIMBS, OUTRIDER_GLOVES, OUTRIDER_CAPS, OUTRIDER_BOOTS } from './products/outriderLimbs';
 import { VANGUARD_HELMETS } from './products/vanguardHead';
@@ -33,7 +33,7 @@ import { WARDEN_HELMETS } from './products/wardenHead';
 import { WARDEN_CHESTS, WARDEN_PAULDRONS, WARDEN_BARRIER } from './products/wardenTorso';
 import { WARDEN_EMITTER, WARDEN_CORE, WARDEN_BACKPACK, WARDEN_REACTOR } from './products/wardenSystems';
 import { WARDEN_BOOTS, WARDEN_BRACES } from './products/wardenLimbs';
-import { PHANTOM_HELMETS, PHANTOM_VISORS, PHANTOM_TARGETING } from './products/phantomHead';
+import { PHANTOM_HELMETS, PHANTOM_TARGETING } from './products/phantomHead';
 import { PHANTOM_CHESTS, PHANTOM_PAULDRONS, PHANTOM_CAMO } from './products/phantomTorso';
 import { PHANTOM_RANGEFIND, PHANTOM_CORE } from './products/phantomSystems';
 import { PHANTOM_GLOVES, PHANTOM_BOOTS } from './products/phantomLimbs';
@@ -63,7 +63,6 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   ghost_harness: GHOST_HARNESS,
   // ── OUTRIDER (Standard-Issue; recruit slot ids) ──────────────────────────────
   helmet: OUTRIDER_HELMETS,
-  visor: OUTRIDER_VISORS,
   comms: OUTRIDER_COMMS,
   chest: OUTRIDER_CHESTS,
   neck: OUTRIDER_PLATES,
@@ -104,7 +103,6 @@ const PRODUCTS: Record<string, ArmorProduct[]> = {
   warden_braces: WARDEN_BRACES,
   // ── PHANTOM (precision hunter) ───────────────────────────────────────────────
   phantom_helmet: PHANTOM_HELMETS,
-  phantom_visor: PHANTOM_VISORS,
   phantom_targeting: PHANTOM_TARGETING,
   phantom_chest: PHANTOM_CHESTS,
   phantom_shoulders: PHANTOM_PAULDRONS,
