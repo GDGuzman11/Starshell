@@ -296,6 +296,68 @@ const PARAMS: Record<Difficulty, Params> = {
   nightmare: { acc: 0.48, rate: 0.7, speed: 3.4, view: 38, dmgMul: 1.3, hpMul: 1.2 },
 };
 
+interface Footprint {
+  cx: number;
+  cz: number;
+  hx: number;
+  hz: number;
+}
+/** Steer a BOSS around building footprints. Bosses are far too wide to fit through a
+ *  door, so instead of clipping in and jamming they must route AROUND the structure:
+ *  cancel any velocity heading INTO the footprint and add a tangential slide so the
+ *  boss circles it (and holds at the openings, firing when it has a clean shot). If a
+ *  boss somehow ends up inside, this pushes it back out the nearest edge. */
+function deflectBuildings(ex: number, ez: number, wx: number, wz: number, r: number, buildings: Footprint[]): [number, number] {
+  for (const b of buildings) {
+    const pad = r + 1.6;
+    const ix = Math.max(b.cx - b.hx, Math.min(ex, b.cx + b.hx));
+    const iz = Math.max(b.cz - b.hz, Math.min(ez, b.cz + b.hz));
+    let dx = ex - ix;
+    let dz = ez - iz;
+    let d = Math.hypot(dx, dz);
+    if (d >= pad) continue;
+    let nx: number;
+    let nz: number;
+    if (d > 1e-3) {
+      nx = dx / d;
+      nz = dz / d;
+    } else {
+      // inside the footprint → push out along the shortest edge
+      const toL = ex - (b.cx - b.hx);
+      const toR = b.cx + b.hx - ex;
+      const toD = ez - (b.cz - b.hz);
+      const toU = b.cz + b.hz - ez;
+      if (Math.min(toL, toR) < Math.min(toD, toU)) {
+        nx = toL < toR ? -1 : 1;
+        nz = 0;
+      } else {
+        nx = 0;
+        nz = toD < toU ? -1 : 1;
+      }
+      d = 0;
+    }
+    const inward = -(wx * nx + wz * nz); // component heading toward the building
+    if (inward > 0) {
+      wx += nx * inward; // cancel it (slide along the wall instead)
+      wz += nz * inward;
+    }
+    const push = (pad - d) / pad; // gentle outward bias so it clears the footprint
+    wx += nx * push;
+    wz += nz * push;
+  }
+  return [wx, wz];
+}
+/** Boss ranged accuracy — AWARE but FAIR (no more ~100%). Sniper-like: worse while the
+ *  player moves + at range, sharper up close, and it ZEROES IN the longer it holds a
+ *  clean shot. Scaled a touch by the boss's own rating, hard-capped so it's never a
+ *  guaranteed hit — slightly better than the marksman, and more aware. */
+function bossAccuracy(rating: number, dist: number, moving: boolean, track: number): number {
+  const base = moving ? 0.5 : 0.72;
+  const close = Math.max(0, Math.min(1, (34 - dist) / 34)) * 0.18;
+  const zero = 0.85 + 0.15 * Math.min(1, track / 1.4);
+  return Math.min(0.88, (base + close) * zero * (0.88 + rating * 0.2));
+}
+
 function blocked(lvl: Level3D, x: number, z: number, r = R, grid?: SpatialGrid): boolean {
   const boxes = grid ? grid.queryAABB(x - r, z - r, x + r, z + r) : lvl.boxes;
   for (let i = 0; i < boxes.length; i++) {
@@ -883,6 +945,11 @@ export function updateEnemies(
     if (!sees[i]) return false;
     return !segBlocked([e.x, e.y + EYE_H, e.z], pchest, lvl, grid);
   });
+  // Building footprints for BOSS keep-out (bosses are too wide for doors → route
+  // around, never clip in). Only built on boss levels; cheap map over the modules.
+  const buildings: Footprint[] = enemies.some((e) => e.boss)
+    ? (lvl.modules ?? []).map((m) => ({ cx: m.cx, cz: m.cz, hx: m.sx / 2, hz: m.sz / 2 }))
+    : [];
   const mem = squad.mem;
   for (let i = 0; i < enemies.length; i++) {
     if (sees[i]) {
@@ -1308,6 +1375,7 @@ export function updateEnemies(
               wz += (dz / d) * 0.6;
             }
           }
+          if (buildings.length) [wx, wz] = deflectBuildings(e.x, e.z, wx, wz, bd.radius, buildings); // route around buildings, never clip in
           const wl = Math.hypot(wx, wz) || 1;
           moveEnemy(e, lvl, wx / wl, wz / wl, P.speed * 1.7 * speedMul * (desp ? 1.35 : 1) * eSpd, dt, bd.radius, grid);
 
@@ -1632,7 +1700,9 @@ export function updateEnemies(
             } else {
               e.fireCd = bd.rangeRate;
               tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
-              if (Math.random() < bd.acc) damage += bd.rangeDmg;
+              // Fair, aware hitscan: needs a clean shot to the player's body (canHit —
+              // walls block it) and a sniper-like accuracy (capped, never 100%).
+              if (canHit[i] && Math.random() < bossAccuracy(bd.acc, dist, pspeed > 1.6, e.track)) damage += bd.rangeDmg;
             }
           }
         }
