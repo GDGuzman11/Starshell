@@ -874,6 +874,15 @@ export function updateEnemies(
     for (const sm of smokes) if (segHitsSphere(eeye, peye, [sm.x, sm.y, sm.z], sm.r)) return false;
     return true;
   });
+  // canHit = a bot may actually LAND a shot: it must not only see the player (eye LoS,
+  // above) but have a clear line to the player's TORSO. Firing is gated on THIS, so a
+  // wall between the shooter and the player's body blocks the hit even if an eye/head
+  // peeks over cover. Tracking/awareness still uses `sees` so bots stay responsive.
+  const pchest: Vec3 = [player.x, player.y + 1.05, player.z];
+  const canHit = enemies.map((e, i) => {
+    if (!sees[i]) return false;
+    return !segBlocked([e.x, e.y + EYE_H, e.z], pchest, lvl, grid);
+  });
   const mem = squad.mem;
   for (let i = 0; i < enemies.length; i++) {
     if (sees[i]) {
@@ -1698,7 +1707,7 @@ export function updateEnemies(
           if (rx || rz) moveEnemy(e, lvl, rx, rz, sp * 0.4, dt, R, grid);
         }
         e.state = sees[i] || haveIntel ? 'alert' : 'idle';
-        fireAt(e, sees[i]);
+        fireAt(e, canHit[i]);
         continue;
       }
     }
@@ -1736,7 +1745,7 @@ export function updateEnemies(
         if (nf !== 'climb' && nf) moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * slow, dt, R, grid);
       }
       e.state = sees[i] || haveIntel ? 'alert' : 'idle';
-      fireAt(e, sees[i]);
+      fireAt(e, canHit[i]);
       continue;
     }
 
@@ -1757,12 +1766,12 @@ export function updateEnemies(
         const gZ = tgt.z + ((tgt.x - e.x) / pl2) * off;
         const nf = navFollow(e, nav, lvl, gX, gZ, tgtY, P.speed * role.speedMul * slow, dt, grid);
         if (nf === 'climb') {
-          fireAt(e, sees[i]);
+          fireAt(e, canHit[i]);
           continue;
         }
         if (nf) {
           moveEnemy(e, lvl, nf.wx + sepX * 0.5, nf.wz + sepZ * 0.5, P.speed * role.speedMul * (boosted ? 1.15 : 1) * slow, dt, R, grid);
-          fireAt(e, sees[i]);
+          fireAt(e, canHit[i]);
           continue;
         }
       }
@@ -1771,7 +1780,7 @@ export function updateEnemies(
       if (player.y > e.y + 2) wantY = player.y;
       else if (e.onDeck && player.y < e.y - 1.5) wantY = 0;
       if (Math.abs(wantY - e.y) > 0.6 && climbToward(e, lvl, wantY, P.speed * role.speedMul * slow, dt, grid)) {
-        fireAt(e, sees[i]);
+        fireAt(e, canHit[i]);
         continue;
       }
       // Move to a role-based standoff position around the target — flankers come
@@ -1819,7 +1828,7 @@ export function updateEnemies(
         }
       }
       moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1) * slow, dt, R, grid);
-      fireAt(e, sees[i]);
+      fireAt(e, canHit[i]);
       // Give up only when there's no personal sight, no shared intel, and the
       // bot has reached the spot.
       if (!sees[i] && !haveIntel && md < 1.5) {

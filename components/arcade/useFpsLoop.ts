@@ -45,12 +45,27 @@ const SPREAD: Record<string, number> = { rifle: 0.026, mg: 0.044, laser: 0.016, 
 // secondaries) kick hard so each shot/cycle is obvious; autos stay snappy.
 const RECOIL: Record<string, number> = { rifle: 0.016, mg: 0.011, laser: 0.009, pistol: 0.03, launcher: 0.1, sniper: 0.085 };
 const BURST_GAP = 0.07; // intra-burst round spacing (CB-02)
-// Headshots: a hitscan round landing in the top band of a NON-boss enemy's body
-// sphere hits harder. HEAD_BAND is the fraction of the radius above the sphere
-// centre that counts as "head". Bosses/deployables are immune (their weak-points
-// are their own mechanic).
-const HEADSHOT_MULT = 2.0;
-const HEAD_BAND = 0.45;
+// Per-body-zone damage. A non-boss enemy's body is a stack of overlapping spheres
+// (legs / torso / head) so the WHOLE silhouette is hittable — no more "aim at the
+// crotch." The damage multiplier is banded by WHERE the round lands: the head hits
+// hardest, centre-chest gets a bonus, limbs are chip damage. Bosses/deployables keep
+// their single sphere + weak-point mechanic (no zones — headshot-immune).
+const HEADSHOT_MULT = 2.5;
+const CHEST_MULT = 1.25;
+const LIMB_MULT = 0.75;
+
+/** Ray vs a non-boss enemy's body (legs+torso+head spheres, sized to a ~2 m humanoid).
+ *  Returns the nearest entry distance + the zone damage multiplier (Infinity = miss). */
+function bodyHit(eye: Vec3, dir: Vec3, e: Enemy): { t: number; mult: number } {
+  const legs = raySphere(eye, dir, [e.x, e.y + 0.55, e.z], 0.6);
+  const torso = raySphere(eye, dir, [e.x, e.y + 1.25, e.z], 0.55);
+  const head = raySphere(eye, dir, [e.x, e.y + 1.72, e.z], 0.3);
+  const t = Math.min(legs, torso, head);
+  if (!isFinite(t)) return { t: Infinity, mult: 1 };
+  const iy = eye[1] + dir[1] * t - e.y; // impact height above the feet
+  const mult = iy > 1.5 ? HEADSHOT_MULT : iy > 1.05 ? CHEST_MULT : iy > 0.7 ? 1 : LIMB_MULT;
+  return { t, mult };
+}
 // Self-damage: the player takes a fraction of a throwable's blast (falloff to the
 // edge) if caught in its AoE — dangerous but not always an instant kill.
 const PLAYER_BLAST_MULT = 0.4;
@@ -958,14 +973,24 @@ export function useFpsLoop(
             const wallD = wb.t;
             let hitT = wallD;
             let hit: Enemy | null = null;
+            let hitMult = 1; // body-zone damage multiplier for the nearest enemy hit
             for (const e of g.enemies) {
               if (e.health <= 0) continue;
-              const hr = e.destructible === 'shield' ? 3.0 : e.boss ? BOSSES[e.boss].radius : ENEMY_R; // shield = a wide blocker
-              const ecy = e.boss ? BOSSES[e.boss].scale : 1.0;
-              const t = raySphere(eye, sdir, [e.x, e.y + ecy, e.z], hr);
+              let t: number;
+              let mult = 1;
+              if (e.boss) {
+                t = raySphere(eye, sdir, [e.x, e.y + BOSSES[e.boss].scale, e.z], BOSSES[e.boss].radius);
+              } else if (e.destructible) {
+                t = raySphere(eye, sdir, [e.x, e.y + 1.0, e.z], e.destructible === 'shield' ? 3.0 : ENEMY_R); // shield = a wide blocker
+              } else {
+                const bh = bodyHit(eye, sdir, e); // per-zone body (head/chest/torso/legs)
+                t = bh.t;
+                mult = bh.mult;
+              }
               if (t < hitT) {
                 hitT = t;
                 hit = e;
+                hitMult = mult;
               }
             }
             addTracer([eye[0] + sfx2 * 0.4, eye[1] - 0.12, eye[2] + sfz2 * 0.4], [eye[0] + sfx2 * hitT, eye[1] + sfy2 * hitT, eye[2] + sfz2 * hitT], gun.color);
@@ -1024,13 +1049,11 @@ export function useFpsLoop(
               if (hit) {
                 // Boss weak-point window (after a missed pounce) = bonus damage.
                 const wm = hit.boss && hit.weakUntil && now < hit.weakUntil ? 2.5 : 1;
-                // Headshot (non-boss, non-deployable only): the round landed in the
-                // top band of the body sphere → extra damage. The sphere centre for a
-                // regular enemy is at y+1 with radius ENEMY_R; anything above
-                // centre + HEAD_BAND·radius counts as the head.
-                const impactY = eye[1] + sfy2 * hitT;
-                const headshot = !hit.boss && !hit.destructible && impactY > hit.y + 1 + ENEMY_R * HEAD_BAND;
-                const dmg = gun.dmg * wm * (headshot ? HEADSHOT_MULT : 1);
+                // Body-zone multiplier (non-boss): head 2.5× · centre-chest 1.25× ·
+                // torso 1× · limbs 0.75×. Bosses/deployables have hitMult = 1 (they use
+                // the weak-point window instead). A head-zone hit still counts as a headshot.
+                const headshot = hitMult >= HEADSHOT_MULT;
+                const dmg = gun.dmg * wm * hitMult;
                 hurtEnemy(hit, dmg);
                 g.dmgDealt += dmg;
                 g.shotsHit++;
