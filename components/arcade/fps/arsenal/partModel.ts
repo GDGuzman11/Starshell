@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { RenderTier } from '../materials';
 import { accent, box, coneZ, cylZ, metal } from '../models/parts';
 import { buildGun } from '../models';
+import { fitToSlot, meshesByName, type FitMode } from '../fit';
 import type { PartModelSpec } from './parts';
 import type { EngPart } from './parts';
 import type { SlotKind } from './categories';
@@ -416,7 +417,6 @@ function baseMeshNames(slot: SlotKind): string[] {
   }
 }
 
-type FitMode = 'axisZ' | 'footprint' | 'hang' | 'fill';
 function fitModeFor(slot: SlotKind): FitMode {
   switch (slot) {
     case 'barrel':
@@ -435,47 +435,6 @@ function fitModeFor(slot: SlotKind): FitMode {
     default:
       return 'fill';
   }
-}
-
-/** Every non-dead mesh under `g` whose name is one of `names`. */
-function meshesByName(g: THREE.Object3D, names: string[]): THREE.Object3D[] {
-  const out: THREE.Object3D[] = [];
-  g.traverse((o) => {
-    if (o.name && names.includes(o.name) && o.visible) out.push(o);
-  });
-  return out;
-}
-
-/** Scale + position a component (built centred at origin) so it maps into `target`
- *  (the replaced part's box, gun-local). `mode` protects the component's proportions:
- *  a barrel keeps its round girth, an optic its height, so nothing squishes. */
-function fitToSlot(part: THREE.Group, target: THREE.Box3, mode: FitMode): void {
-  const pb = new THREE.Box3().setFromObject(part);
-  if (pb.isEmpty()) return;
-  const ps = pb.getSize(new THREE.Vector3());
-  const pc = pb.getCenter(new THREE.Vector3());
-  const ts = target.getSize(new THREE.Vector3());
-  const tc = target.getCenter(new THREE.Vector3());
-  const r = (a: number, b: number) => (a > 1e-4 ? b / a : 1);
-  let sx = r(ps.x, ts.x);
-  let sy = r(ps.y, ts.y);
-  let sz = r(ps.z, ts.z);
-  if (mode === 'axisZ') {
-    const g = Math.min(sx, sy); // uniform girth so the barrel stays round
-    sx = g;
-    sy = g;
-  } else if (mode === 'footprint') {
-    sy = Math.min(sx, sz); // optic height proportional to its footprint
-  } else if (mode === 'fill') {
-    // per-axis fill, but clamp each axis near the mean so nothing distorts hard
-    const mean = Math.cbrt(sx * sy * sz);
-    const cl = (v: number) => Math.max(mean / 1.6, Math.min(mean * 1.6, v));
-    sx = cl(sx);
-    sy = cl(sy);
-    sz = cl(sz);
-  }
-  part.scale.set(sx, sy, sz);
-  part.position.set(tc.x - pc.x * sx, tc.y - pc.y * sy, tc.z - pc.z * sz);
 }
 
 /** Build a weapon model with the player's EQUIPPED engineering parts. A part first tries

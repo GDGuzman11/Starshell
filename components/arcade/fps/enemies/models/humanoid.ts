@@ -83,20 +83,27 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
   torso.rotation.x = o.hunch ?? 0;
   const chestW = 0.42 * G;
   const chestH = 0.5 * S;
-  torso.add(box(chestW, chestH, 0.28 * G, armor, 0, 0.28 * S, 0)); // chest
+  const chestShell = box(chestW, chestH, 0.28 * G, armor, 0, 0.28 * S, 0); // chest
+  chestShell.name = 'armor:chest'; // recruit shell the Marine's chest plate replaces
+  torso.add(chestShell);
   torso.add(box(chestW + 0.06, 0.13 * S, 0.32 * G, dark, 0, 0.5 * S, 0)); // shoulder yoke
   torso.add(box(0.16 * G, 0.16 * S, 0.1, glow, 0, 0.3 * S, 0.15 * G)); // chest core (glow)
   // shoulder plates
   const sh = o.shoulders ?? 0.4;
   if (sh > 0) {
-    torso.add(box(0.16 * sh + 0.1, 0.18 * S, 0.26 * G, armor, -(chestW / 2 + 0.04), 0.46 * S, 0));
-    torso.add(box(0.16 * sh + 0.1, 0.18 * S, 0.26 * G, armor, chestW / 2 + 0.04, 0.46 * S, 0));
+    const shL = box(0.16 * sh + 0.1, 0.18 * S, 0.26 * G, armor, -(chestW / 2 + 0.04), 0.46 * S, 0);
+    const shR = box(0.16 * sh + 0.1, 0.18 * S, 0.26 * G, armor, chestW / 2 + 0.04, 0.46 * S, 0);
+    shL.name = 'armor:shoulders'; // recruit pauldrons the Marine's shoulders replace
+    shR.name = 'armor:shoulders';
+    torso.add(shL, shR);
   }
 
   // ── head ───────────────────────────────────────────────────────────────────
   const head = new THREE.Group();
   head.position.set(0, 0.62 * S, 0);
-  head.add(box(0.22 * G, 0.22 * S, 0.24 * G, dark, 0, 0.08, 0)); // helmet
+  const helmetShell = box(0.22 * G, 0.22 * S, 0.24 * G, dark, 0, 0.08, 0); // helmet
+  helmetShell.name = 'armor:helmet'; // recruit shell the Marine's helmet replaces
+  head.add(helmetShell);
   head.add(box(0.2 * G, 0.06, 0.03, glow, 0, 0.08, 0.13 * G)); // visor (glow)
   if (o.crest) head.add(box(0.04, 0.26 * S, 0.16, glow, 0, 0.2 * S, -0.02)); // crest
   for (let i = 0; i < (o.antenna ?? 0); i++) {

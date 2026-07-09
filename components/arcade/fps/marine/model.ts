@@ -15,6 +15,7 @@ import type { EnemyParts } from '../enemies/models/trooper';
 import { slotById, type BodyPart } from './slots';
 import { divisionBase } from './divisions';
 import { buildArmorPiece } from './partModel';
+import { fitToSlot, localBox, meshesByName } from '../fit';
 import type { ArmorPiece } from './parts';
 
 /** Build the Marine wearing the given equipped pieces (empty = base armour). A
@@ -38,6 +39,21 @@ export function buildMarine(equipped: ArmorPiece[], rt: RenderTier, divisionId?:
       const target = groupOf(bp);
       if (!target) continue;
       const mesh = buildArmorPiece(piece.model, rt);
+      // STRUCTURAL slot: replace the recruit shell — hide the `armor:<id>` mesh(es)
+      // on this body part and fit the piece into the exact box they occupied, so it
+      // reads as the marine's armour (flush, sized from what it replaced).
+      if (slot.replace) {
+        const shells = meshesByName(target, [`armor:${slot.id}`]);
+        if (shells.length) {
+          const boxT = new THREE.Box3();
+          for (const s of shells) boxT.union(localBox(s, target));
+          for (const s of shells) s.visible = false;
+          fitToSlot(mesh, boxT, 'fill');
+          target.add(mesh);
+          continue;
+        }
+      }
+      // ADDITIVE slot (or a body that has no such shell): overlay at the anchor.
       mesh.position.set(slot.anchor[0], slot.anchor[1], slot.anchor[2]);
       target.add(mesh);
     }

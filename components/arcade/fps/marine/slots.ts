@@ -36,6 +36,11 @@ export interface ArmorSlot {
   division?: string; // undefined = recruit slot; else a Combat Division slot
   roles?: string[]; // name-pool override (division slots carry their own themed pool)
   noun?: string; // piece-noun override (e.g. "Cuirass")
+  /** Structural slot: the equipped piece REPLACES the recruit shell tagged
+   *  `armor:<id>` on the body part (hidden + fitted into its box), so the piece
+   *  reads as the marine's armour rather than sitting on top. Additive slots
+   *  (belt, comms, backpack…) leave this false and overlay at `anchor`. */
+  replace?: boolean;
 }
 
 /**
@@ -45,12 +50,12 @@ export interface ArmorSlot {
  */
 export const ARMOR_SLOTS: ArmorSlot[] = [
   // ── plating ─────────────────────────────────────────────────────────────────
-  { id: 'helmet', label: 'Helmet', parts: ['head'], anchor: [0, 0.1, 0], family: 'helmet', primary: 'armor', group: 'plating' },
+  { id: 'helmet', label: 'Helmet', parts: ['head'], anchor: [0, 0.1, 0], family: 'helmet', primary: 'armor', group: 'plating', replace: true },
   { id: 'visor', label: 'Visor', parts: ['head'], anchor: [0, 0.08, 0.15], family: 'visor', primary: 'recovery', group: 'plating' },
   { id: 'neck', label: 'Neck Guard', parts: ['torso'], anchor: [0, 0.52, 0.02], family: 'plate', primary: 'armor', group: 'plating' },
-  { id: 'chest', label: 'Chest Plate', parts: ['torso'], anchor: [0, 0.3, 0.16], family: 'chest', primary: 'armor', group: 'plating' },
+  { id: 'chest', label: 'Chest Plate', parts: ['torso'], anchor: [0, 0.3, 0.16], family: 'chest', primary: 'armor', group: 'plating', replace: true },
   { id: 'back', label: 'Back Plate', parts: ['torso'], anchor: [0, 0.32, -0.16], family: 'plate', primary: 'armor', group: 'plating' },
-  { id: 'shoulders', label: 'Shoulders', parts: ['torso'], anchor: [0, 0.48, 0], family: 'pauldron', primary: 'armor', group: 'plating' },
+  { id: 'shoulders', label: 'Shoulders', parts: ['torso'], anchor: [0, 0.48, 0], family: 'pauldron', primary: 'armor', group: 'plating', replace: true },
   { id: 'upperArms', label: 'Upper Arms', parts: ['armL', 'armR'], anchor: [0, -0.2, 0], family: 'limb', primary: 'armor', group: 'plating' },
   { id: 'forearms', label: 'Forearms', parts: ['armL', 'armR'], anchor: [0, -0.4, 0], family: 'limb', primary: 'mobility', group: 'plating' },
   { id: 'gloves', label: 'Gloves', parts: ['armL', 'armR'], anchor: [0, -0.54, 0.02], family: 'glove', primary: 'mobility', group: 'plating' },
