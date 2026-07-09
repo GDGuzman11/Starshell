@@ -55,6 +55,19 @@ function groundBlocked(boxes: readonly Box[], x: number, z: number, r: number): 
   return false;
 }
 
+/** Is there a walkable DECK whose top sits at ~y covering (x,z)? An upper-floor nav
+ *  node must stand on a real floor slab, not float over the stairwell opening. */
+function hasDeckAt(boxes: readonly Box[], x: number, z: number, y: number): boolean {
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (b.dead) continue;
+    const top = b.y + b.sy / 2;
+    if (top < y - 0.5 || top > y + 0.3) continue;
+    if (x > b.x - b.sx / 2 && x < b.x + b.sx / 2 && z > b.z - b.sz / 2 && z < b.z + b.sz / 2) return true;
+  }
+  return false;
+}
+
 /** Walkable ground height at (x,z): the highest ramp surface there, else 0. */
 function groundYAt(lvl: Level3D, x: number, z: number): number {
   let y = 0;
@@ -184,14 +197,14 @@ export function buildNavGraph(lvl: Level3D, grid?: SpatialGrid): NavGraph {
     connectLocal(b);
   }
 
-  // 4. Building INTERIORS — sample each module's ground floor + put a gateway node
-  //    on each doorway, so bots actually route INSIDE and through openings instead of
-  //    only skirting the outside. (Upper floors are reached via the ramp/ladder nodes
-  //    above; this fixes ground-level entry + interior maneuvering.)
+  // 4. Building INTERIORS — sample EVERY floor (not just the ground) + a gateway node
+  //    on each doorway + the interior stair links, so bots route INSIDE, through the
+  //    openings, AND up to the second/third floor (instead of only ever reaching the
+  //    first deck). Upper decks connect to their stair tops via `connectLocal`.
   for (const m of lvl.modules ?? []) {
-    const ground = m.floors[0];
-    if (ground && Math.abs(ground.y) < 0.6) {
-      const [x0, z0, x1, z1] = ground.rect;
+    for (const floor of m.floors) {
+      const upper = Math.abs(floor.y) >= 0.6;
+      const [x0, z0, x1, z1] = floor.rect;
       const iw = x1 - x0;
       const id_ = z1 - z0;
       const cols = Math.max(1, Math.round(iw / 5.5));
@@ -201,10 +214,20 @@ export function buildNavGraph(lvl: Level3D, grid?: SpatialGrid): NavGraph {
           const x = x0 + (iw * cc) / cols;
           const z = z0 + (id_ * rr) / rows;
           const boxes = grid ? grid.queryAABB(x - R_NAV, z - R_NAV, x + R_NAV, z + R_NAV) : lvl.boxes;
-          if (groundBlocked(boxes, x, z, R_NAV)) continue;
-          connectLocal(addNode(x, 0, z));
+          // ground floor: clear of ground obstacles; upper floor: standing on a deck.
+          if (upper ? !hasDeckAt(boxes, x, z, floor.y) : groundBlocked(boxes, x, z, R_NAV)) continue;
+          connectLocal(addNode(x, floor.y, z));
         }
       }
+    }
+    // Interior stairs/ramps (low ↔ high) — an explicit vertical link between floors so
+    // A* can always route up even if the deck lattice link is missed.
+    for (const s of m.stairs) {
+      const a = addNode(s.x0, s.y0, s.z0);
+      const b = addNode(s.x1, s.y1, s.z1);
+      link(a, b, 'ramp', Math.hypot(s.x1 - s.x0, s.z1 - s.z0) + Math.abs(s.y1 - s.y0) * 1.2 + 2);
+      connectLocal(a);
+      connectLocal(b);
     }
     // Doorway gateways — an explicit passable link from just-inside to just-outside
     // each ground door (guaranteed traversable even if the lattice misses the gap).

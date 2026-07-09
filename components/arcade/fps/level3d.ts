@@ -195,7 +195,7 @@ function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
   }
   // ONE continuous ladder up the open front face — ground straight to the top deck
   // (no switchback / no cut segments).
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: roof + 0.5, sx: 0.9, sz: 0.5, exX: 0, exZ: 1 });
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: roof + 0.5, sx: 1.6, sz: 0.5, exX: 0, exZ: 1 });
   // Top deck is OPEN — no rails (removed per design).
 }
 
@@ -209,7 +209,7 @@ function tower2(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
   shell(boxes, cx, cz, half, bw, 0);
   boxes.push({ x: cx, y: F2 - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
   // Open deck — no rails (removed per design).
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: F2 + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: F2 + 0.5, sx: 1.6, sz: 0.45, exX: 0, exZ: 1 });
 }
 
 /** Open raised platform on columns — quick sniper deck. */
@@ -220,7 +220,7 @@ function platform(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: n
   columns(boxes, cx, cz, half, H + 0.5);
   boxes.push({ x: cx, y: H - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
   // Open platform — no rail (removed per design).
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: H + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: H + 0.5, sx: 1.6, sz: 0.45, exX: 0, exZ: 1 });
 }
 
 /** Ground cover bunker — U of low walls + a crate. */
@@ -238,7 +238,7 @@ function hill(boxes: Box[], ladders: Ladder[], cx: number, cz: number, w: number
   const H = 3;
   const half = w / 2;
   boxes.push({ x: cx, y: H / 2, z: cz, sx: w, sy: H, sz: w, tex: 1 }); // plateau body
-  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: H + 0.5, sx: 0.9, sz: 0.45, exX: 0, exZ: 1 });
+  ladders.push({ x: cx, z: cz - half - 0.35, y0: 0, y1: H + 0.5, sx: 1.6, sz: 0.45, exX: 0, exZ: 1 });
   boxes.push({ x: cx - half * 0.4, y: H + 0.7, z: cz + half * 0.3, sx: 2, sy: 1.4, sz: 2, tex: 2 });
   boxes.push({ x: cx + half * 0.4, y: H + 0.7, z: cz - half * 0.2, sx: 1.6, sy: 1.4, sz: 1.6, tex: 3 });
 }

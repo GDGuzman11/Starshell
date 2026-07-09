@@ -124,7 +124,7 @@ export function windowBand(boxes: Box[], x: number, z: number, len: number, alon
 
 /** A ladder (vertical climb zone) with a top-exit direction (exX/exZ unit). */
 export function ladder(ladders: Ladder[], x: number, z: number, y0: number, y1: number, exX: number, exZ: number): void {
-  ladders.push({ x, z, y0, y1: y1 + 0.5, sx: 0.9, sz: 0.5, exX, exZ });
+  ladders.push({ x, z, y0, y1: y1 + 0.5, sx: 1.6, sz: 0.5, exX, exZ });
 }
 
 /** An elevated catwalk (thin DIM.catwalkW walkway) at height `atY` with rails on
