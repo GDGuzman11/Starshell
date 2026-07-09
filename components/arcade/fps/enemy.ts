@@ -1858,6 +1858,39 @@ export function updateEnemies(
       continue;
     }
 
+    // FLANK FROM HEIGHT (scout / elite): when they KNOW roughly where you are but can't
+    // SEE you (you ducked behind cover or under a roof), the fast flankers take an
+    // ELEVATED vantage — often a building's second floor — to get an angle down on you,
+    // instead of only circling at ground level. Multidimensional pursuit. Self-limiting:
+    // they only commit when a high perch (y>2) with a clean line to your spot actually
+    // exists nearby, otherwise they fall through to the normal ground hunt.
+    if ((e.cls === 'scout' || e.cls === 'elite') && nav && haveIntel && !sees[i]) {
+      const focusH = tgt ?? { x: player.x, z: player.z };
+      e.perchT = (e.perchT ?? 0) - dt;
+      if (e.perchT <= 0 || !e.perch) {
+        const v = bestVantage(nav, lvl, grid, e.x, e.z, focusH.x, focusH.z, mem?.preferRange ?? 14);
+        e.perch = v && v.y > 2 ? v : null; // only a REAL high-ground angle
+        e.perchT = 2 + Math.random() * 1.5;
+      }
+      const v = e.perch;
+      if (v) {
+        const reached = Math.abs(e.y - v.y) < 0.8 && Math.hypot(e.x - v.x, e.z - v.z) < 2.6;
+        if (!reached) {
+          if (Math.hypot(v.x - e.x, v.z - e.z) > NAV_NEAR) {
+            const nf = navFollow(e, nav, lvl, v.x, v.z, v.y, P.speed * role.speedMul * slow, dt, grid);
+            if (nf !== 'climb' && nf) moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * slow, dt, R, grid);
+          } else {
+            const busy = climbToward(e, lvl, v.y, P.speed * role.speedMul * slow, dt, grid);
+            if (!busy) moveEnemy(e, lvl, v.x - e.x, v.z - e.z, P.speed * 0.8 * slow, dt, R, grid);
+          }
+          e.state = 'alert';
+          fireAt(e, canHit[i]);
+          continue; // committing to the high ground this frame
+        }
+        e.perch = null; // arrived (should now have the angle) → resume normal hunt
+      }
+    }
+
     if (tgt) {
       e.state = 'alert';
       const boosted = e.alarm > 0;
