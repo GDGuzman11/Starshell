@@ -26,6 +26,24 @@ import { buildVisor } from './visors';
 import { productForPiece } from './products';
 import type { ArmorModelSpec } from './parts';
 
+/** Mark a helmet's skull as the 'fitcore' so it sizes to the head by the SKULL (not the
+ *  whole bbox), keeping the head shape and stopping antennas/crests squashing it. Picks
+ *  the largest-volume mesh (the skull) when a bespoke product hasn't already tagged one. */
+function ensureHelmetCore(group: THREE.Object3D): void {
+  let has = false;
+  group.traverse((o) => { if (o.name === 'fitcore') has = true; });
+  if (has) return;
+  let best: THREE.Object3D | null = null;
+  let bestV = -1;
+  group.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) return;
+    const s = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+    const v = s.x * s.y * s.z;
+    if (v > bestV) { bestV = v; best = o; }
+  });
+  if (best) (best as THREE.Object3D).name = 'fitcore';
+}
+
 /** Build one armour piece centred at the origin. Paired slots (arms/legs) return a
  *  single side; model.ts clones it onto both limb groups. */
 export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Group {
@@ -34,7 +52,9 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
   if (spec.template) {
     const product = productForPiece(spec.slot, spec.template);
     if (product) {
-      g.add(product.build(spec, rt));
+      const built = product.build(spec, rt);
+      g.add(built);
+      if (spec.family === 'helmet') ensureHelmetCore(built); // size product heads by the skull
       return g;
     }
   }

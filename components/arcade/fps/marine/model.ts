@@ -48,6 +48,10 @@ export function buildMarine(equipped: ArmorPiece[], rt: RenderTier, divisionId?:
           const boxT = new THREE.Box3();
           for (const s of shells) boxT.union(localBox(s, target));
           for (const s of shells) s.visible = false;
+          // extra recruit bits on this body part (a helmet's base visor/crest/antenna)
+          // hide too so they don't float over the new piece — but they do NOT define the
+          // fit box (a tall crest must not shift the helmet up).
+          for (const h of meshesByName(target, [`hide:${slot.id}`])) h.visible = false;
           // pieces with a 'fitcore' child (helmets) size by the core so accessories
           // (antennas/crown/beacon) don't squash the head; others fill the box.
           if (mesh.getObjectByName('fitcore')) fitByCore(mesh, boxT, 'fitcore');

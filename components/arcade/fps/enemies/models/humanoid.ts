@@ -107,10 +107,14 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
   const helmetShell = box(0.22 * G, 0.22 * S, 0.24 * G, dark, 0, 0.08, 0); // helmet
   helmetShell.name = 'armor:helmet'; // recruit shell the Marine's helmet replaces
   head.add(helmetShell);
-  head.add(box(0.2 * G, 0.06, 0.03, glow, 0, 0.08, 0.13 * G)); // visor (glow)
-  if (o.crest) head.add(box(0.04, 0.26 * S, 0.16, glow, 0, 0.2 * S, -0.02)); // crest
+  const baseVisor = box(0.2 * G, 0.06, 0.03, glow, 0, 0.08, 0.13 * G); // visor (glow)
+  baseVisor.name = 'hide:helmet'; // a Marine helmet has its own visor — clear this one
+  head.add(baseVisor);
+  if (o.crest) { const cr = box(0.04, 0.26 * S, 0.16, glow, 0, 0.2 * S, -0.02); cr.name = 'hide:helmet'; head.add(cr); } // crest
   for (let i = 0; i < (o.antenna ?? 0); i++) {
-    head.add(cylY(0.012, 0.16 * S, dark, 0.06 - i * 0.12, 0.24 * S, -0.05));
+    const ant = cylY(0.012, 0.16 * S, dark, 0.06 - i * 0.12, 0.24 * S, -0.05);
+    ant.name = 'hide:helmet';
+    head.add(ant);
   }
   torso.add(head);
 
