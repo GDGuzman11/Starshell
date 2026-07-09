@@ -25,8 +25,8 @@ function mk(spec: ArmorModelSpec, rt: RenderTier) {
   const dark = metal(0x15171b, rt);
   const glow = accent(spec.accent, rt, 1.3 + spec.emissive);
   const gl = (m: THREE.Mesh): THREE.Mesh => { m.name = 'glow'; g.add(m); return m; };
-  // a rotating element on prototype/legendary; a static glow on standard
-  const moving = (m: THREE.Mesh): THREE.Mesh => { m.name = spec.animated ? 'spin' : 'glow'; g.add(m); return m; };
+  // REALISM: a helmet's sensors pulse (glow), they don't spin. Only core/backpack spin.
+  const moving = (m: THREE.Mesh): THREE.Mesh => { m.name = 'glow'; g.add(m); return m; };
   return { g, b, body, dark, glow, gl, moving };
 }
 

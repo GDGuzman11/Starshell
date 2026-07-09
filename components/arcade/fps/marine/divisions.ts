@@ -178,7 +178,6 @@ const CATS: Record<SpecialistId, CatDef[]> = {
   ],
   phantom: [
     { key: 'helmet', label: 'Precision Helmet', family: 'helmet', primary: 'mobility', noun: 'Helm' },
-    { key: 'visor', label: 'Long Range Visor', family: 'visor', primary: 'recovery', noun: 'Visor' },
     { key: 'chest', label: 'Sniper Chest Plate', family: 'chest', primary: 'mobility', noun: 'Plate' },
     { key: 'shoulders', label: 'Stability Shoulders', family: 'pauldron', primary: 'recovery', noun: 'Pauldrons' },
     { key: 'gloves', label: 'Precision Gloves', family: 'glove', primary: 'mobility', noun: 'Gauntlets' },

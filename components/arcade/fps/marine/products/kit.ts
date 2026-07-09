@@ -15,7 +15,9 @@ export function kit(spec: ArmorModelSpec, rt: RenderTier, compress = 0.3) {
   const dark = metal(0x15171b, rt);
   const glow = accent(spec.accent, rt, 1.3 + spec.emissive);
   const gl = (m: THREE.Mesh): THREE.Mesh => { m.name = 'glow'; g.add(m); return m; };
-  // a rotating element on prototype/legendary; a static glow on standard
-  const moving = (m: THREE.Mesh): THREE.Mesh => { m.name = spec.animated ? 'spin' : 'glow'; g.add(m); return m; };
+  // REALISM: only genuinely rotary kit (a power core's reactor ring, a backpack
+  // turbine) actually SPINS; everything else pulses (glow). No spinning helmets/plates.
+  const rotary = spec.family === 'core' || spec.family === 'backpack';
+  const moving = (m: THREE.Mesh): THREE.Mesh => { m.name = spec.animated && rotary ? 'spin' : 'glow'; g.add(m); return m; };
   return { g, b, body, dark, glow, gl, moving };
 }

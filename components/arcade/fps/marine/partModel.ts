@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../materials';
-import { accent, box, cylY, cylZ, metal } from '../models/parts';
+import { accent, box, cylY, metal } from '../models/parts';
 import { buildHelmet } from './helmets';
 import { buildChest } from './chests';
 import { buildShoulders } from './shoulders';
@@ -49,13 +49,8 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
     m.name = 'glow';
     g.add(m);
   };
-  // A small rotating element (prototype/legendary) so evolution reads as motion.
-  const addSpinner = (y: number, z: number, r: number) => {
-    if (!spec.animated) return;
-    const ring = cylZ(r, 0.02, glow, 0, y, z, 8);
-    ring.name = 'spin';
-    g.add(ring);
-  };
+  // REALISM: plates/caps don't rotate. Only the power core + backpack (their own
+  // builders) carry a genuine spinning element; here evolution reads via glow trim.
 
   switch (spec.family) {
     case 'helmet': {
@@ -76,7 +71,6 @@ export function buildArmorPiece(spec: ArmorModelSpec, rt: RenderTier): THREE.Gro
       g.add(box(0.44 * b, 0.3 * b, 0.06, body, 0, 0, 0)); // main plate
       for (let i = 0; i < spec.plates; i++) g.add(box(0.4 * b - i * 0.05, 0.04, 0.03, dark, 0, 0.09 * b - i * 0.08, 0.04)); // ribs
       if (trim) glowStrip(0.06, 0.14 * b, 0.02, 0, 0, 0.05);
-      addSpinner(-0.08 * b, 0.06, 0.03 * b);
       break;
     }
     case 'pauldron': {

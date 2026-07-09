@@ -30,7 +30,8 @@ export function buildChest(spec: ArmorModelSpec, rt: RenderTier): THREE.Group {
   const r = rng(spec.seed >>> 0);
   const chance = (p: number) => r() < p;
   const gl = (m: THREE.Mesh): THREE.Mesh => { m.name = 'glow'; g.add(m); return m; };
-  const spinner = (mesh: THREE.Mesh) => { mesh.name = spec.animated ? 'spin' : 'glow'; g.add(mesh); };
+  // REALISM: a chest plate never rotates — its reactor/vents pulse (glow), not spin.
+  const spinner = (mesh: THREE.Mesh) => { mesh.name = 'glow'; g.add(mesh); };
 
   switch (spec.division) {
     // ── VANGUARD — broad, heavy, forward, breaching ───────────────────────────

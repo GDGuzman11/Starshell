@@ -51,25 +51,28 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
     const g = new THREE.Group();
     g.position.set(sx, hipY, 0);
     const style = o.legs ?? 'normal';
+    // Tag the thigh / shin / foot shells so the Marine's thigh/shin/boot armour can
+    // REPLACE them (metadata only — enemies never hide them, so their look is unchanged).
+    const tag = (m: THREE.Object3D, name: string): THREE.Object3D => { m.name = name; g.add(m); return m; };
     if (style === 'digi') {
       // tall thin digitigrade (raptor) leg — bent knee back, long shin
-      g.add(box(0.1 * G, 0.46 * S, 0.12 * G, armor, 0, -0.23 * S, 0.04 * S)); // thigh fwd
-      g.add(box(0.09 * G, 0.42 * S, 0.1 * G, dark, 0, -0.62 * S, -0.06 * S)); // shin back
-      g.add(box(0.1 * G, 0.06, 0.3 * S, dark, 0, -0.88 * S, 0.08 * S)); // long foot
+      tag(box(0.1 * G, 0.46 * S, 0.12 * G, armor, 0, -0.23 * S, 0.04 * S), 'armor:thighs'); // thigh fwd
+      tag(box(0.09 * G, 0.42 * S, 0.1 * G, dark, 0, -0.62 * S, -0.06 * S), 'armor:shins'); // shin back
+      tag(box(0.1 * G, 0.06, 0.3 * S, dark, 0, -0.88 * S, 0.08 * S), 'armor:boots'); // long foot
     } else if (style === 'piston') {
       // hydraulic reverse-jointed leg (Tank) — thick cylinders
-      g.add(cylY(0.14 * G, 0.42 * S, dark, 0, -0.2 * S, 0.05 * S)); // upper piston
-      g.add(cylY(0.11 * G, 0.42 * S, armor, 0, -0.6 * S, -0.05 * S)); // lower piston
-      g.add(box(0.28 * G, 0.1, 0.34 * S, dark, 0, -0.86 * S, 0.06 * S)); // big foot
+      tag(cylY(0.14 * G, 0.42 * S, dark, 0, -0.2 * S, 0.05 * S), 'armor:thighs'); // upper piston
+      tag(cylY(0.11 * G, 0.42 * S, armor, 0, -0.6 * S, -0.05 * S), 'armor:shins'); // lower piston
+      tag(box(0.28 * G, 0.1, 0.34 * S, dark, 0, -0.86 * S, 0.06 * S), 'armor:boots'); // big foot
       g.add(cylZ(0.06, 0.2 * G, gun, 0, -0.4 * S, 0)); // knee actuator
     } else if (style === 'thick') {
-      g.add(box(0.22 * G, 0.5 * S, 0.24 * G, armor, 0, -0.25 * S, 0)); // thick thigh
-      g.add(box(0.2 * G, 0.44 * S, 0.2 * G, dark, 0, -0.68 * S, 0.01)); // thick shin
-      g.add(box(0.26 * G, 0.09, 0.32 * S, dark, 0, -0.9 * S, 0.05)); // boot
+      tag(box(0.22 * G, 0.5 * S, 0.24 * G, armor, 0, -0.25 * S, 0), 'armor:thighs'); // thick thigh
+      tag(box(0.2 * G, 0.44 * S, 0.2 * G, dark, 0, -0.68 * S, 0.01), 'armor:shins'); // thick shin
+      tag(box(0.26 * G, 0.09, 0.32 * S, dark, 0, -0.9 * S, 0.05), 'armor:boots'); // boot
     } else {
-      g.add(box(0.16 * G, 0.5 * S, 0.18 * G, armor, 0, -0.25 * S, 0)); // thigh
-      g.add(box(0.15 * G, 0.46 * S, 0.16 * G, dark, 0, -0.68 * S, 0.01)); // shin
-      g.add(box(0.2 * G, 0.08, 0.28 * S, dark, 0, -0.9 * S, 0.05)); // foot
+      tag(box(0.16 * G, 0.5 * S, 0.18 * G, armor, 0, -0.25 * S, 0), 'armor:thighs'); // thigh
+      tag(box(0.15 * G, 0.46 * S, 0.16 * G, dark, 0, -0.68 * S, 0.01), 'armor:shins'); // shin
+      tag(box(0.2 * G, 0.08, 0.28 * S, dark, 0, -0.9 * S, 0.05), 'armor:boots'); // foot
     }
     return g;
   };
@@ -116,8 +119,15 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
   const mkArm = (sx: number): THREE.Group => {
     const g = new THREE.Group();
     g.position.set(sx, 0.46 * S, 0);
-    g.add(box(aw, 0.46 * S, aw, armor, 0, -0.22 * S, 0));
-    if (o.heavyArms) g.add(box(aw + 0.04, 0.2 * S, aw + 0.04, dark, 0, -0.4 * S, 0)); // big forearm
+    // Split the arm into upper + fore shells (summed volume = the old single box, so
+    // the enemy silhouette is unchanged) so the Marine's upper-arm / forearm armour
+    // can each REPLACE their segment.
+    const upper = box(aw, 0.23 * S, aw, armor, 0, -0.115 * S, 0);
+    upper.name = 'armor:upperArms';
+    const fore = box(aw, 0.23 * S, aw, armor, 0, -0.345 * S, 0);
+    fore.name = 'armor:forearms';
+    g.add(upper, fore);
+    if (o.heavyArms) { const hf = box(aw + 0.04, 0.2 * S, aw + 0.04, dark, 0, -0.4 * S, 0); hf.name = 'armor:forearms'; g.add(hf); } // big forearm
     return g;
   };
   const shoulderX = chestW / 2 + aw / 2 + 0.02;

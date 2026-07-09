@@ -49,6 +49,28 @@ export function fitToSlot(part: THREE.Object3D, target: THREE.Box3, mode: FitMod
   part.position.set(tc.x - pc.x * sx, tc.y - pc.y * sy, tc.z - pc.z * sz);
 }
 
+/** Fit by a CORE child (uniform scale), for pieces whose silhouette extends beyond the
+ *  slot with accessories (a helmet's antennas/crown/beacon). Instead of squishing the
+ *  whole bbox into `target`, scale the piece UNIFORMLY so its `coreName` child (the head
+ *  skull) matches the target footprint — accessories ride along proportionally, so the
+ *  head shape is preserved. Falls back to a plain `fitToSlot('fill')` if no core child. */
+export function fitByCore(part: THREE.Object3D, target: THREE.Box3, coreName: string): void {
+  let core: THREE.Object3D | undefined;
+  part.traverse((o) => { if (!core && o.name === coreName) core = o; });
+  if (!core) return fitToSlot(part, target, 'fill');
+  const cb = new THREE.Box3().setFromObject(core);
+  if (cb.isEmpty()) return fitToSlot(part, target, 'fill');
+  const cs = cb.getSize(new THREE.Vector3());
+  const cc = cb.getCenter(new THREE.Vector3());
+  const ts = target.getSize(new THREE.Vector3());
+  const tc = target.getCenter(new THREE.Vector3());
+  // match the skull's horizontal footprint (width + depth) with one uniform scale so
+  // nothing distorts; height follows proportionally.
+  const s = 0.5 * ((cs.x > 1e-4 ? ts.x / cs.x : 1) + (cs.z > 1e-4 ? ts.z / cs.z : 1));
+  part.scale.setScalar(s);
+  part.position.set(tc.x - cc.x * s, tc.y - cc.y * s, tc.z - cc.z * s);
+}
+
 /** The world-space bbox of `obj` re-expressed in `frame`'s LOCAL coordinates — used
  *  when the target mesh and the part live under a parent group that has its own
  *  transform (the marine's positioned/rotated body-part groups). */

@@ -58,8 +58,7 @@ export function buildShoulders(spec: ArmorModelSpec, rt: RenderTier): THREE.Grou
         g.add(box(0.34 * b, 0.14 * b, 0.4 * b, body, x, 0.04 * b, 0)); // main slab
         g.add(box(0.3 * b, 0.1 * b, 0.36 * b, dark, x, -0.08 * b, 0)); // lower slab
         g.add(box(0.36 * b, 0.05, 0.42 * b, dark, x, 0.13 * b, 0)); // top cap band
-        const em = gl(cylY(0.04 * b, 0.1 * b, glow, x, 0.2 * b, 0)); // shield emitter
-        em.name = spec.animated ? 'spin' : 'glow';
+        gl(cylY(0.04 * b, 0.1 * b, glow, x, 0.2 * b, 0)); // shield emitter (pulses, never spins)
         for (let k = 0; k < 3; k++) g.add(box(0.02, 0.08 * b, 0.34 * b, dark, x - 0.1 * b + k * 0.1 * b, 0.04 * b, 0.02)); // vents
         if (trim) gl(box(0.28 * b, 0.02, 0.03, glow, x, -0.02 * b, 0.2 * b));
       }

@@ -15,7 +15,7 @@ import type { EnemyParts } from '../enemies/models/trooper';
 import { slotById, type BodyPart } from './slots';
 import { divisionBase } from './divisions';
 import { buildArmorPiece } from './partModel';
-import { fitToSlot, localBox, meshesByName } from '../fit';
+import { fitByCore, fitToSlot, localBox, meshesByName } from '../fit';
 import type { ArmorPiece } from './parts';
 
 /** Build the Marine wearing the given equipped pieces (empty = base armour). A
@@ -48,7 +48,10 @@ export function buildMarine(equipped: ArmorPiece[], rt: RenderTier, divisionId?:
           const boxT = new THREE.Box3();
           for (const s of shells) boxT.union(localBox(s, target));
           for (const s of shells) s.visible = false;
-          fitToSlot(mesh, boxT, 'fill');
+          // pieces with a 'fitcore' child (helmets) size by the core so accessories
+          // (antennas/crown/beacon) don't squash the head; others fill the box.
+          if (mesh.getObjectByName('fitcore')) fitByCore(mesh, boxT, 'fitcore');
+          else fitToSlot(mesh, boxT, 'fill');
           target.add(mesh);
           continue;
         }
