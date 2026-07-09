@@ -1551,7 +1551,7 @@ export function useFpsLoop(
           for (let s = 0; s < g.squads.length; s++) {
             const group = squadGroups[s];
             if (!group || !group.length) continue;
-            const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed);
+            const res = updateEnemies(group, p, g.level, g.difficulty, pvx, pvz, dt, now, g.squads[s], smokes, grid ?? undefined, nav ?? undefined, g.elapsed, eyeH);
             for (const tr of res.tracers) addTracer(tr.from, [p.x, p.y + eyeH - 0.1, p.z], tr.color);
             // Heavy enemies chipping breakable cover to flush the player out.
             for (const wh of res.wallHits) {

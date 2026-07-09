@@ -921,6 +921,7 @@ export function updateEnemies(
   grid?: SpatialGrid,
   nav?: NavGraph,
   elapsed = 0, // seconds since level start (start-of-match combat lock + boss grace)
+  eyeOffset = EYE, // player's CURRENT eye height (drops when crouching) — LoS keys off this
 ): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean; wallHits: WallHit[] } {
   const P = PARAMS[diff];
   // Combat lock: nobody fires until the intro countdown ends. Boss grace: on a boss
@@ -930,7 +931,7 @@ export function updateEnemies(
   // Level-start settle: for a few seconds after the combat lock, non-boss bots see at
   // HALF range so you can orient at spawn instead of being sniped from off-screen.
   const settleMul = elapsed < 6 ? 0.5 : 1;
-  const peye: Vec3 = [player.x, player.y + EYE, player.z];
+  const peye: Vec3 = [player.x, player.y + eyeOffset, player.z]; // crouch-aware: hiding low actually breaks LoS
   const pspeed = Math.hypot(pvx, pvz);
   let damage = 0;
   let seen = false;
@@ -952,15 +953,10 @@ export function updateEnemies(
     for (const sm of smokes) if (segHitsSphere(eeye, peye, [sm.x, sm.y, sm.z], sm.r)) return false;
     return true;
   });
-  // canHit = a bot may actually LAND a shot: it must not only see the player (eye LoS,
-  // above) but have a clear line to the player's TORSO. Firing is gated on THIS, so a
-  // wall between the shooter and the player's body blocks the hit even if an eye/head
-  // peeks over cover. Tracking/awareness still uses `sees` so bots stay responsive.
-  const pchest: Vec3 = [player.x, player.y + 1.05, player.z];
-  const canHit = enemies.map((e, i) => {
-    if (!sees[i]) return false;
-    return !segBlocked([e.x, e.y + EYE_H, e.z], pchest, lvl, grid);
-  });
+  // Firing is gated on `sees` — a clean line to the player's (crouch-aware) EYE, i.e.
+  // the same sightline the PLAYER uses to see the enemy. So if you can see them over a
+  // low wall, they can hit you; if you CROUCH so your eye drops below the wall, they
+  // lose the shot (and heavy classes will break the wall to get to you). Symmetric.
   // Building footprints for BOSS keep-out (bosses are too wide for doors → route
   // around, never clip in). Only built on boss levels; cheap map over the modules.
   const buildings: Footprint[] = enemies.some((e) => e.boss)
@@ -1739,9 +1735,9 @@ export function updateEnemies(
             } else {
               e.fireCd = bd.rangeRate;
               tracers.push({ from: [e.x, e.y + bd.scale * 0.7, e.z], to: peye, color: bd.color });
-              // Fair, aware hitscan: needs a clean shot to the player's body (canHit —
-              // walls block it) and a sniper-like accuracy (capped, never 100%).
-              if (canHit[i] && Math.random() < bossAccuracy(bd.acc, dist, pspeed > 1.6, e.track)) damage += bd.rangeDmg;
+              // Fair, aware hitscan: a clean line to the player's (crouch-aware) eye
+              // (walls block it) + a sniper-like accuracy (capped, never 100%).
+              if (sees[i] && Math.random() < bossAccuracy(bd.acc, dist, pspeed > 1.6, e.track)) damage += bd.rangeDmg;
             }
           }
         }
@@ -1816,7 +1812,7 @@ export function updateEnemies(
           if (rx || rz) moveEnemy(e, lvl, rx, rz, sp * 0.4, dt, R, grid);
         }
         e.state = sees[i] || haveIntel ? 'alert' : 'idle';
-        fireAt(e, canHit[i]);
+        fireAt(e, sees[i]);
         continue;
       }
     }
@@ -1854,7 +1850,7 @@ export function updateEnemies(
         if (nf !== 'climb' && nf) moveEnemy(e, lvl, nf.wx, nf.wz, P.speed * role.speedMul * slow, dt, R, grid);
       }
       e.state = sees[i] || haveIntel ? 'alert' : 'idle';
-      fireAt(e, canHit[i]);
+      fireAt(e, sees[i]);
       continue;
     }
 
@@ -1884,7 +1880,7 @@ export function updateEnemies(
             if (!busy) moveEnemy(e, lvl, v.x - e.x, v.z - e.z, P.speed * 0.8 * slow, dt, R, grid);
           }
           e.state = 'alert';
-          fireAt(e, canHit[i]);
+          fireAt(e, sees[i]);
           continue; // committing to the high ground this frame
         }
         e.perch = null; // arrived (should now have the angle) → resume normal hunt
@@ -1908,12 +1904,12 @@ export function updateEnemies(
         const gZ = tgt.z + ((tgt.x - e.x) / pl2) * off;
         const nf = navFollow(e, nav, lvl, gX, gZ, tgtY, P.speed * role.speedMul * slow, dt, grid);
         if (nf === 'climb') {
-          fireAt(e, canHit[i]);
+          fireAt(e, sees[i]);
           continue;
         }
         if (nf) {
           moveEnemy(e, lvl, nf.wx + sepX * 0.5, nf.wz + sepZ * 0.5, P.speed * role.speedMul * (boosted ? 1.15 : 1) * slow, dt, R, grid);
-          fireAt(e, canHit[i]);
+          fireAt(e, sees[i]);
           continue;
         }
       }
@@ -1922,7 +1918,7 @@ export function updateEnemies(
       if (player.y > e.y + 2) wantY = player.y;
       else if (e.onDeck && player.y < e.y - 1.5) wantY = 0;
       if (Math.abs(wantY - e.y) > 0.6 && climbToward(e, lvl, wantY, P.speed * role.speedMul * slow, dt, grid)) {
-        fireAt(e, canHit[i]);
+        fireAt(e, sees[i]);
         continue;
       }
       // Move to a role-based standoff position around the target — flankers come
@@ -1970,7 +1966,7 @@ export function updateEnemies(
         }
       }
       moveEnemy(e, lvl, wx, wz, P.speed * role.speedMul * (boosted ? 1.25 : 1) * slow, dt, R, grid);
-      fireAt(e, canHit[i]);
+      fireAt(e, sees[i]);
       // Give up only when there's no personal sight, no shared intel, and the
       // bot has reached the spot.
       if (!sees[i] && !haveIntel && md < 1.5) {
