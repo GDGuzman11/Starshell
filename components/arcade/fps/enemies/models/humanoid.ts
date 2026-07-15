@@ -1,9 +1,16 @@
 /**
- * Parameterized low-poly humanoid — the shared base for all 10 enemy classes.
+ * Parameterized low-poly humanoid — the shared base for all 10 enemy classes,
+ * the player Marine (marine/model.ts) and the boss humanoids (boss/models.ts).
  * Same RIG as the trooper (named hip/torso/leg/arm/weapon joints) so one animator
  * poses every class, but the proportions, leg style, armor, weapon and back-mounted
  * gear are all option-driven so each class has an instantly-distinct SILHOUETTE.
  * Forward = +Z, feet at y=0. Sets `userData.parts` + `userData.bodyMats`.
+ *
+ * ALIEN FACTION (enemy-only): the `alien*`/`carapace`/`asymShoulder`/`mantle`/
+ * `organPack`/`skirt` options restyle the humanoid as an armored ALIEN trooper
+ * (non-human sensor-pod head, bio-emissive veins, forward carapace hunch). They all
+ * default OFF, so the Marine + boss builders (which never set them) stay HUMAN and
+ * the armor:* slot tags are untouched.
  */
 import * as THREE from 'three';
 import type { RenderTier } from '../../materials';
@@ -29,6 +36,14 @@ export interface HumanoidOpts {
   spine?: boolean; // tall reactor spine
   drones?: number; // floating drones above the shoulders
   hunch?: number; // forward torso lean (rad)
+  // ── alien faction (enemy-only; Marine/boss builders omit these so they stay human) ──
+  alien?: boolean; // restyle as an alien trooper: non-human head, bio veins, hunch
+  alienHead?: 'pod' | 'cyclops' | 'crown' | 'mandible';
+  carapace?: number; // back carapace hump size (0 = none)
+  asymShoulder?: 'L' | 'R'; // one oversized asymmetric siege shoulder (Tank)
+  mantle?: boolean; // officer command shoulder mantle (Captain)
+  organPack?: boolean; // bulbous bio-organ backpack + tendrils (Healer)
+  skirt?: boolean; // heavy armor skirt over the hips (Tank)
 }
 
 export function buildHumanoid(o: HumanoidOpts): THREE.Group {
@@ -83,7 +98,7 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
   // ── torso ──────────────────────────────────────────────────────────────────
   const torso = new THREE.Group();
   torso.position.set(0, hipY, 0);
-  torso.rotation.x = o.hunch ?? 0;
+  torso.rotation.x = o.hunch ?? (o.alien ? 0.12 : 0); // alien troopers hunch forward by default
   const chestW = 0.42 * G;
   const chestH = 0.5 * S;
   const chestShell = box(chestW, chestH, 0.28 * G, armor, 0, 0.28 * S, 0); // chest
@@ -100,21 +115,69 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
     shR.name = 'armor:shoulders';
     torso.add(shL, shR);
   }
+  // ONE oversized asymmetric siege carapace shoulder (Tank) — reads from any angle
+  if (o.asymShoulder) {
+    const sgn = o.asymShoulder === 'R' ? 1 : -1;
+    const bx = sgn * (chestW / 2 + 0.16 * G);
+    const cap = box(0.44 * G, 0.44 * S, 0.4 * G, armor, bx, 0.5 * S, -0.02);
+    torso.add(cap);
+    torso.add(box(0.48 * G, 0.1 * S, 0.44 * G, dark, bx, 0.72 * S, -0.02)); // top plate
+    torso.add(box(0.06, 0.36 * S, 0.06, glow, bx + sgn * 0.22 * G, 0.5 * S, 0.02)); // glow rib
+  }
 
   // ── head ───────────────────────────────────────────────────────────────────
   const head = new THREE.Group();
   head.position.set(0, 0.62 * S, 0);
-  const helmetShell = box(0.22 * G, 0.22 * S, 0.24 * G, dark, 0, 0.08, 0); // helmet
-  helmetShell.name = 'armor:helmet'; // recruit shell the Marine's helmet replaces
-  head.add(helmetShell);
-  const baseVisor = box(0.2 * G, 0.06, 0.03, glow, 0, 0.08, 0.13 * G); // visor (glow)
-  baseVisor.name = 'hide:helmet'; // a Marine helmet has its own visor — clear this one
-  head.add(baseVisor);
-  if (o.crest) { const cr = box(0.04, 0.26 * S, 0.16, glow, 0, 0.2 * S, -0.02); cr.name = 'hide:helmet'; head.add(cr); } // crest
-  for (let i = 0; i < (o.antenna ?? 0); i++) {
-    const ant = cylY(0.012, 0.16 * S, dark, 0.06 - i * 0.12, 0.24 * S, -0.05);
-    ant.name = 'hide:helmet';
-    head.add(ant);
+  if (o.alien) {
+    // Non-human alien head: a sensor-pod skull with a horizontal multi-lens band
+    // instead of a human visor. The main skull keeps the `armor:helmet` tag (harmless
+    // — enemies never run the Marine replacement, which is what reads that tag).
+    const kind = o.alienHead ?? 'pod';
+    if (kind === 'cyclops') {
+      // Longsight (sniper): elongated narrow skull + ONE big single optic
+      const skull = box(0.15 * G, 0.26 * S, 0.22 * G, dark, 0, 0.12, 0);
+      skull.name = 'armor:helmet';
+      head.add(skull);
+      head.add(cylZ(0.11 * G, 0.03, armor, 0, 0.13, 0.1 * G)); // optic housing ring
+      head.add(cylZ(0.08 * G, 0.06, glow, 0, 0.13, 0.13 * G)); // big glowing eye
+    } else if (kind === 'crown') {
+      // Warcaller (captain): skull + a crown of sensor spikes
+      const skull = box(0.2 * G, 0.2 * S, 0.24 * G, dark, 0, 0.08, 0);
+      skull.name = 'armor:helmet';
+      head.add(skull);
+      head.add(box(0.16 * G, 0.045, 0.04, glow, 0, 0.09, 0.13 * G)); // sensor band
+      for (let i = -2; i <= 2; i++) {
+        head.add(cylY(0.014, 0.16 * S + Math.abs(i) * -0.02 * S, i % 2 ? glow : armor, i * 0.05 * G, 0.24 * S, -0.02));
+      }
+    } else if (kind === 'mandible') {
+      // heavy alien: skull + forward mandible tusks
+      const skull = box(0.2 * G, 0.2 * S, 0.24 * G, dark, 0, 0.08, 0);
+      skull.name = 'armor:helmet';
+      head.add(skull);
+      head.add(box(0.16 * G, 0.05, 0.04, glow, 0, 0.09, 0.13 * G)); // sensor band
+      for (const sgn of [-1, 1]) head.add(box(0.04, 0.06, 0.16, armor, sgn * 0.09 * G, 0.02, 0.12 * G)); // tusks
+    } else {
+      // 'pod' — the baseline trooper skull: forward wedge + horizontal sensor band + cheek plates
+      const skull = box(0.2 * G, 0.2 * S, 0.26 * G, dark, 0, 0.08, 0);
+      skull.name = 'armor:helmet';
+      head.add(skull);
+      head.add(box(0.17 * G, 0.05, 0.04, glow, 0, 0.09, 0.14 * G)); // multi-lens sensor band (alien eye)
+      for (const sgn of [-1, 1]) head.add(box(0.05, 0.1 * S, 0.1, armor, sgn * 0.1 * G, 0.03, 0.06)); // cheek plates
+      head.add(box(0.06, 0.06, 0.1, dark, 0, 0.16 * S, -0.08)); // rear vent
+    }
+  } else {
+    const helmetShell = box(0.22 * G, 0.22 * S, 0.24 * G, dark, 0, 0.08, 0); // helmet
+    helmetShell.name = 'armor:helmet'; // recruit shell the Marine's helmet replaces
+    head.add(helmetShell);
+    const baseVisor = box(0.2 * G, 0.06, 0.03, glow, 0, 0.08, 0.13 * G); // visor (glow)
+    baseVisor.name = 'hide:helmet'; // a Marine helmet has its own visor — clear this one
+    head.add(baseVisor);
+    if (o.crest) { const cr = box(0.04, 0.26 * S, 0.16, glow, 0, 0.2 * S, -0.02); cr.name = 'hide:helmet'; head.add(cr); } // crest
+    for (let i = 0; i < (o.antenna ?? 0); i++) {
+      const ant = cylY(0.012, 0.16 * S, dark, 0.06 - i * 0.12, 0.24 * S, -0.05);
+      ant.name = 'hide:helmet';
+      head.add(ant);
+    }
   }
   torso.add(head);
 
@@ -172,11 +235,41 @@ export function buildHumanoid(o: HumanoidOpts): THREE.Group {
   if (wt !== 'none') armR.add(weapon);
 
   // ── back-mounted gear ────────────────────────────────────────────────────────
-  if (o.backpack && o.backpack !== 'none') {
+  if (o.organPack) {
+    // Bio-weaver (healer): a bulbous glowing organ pack sprouting tendril heal-emitters
+    torso.add(box(0.34 * G, 0.42 * S, 0.26, dark, 0, 0.34 * S, -0.22 * G)); // organ shell
+    torso.add(box(0.2 * G, 0.28 * S, 0.14, glow, 0, 0.34 * S, -0.28 * G)); // glowing organ core
+    for (const sgn of [-1, 1]) {
+      const t = cylY(0.02, 0.3 * S, glow, sgn * 0.16 * G, 0.24 * S, -0.28 * G);
+      t.rotation.x = -0.5; // tendril curling down/out
+      torso.add(t);
+    }
+  } else if (o.backpack && o.backpack !== 'none') {
     const bp = o.backpack === 'reactor' ? glow : dark;
     torso.add(box(0.3 * G, 0.38 * S, 0.18, o.backpack === 'tech' ? armor : bp, 0, 0.34 * S, -0.22 * G));
     if (o.backpack === 'ammo') torso.add(cylZ(0.13, 0.12, dark, 0, 0.3 * S, -0.3)); // ammo drum
     if (o.backpack === 'reactor') torso.add(box(0.12, 0.3 * S, 0.12, glow, 0, 0.34 * S, -0.24));
+  }
+  // officer command mantle (Captain) — a wide shoulder collar that reads as rank
+  if (o.mantle) {
+    torso.add(box(chestW + 0.34, 0.12 * S, 0.36 * G, armor, 0, 0.54 * S, -0.03));
+    torso.add(box(chestW + 0.38, 0.04, 0.06, glow, 0, 0.6 * S, 0.16 * G)); // glow trim
+  }
+  // heavy armor skirt over the hips (Tank)
+  if (o.skirt) {
+    for (const sgn of [-1, 1]) torso.add(box(0.22 * G, 0.22 * S, 0.36 * G, armor, sgn * 0.2 * G, -0.02 * S, 0));
+    torso.add(box(0.5 * G, 0.06, 0.04, glow, 0, 0.06 * S, 0.2 * G)); // skirt glow rim
+  }
+  // back carapace hump (alien faction signature)
+  if (o.carapace && o.carapace > 0) {
+    const c = o.carapace;
+    torso.add(box(0.34 * G * c, 0.3 * S * c, 0.2 * c, armor, 0, 0.44 * S, -0.16 * G)); // carapace shell
+    torso.add(box(0.06, 0.26 * S * c, 0.06, glow, 0, 0.46 * S, -0.16 * G)); // spinal glow ridge
+  }
+  // bio-emissive veins running the armor (alien faction signature)
+  if (o.alien) {
+    torso.add(box(0.025, 0.3 * S, 0.02, glow, 0, 0.24 * S, 0.15 * G)); // chest vein
+    for (const sgn of [-1, 1]) torso.add(box(0.02, 0.22 * S, 0.02, glow, sgn * (chestW / 2 - 0.02), 0.28 * S, 0.13 * G)); // side veins
   }
   if (o.spine) {
     torso.add(box(0.1, 0.6 * S, 0.1, dark, 0, 0.62 * S, -0.18));

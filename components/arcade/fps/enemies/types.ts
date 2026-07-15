@@ -13,7 +13,9 @@ export type EnemyClass =
   | 'tank'
   | 'elite'
   | 'commander'
-  | 'berserker';
+  | 'berserker'
+  | 'artillery' // a manned alien siege gun (static emplacement, arcing shells)
+  | 'jetpack'; // the ejected gun operator — a flying fighter (phase 2)
 
 /** Current AI roles → a class model. */
 export const ROLE_TO_CLASS: Record<string, EnemyClass> = {

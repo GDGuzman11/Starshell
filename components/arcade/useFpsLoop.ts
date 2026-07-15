@@ -980,6 +980,8 @@ export function useFpsLoop(
               let mult = 1;
               if (e.boss) {
                 t = raySphere(eye, sdir, [e.x, e.y + BOSSES[e.boss].scale, e.z], BOSSES[e.boss].radius);
+              } else if (e.cls === 'artillery') {
+                t = raySphere(eye, sdir, [e.x, e.y + 2.6, e.z], 3.6); // big siege-gun emplacement
               } else if (e.destructible) {
                 t = raySphere(eye, sdir, [e.x, e.y + 1.0, e.z], e.destructible === 'shield' ? 3.0 : ENEMY_R); // shield = a wide blocker
               } else {
@@ -1740,6 +1742,19 @@ export function useFpsLoop(
             const dmg = e.cls === 'tank' ? (1 - e.health / e.maxHealth) * 0.6 : 0;
             const mats = s.userData.bodyMats as THREE.Material[] | undefined;
             if (mats) for (const m of mats) (m as THREE.MeshStandardMaterial).emissive.setRGB(Math.max(hf * 0.7, dmg), Math.max(hf * 0.04, dmg * 0.4), hf * 0.04);
+            if (e.cls === 'artillery') {
+              // Deploy the twin machine guns out of the turret as the player closes in.
+              const t = e.mgT ?? 0;
+              const mgL = s.userData.mgL as THREE.Object3D | undefined;
+              const mgR = s.userData.mgR as THREE.Object3D | undefined;
+              if (mgL) mgL.scale.setScalar(Math.max(0.001, t));
+              if (mgR) mgR.scale.setScalar(Math.max(0.001, t));
+              const flashMat = s.userData.mgFlash as THREE.MeshStandardMaterial | undefined;
+              if (flashMat?.emissive) {
+                const f = e.muzzle > 0 && t > 0.6 ? 1 : 0; // muzzle flash only while the MGs fire
+                flashMat.emissive.setRGB(f, f * 0.7, f * 0.2);
+              }
+            }
           }
 
           if (showBar) {

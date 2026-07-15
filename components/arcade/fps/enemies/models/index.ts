@@ -18,6 +18,7 @@ import {
   buildSuppressor,
   buildTank,
 } from './classes';
+import { buildArtilleryGun, buildJetpackPilot } from './artillery';
 
 type Builder = (tier: RenderTier) => THREE.Group;
 
@@ -32,6 +33,8 @@ const ENEMY_BUILDERS: Record<EnemyClass, Builder> = {
   elite: buildElite,
   commander: buildCommander,
   berserker: buildBerserker,
+  artillery: buildArtilleryGun,
+  jetpack: buildJetpackPilot,
 };
 
 /** Build by class id OR by current AI role (resolved through ROLE_TO_CLASS). */

@@ -66,6 +66,13 @@ export interface Enemy {
   wakeAtHp?: number; // boss HP fraction at/below which this reinforcement wakes
   destructible?: 'beacon' | 'shield'; // a deployable object (no AI), shootable
   enh?: boolean; // ENHANCED gauntlet variant (bigger, faster, more aggressive)
+  // Two-phase ARTILLERY: a gun (cls 'artillery') linked by pairId to a dormant pilot
+  // (cls 'jetpack') that ejects + flies when the gun is destroyed.
+  pairId?: number; // links a siege gun to its dormant jetpack pilot
+  airborne?: boolean; // jetpack pilot is flying (skip grounding; runs flight AI)
+  artCd?: number; // artillery: seconds until the next shell
+  mgT?: number; // artillery: dual-MG deploy amount (0 retracted … 1 deployed)
+  mgFireCd?: number; // artillery: close-range MG fire cadence
 }
 
 // Energy shield carried by every regular enemy: starts at 3/4 of max HP, absorbs
@@ -267,6 +274,8 @@ const CLASS: Record<EnemyClass, ClassDef> = {
   elite: { range: 9, angle: 1.1, strafe: 0.7, speedMul: 1.1, hp: 1.5, viewMul: 1.15 }, // fast flank
   commander: { range: 20, angle: 0.2, strafe: 0.3, speedMul: 0.85, hp: 2.0, viewMul: 1.1 }, // stays back, calm
   berserker: { range: 2.5, angle: 0.0, strafe: 0.3, speedMul: 1.3, hp: 1.6, viewMul: 1.0 }, // charges to melee
+  artillery: { range: 80, angle: 0.0, strafe: 0.0, speedMul: 0.0, hp: 3.0, viewMul: 1.8 }, // static siege gun, long reach + wide sensor sight (MGs to 40 m), tanky
+  jetpack: { range: 24, angle: 0.5, strafe: 0.9, speedMul: 1.25, hp: 1.1, viewMul: 1.15 }, // agile aerial fighter
 };
 
 /** Every squad is a fixed 5-man fireteam: a CAPTAIN who steadies their aim, ONE
@@ -295,9 +304,10 @@ const PARAMS: Record<Difficulty, Params> = {
   // `view` = how close a regular bot must be to acquire you (LoS still required).
   // Kept well under the arena size so they DON'T spot you across the map at spawn.
   // Difficulty now scales damage + HP too (not just hit chance), for a real curve.
-  normal: { acc: 0.2, rate: 1.25, speed: 2.3, view: 24, dmgMul: 0.85, hpMul: 0.85 },
-  hard: { acc: 0.34, rate: 0.92, speed: 2.9, view: 30, dmgMul: 1.05, hpMul: 1.0 },
-  nightmare: { acc: 0.48, rate: 0.7, speed: 3.4, view: 38, dmgMul: 1.3, hpMul: 1.2 },
+  // speed bumped ~10% (Gabe) — bigger AND a touch quicker, still dodgeable.
+  normal: { acc: 0.2, rate: 1.25, speed: 2.53, view: 24, dmgMul: 0.85, hpMul: 0.85 },
+  hard: { acc: 0.34, rate: 0.92, speed: 3.19, view: 30, dmgMul: 1.05, hpMul: 1.0 },
+  nightmare: { acc: 0.48, rate: 0.7, speed: 3.74, view: 38, dmgMul: 1.3, hpMul: 1.2 },
 };
 
 interface Footprint {
@@ -652,6 +662,28 @@ export function spawnEnemies(lvl: Level3D, nSquads: number, level: number, diff:
       out.push({ x, y: 0, z, health: hp, maxHealth: hp, shield: hp * SHIELD_FRAC, maxShield: hp * SHIELD_FRAC, shieldRegenT: 0, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon, cls, side, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch, squadId: s });
     }
   }
+
+  // TWO ARTILLERY emplacements on the enemy's back line, at the OPPOSITE flanks of that
+  // edge — rear siege guns raining arc-shells on the approach. Each carries a DORMANT
+  // jetpack pilot (pairId-linked) that ejects + flies when the gun is destroyed.
+  const mk = (x: number, z: number, cls: EnemyClass, hpMul: number, shieldFrac: number, extra: Partial<Enemy>): Enemy => {
+    const hp = ENEMY_HP * hpMul * P.hpMul * hpRamp;
+    return { x, y: 0, z, health: hp, maxHealth: hp, shield: hp * shieldFrac, maxShield: hp * shieldFrac, shieldRegenT: 0, state: 'idle', lastSeen: null, fireCd: rand() * 0.6, hitFlash: 0, wander: rand() * 6, step: 0, alarm: 0, weapon: 'rifle', cls, side: 1, barUntil: 0, boss: null, track: 0, muzzle: 0, stunT: 0, slowT: 0, blindT: 0, burnT: 0, burnDps: 0, onDeck: false, perch: null, squadId: 0, ...extra };
+  };
+  let flankI = 0;
+  for (const flank of [-1, 1] as const) {
+    let gx = Math.max(-half + 8, Math.min(half - 8, a.x + flank * half * 0.6));
+    let gz = a.z;
+    for (let guard = 0; guard < 30; guard++) {
+      if (Math.abs(gx) <= half - 6 && Math.abs(gz) <= half - 6 && !blocked(lvl, gx, gz)) break;
+      gx = Math.max(-half + 8, Math.min(half - 8, a.x + flank * half * 0.6 + (rand() - 0.5) * 16));
+      gz = a.z + (rand() - 0.5) * 12;
+    }
+    const pid = 900 + flankI++;
+    // Artillery carries 4× the Tank's shield (same HP mult as the tank → shieldFrac ×4).
+    out.push(mk(gx, gz, 'artillery', CLASS.artillery.hp, SHIELD_FRAC * 4, { pairId: pid, side: flank, artCd: 2.5 + rand() * 2, mgT: 0 }));
+    out.push(mk(gx, gz, 'jetpack', CLASS.jetpack.hp, SHIELD_FRAC, { pairId: pid, side: flank, dormant: true }));
+  }
   return out;
 }
 
@@ -962,6 +994,10 @@ export function updateEnemies(
   const buildings: Footprint[] = enemies.some((e) => e.boss)
     ? (lvl.modules ?? []).map((m) => ({ cx: m.cx, cz: m.cz, hx: m.sx / 2, hz: m.sz / 2 }))
     : [];
+  // Building footprints for ARTILLERY building-flush targeting (all levels; cheap map).
+  const artBuildings: Footprint[] = enemies.some((e) => e.cls === 'artillery')
+    ? (lvl.modules ?? []).map((m) => ({ cx: m.cx, cz: m.cz, hx: m.sx / 2, hz: m.sz / 2 }))
+    : [];
   const mem = squad.mem;
   for (let i = 0; i < enemies.length; i++) {
     if (sees[i]) {
@@ -1115,6 +1151,24 @@ export function updateEnemies(
     }
   }
 
+  // ARTILLERY two-phase: when a siege gun is destroyed, EJECT its dormant jetpack
+  // pilot at the gun's spot — it wakes airborne and flies (the once-`p.dormant` guard
+  // means each gun ejects its pilot exactly once).
+  for (const g of enemies) {
+    if (g.cls === 'artillery' && g.health <= 0 && g.pairId != null) {
+      const pilot = enemies.find((p) => p.cls === 'jetpack' && p.pairId === g.pairId && p.dormant && p.health > 0);
+      if (pilot) {
+        pilot.dormant = false;
+        pilot.airborne = true;
+        pilot.x = g.x;
+        pilot.z = g.z;
+        pilot.y = 3;
+        pilot.state = 'alert';
+        squad.aggroUntil = now + 3000;
+      }
+    }
+  }
+
   // Pass 2: act on personal or shared knowledge.
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
@@ -1122,6 +1176,98 @@ export function updateEnemies(
     if (e.dormant) continue; // reinforcement not yet woken
     if (e.hitFlash > 0) e.hitFlash -= dt;
     if (e.destructible) continue; // deployable object — no AI, just shootable
+
+    // ── ARTILLERY siege gun (static): distance-scaled arc bombardment + close-range
+    //    deployable DUAL MACHINE GUNS. Acquires your approx. position ~4 s in. ────────
+    if (e.cls === 'artillery') {
+      e.muzzle = Math.max(0, e.muzzle - dt);
+      const distA = Math.hypot(player.x - e.x, player.z - e.z);
+      const MG_RANGE = 40; // inside this, the twin MGs transform out and fire directly
+      const deploying = distA <= MG_RANGE && sees[i]; // deploy only with a clean sightline
+      e.mgT = deploying ? Math.min(1, (e.mgT ?? 0) + dt * 1.8) : Math.max(0, (e.mgT ?? 0) - dt * 1.8);
+      if (e.stunT > 0) { e.stunT -= dt; continue; }
+      const acquired = elapsed >= 4; // ~4 s in it knows roughly where you are
+
+      if (distA <= MG_RANGE) {
+        // CLOSE: dual machine guns rip directly at you once transformed out.
+        e.mgFireCd = (e.mgFireCd ?? 0) - dt;
+        if (sees[i] && !combatLock && (e.mgT ?? 0) > 0.6 && (e.mgFireCd ?? 0) <= 0) {
+          e.mgFireCd = 0.11; // rapid dual fire
+          e.muzzle = 0.09;
+          const my = e.y + 2.0;
+          tracers.push({ from: [e.x - 1.3, my, e.z], to: peye, color: 0xffcf6a });
+          tracers.push({ from: [e.x + 1.3, my, e.z], to: peye, color: 0xffcf6a });
+          if (Math.random() < (0.45 + P.acc) * (pspeed > 4 ? 0.7 : 1)) damage += 6 * P.dmgMul;
+        }
+        continue;
+      }
+
+      // FAR/MEDIUM: lob a shell. Launch ANGLE scales with distance (far = high steep
+      // lob, near the MG edge = flatter) via a ballistic solve so it lands on target.
+      e.artCd = (e.artCd ?? 3) - dt;
+      const tgt = sees[i] || haveIntel || acquired ? (haveIntel && !sees[i] ? squad.lastKnown! : { x: player.x, z: player.z }) : null;
+      if (tgt && !combatLock && acquired && (e.artCd ?? 0) <= 0) {
+        const approx = !sees[i]; // no clean sight → wider aim scatter (approximate knowledge)
+        // ACCURACY scales with range: it only knows you ROUGHLY at distance (a big miss
+        // radius), tightening sharply as you close in — ~50% less accurate than before.
+        const rangeFrac = Math.max(0, Math.min(1, (distA - MG_RANGE) / (CLASS.artillery.range - MG_RANGE)));
+        const scat = (approx ? 1 : 0.55) * (2 + rangeFrac * 11); // ~2 m near the MG edge → ~13 m far
+        const inB = artBuildings.find((b) => Math.abs(tgt.x - b.cx) <= b.hx && Math.abs(tgt.z - b.cz) <= b.hz);
+        const aimX = (inB ? inB.cx + (Math.random() * 2 - 1) * inB.hx : tgt.x + pvx * 0.8) + (Math.random() * 2 - 1) * scat;
+        const aimZ = (inB ? inB.cz + (Math.random() * 2 - 1) * inB.hz : tgt.z + pvz * 0.8) + (Math.random() * 2 - 1) * scat;
+        const dx = aimX - e.x;
+        const dz = aimZ - e.z;
+        const dd = Math.hypot(dx, dz) || 1;
+        // launch angle scales with TRUE range: ~22° near the MG edge → ~66° at max reach.
+        const theta = 0.38 + rangeFrac * 0.77;
+        const G = 24;
+        const v = Math.sqrt((dd * G) / Math.max(0.35, Math.sin(2 * theta))); // speed to land at range dd
+        const vh = v * Math.cos(theta);
+        const my = e.y + 3.2; // muzzle high on the angled barrel
+        bossShots.push({ kind: 'grenade', x: e.x, y: my, z: e.z, dir: [(dx / dd) * vh, v * Math.sin(theta), (dz / dd) * vh], speed: v, dmg: Math.round(22 * P.dmgMul), color: 0xff7a2a, splash: 4.2, gravity: G });
+        bossTelegraphs.push({ kind: 'eruption', x: aimX, z: aimZ, radius: 4.8, delay: Math.min(1.6, 0.7 + dd * 0.012) });
+        // WALL DESTRUCTION: chip nearby breakable boxes at the impact (bunker-buster).
+        const from: Vec3 = [e.x, my, e.z];
+        let hitN = 0;
+        for (const b of lvl.boxes) {
+          if (b.dead || b.indestructible) continue;
+          if (Math.abs(b.x - aimX) < 4.5 && Math.abs(b.z - aimZ) < 4.5) {
+            wallHits.push({ box: b, dmg: 60 * P.dmgMul, from, x: b.x, y: b.y, z: b.z, color: 0xff7a2a });
+            if (++hitN >= 4) break;
+          }
+        }
+        e.artCd = (inB ? 2.6 : 3.4) + Math.random() * 1.6;
+        e.muzzle = 0.25;
+      }
+      continue;
+    }
+    // ── JETPACK fighter (airborne): rise, orbit at standoff, strafe, fire down ──────
+    if (e.cls === 'jetpack') {
+      e.muzzle = Math.max(0, e.muzzle - dt);
+      if (e.stunT > 0) { e.stunT -= dt; continue; }
+      const FLY_ALT = 9;
+      e.airborne = true;
+      e.y += (FLY_ALT - e.y) * Math.min(1, dt * 1.4); // rise/hover to altitude
+      const known = sees[i] ? { x: player.x, z: player.z } : haveIntel ? squad.lastKnown : null;
+      if (known) {
+        const dx = known.x - e.x;
+        const dz = known.z - e.z;
+        const dd = Math.hypot(dx, dz) || 1;
+        const radial = Math.abs(dd - CLASS.jetpack.range) < 3 ? 0 : Math.sign(dd - CLASS.jetpack.range);
+        let mx = (dx / dd) * radial + (-dz / dd) * e.side * 0.9; // approach/retreat + orbit strafe
+        let mz = (dz / dd) * radial + (dx / dd) * e.side * 0.9;
+        const ml = Math.hypot(mx, mz) || 1;
+        const sp = P.speed * CLASS.jetpack.speedMul * (e.slowT > 0 ? 0.5 : 1) * dt;
+        const lim = lvl.size / 2 - 2;
+        e.x = Math.max(-lim, Math.min(lim, e.x + (mx / ml) * sp));
+        e.z = Math.max(-lim, Math.min(lim, e.z + (mz / ml) * sp));
+        e.step += sp * 1.3;
+      }
+      if (e.slowT > 0) e.slowT -= dt;
+      if (sees[i]) fireAt(e, true); // fire down from altitude (reuses the standard path)
+      continue;
+    }
+
     if (e.alarm > 0) e.alarm -= dt;
     // Shield regen: paused for a few seconds after any hit, then slowly refills.
     if (e.shieldRegenT > 0) e.shieldRegenT -= dt;

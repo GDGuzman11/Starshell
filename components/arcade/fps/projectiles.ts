@@ -64,6 +64,19 @@ interface Projectile {
 const PLAYER_R = 0.6; // player hit cylinder radius
 const PLAYER_CY = 1.0; // chest height above feet
 
+/** Is (x,y,z) inside any solid (non-dead) level box? Used so an arcing shell detonates
+ *  the instant it enters a ROOF/floor slab instead of punching through to the ground —
+ *  the 2D grid ray query can miss a slab under a near-vertical descent. */
+function insideSolid(x: number, y: number, z: number, level: Level3D, grid?: SpatialGrid): boolean {
+  const boxes = grid ? grid.queryAABB(x - 0.1, z - 0.1, x + 0.1, z + 0.1) : level.boxes;
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (b.dead) continue;
+    if (Math.abs(x - b.x) <= b.sx / 2 && Math.abs(y - b.y) <= b.sy / 2 && Math.abs(z - b.z) <= b.sz / 2) return true;
+  }
+  return false;
+}
+
 export class ProjectileSystem {
   private geo = new THREE.SphereGeometry(1, 10, 8);
   private list: Projectile[] = [];
@@ -117,15 +130,18 @@ export class ProjectileSystem {
       const hitPlayer = distToPlayer < p.radius + PLAYER_R;
       const hitGround = p.gravity > 0 && p.y <= 0.12;
       const hitWall = segBlocked([px, py, pz], [p.x, p.y, p.z], level, grid);
+      // Roof/floor hit: an arcing shell that has entered a solid box detonates on it
+      // (backs up to the surface) rather than punching through to the floor below.
+      const hitSolid = p.gravity > 0 && !hitGround && insideSolid(p.x, p.y, p.z, level, grid);
 
-      if (hitPlayer || hitGround || hitWall || p.life <= 0) {
-        if (p.life <= 0 && !hitPlayer && !hitGround && !hitWall) {
+      if (hitPlayer || hitGround || hitWall || hitSolid || p.life <= 0) {
+        if (p.life <= 0 && !hitPlayer && !hitGround && !hitWall && !hitSolid) {
           this.remove(i); // fizzled in flight, no impact
           continue;
         }
-        const ix = hitGround ? p.x : p.x - p.vx * dt * 0.5;
-        const iy = hitGround ? 0.1 : p.y - p.vy * dt * 0.5;
-        const iz = hitGround ? p.z : p.z - p.vz * dt * 0.5;
+        const ix = hitGround ? p.x : hitSolid ? px : p.x - p.vx * dt * 0.5;
+        const iy = hitGround ? 0.1 : hitSolid ? py : p.y - p.vy * dt * 0.5;
+        const iz = hitGround ? p.z : hitSolid ? pz : p.z - p.vz * dt * 0.5;
         impacts.push(this.resolveImpact(p, ix, iy, iz, player));
         this.remove(i);
         continue;

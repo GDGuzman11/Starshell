@@ -27,6 +27,8 @@ const ANIM: Record<EnemyClass, AnimDef> = {
   elite: { gait: 2.4, swing: 0.7, bob: 0.05, hunch: 0, twist: 0 },
   commander: { gait: 1.5, swing: 0.4, bob: 0.03, hunch: 0, twist: 0 }, // calm
   berserker: { gait: 3.0, swing: 0.85, bob: 0.1, hunch: 0.35, twist: 0 }, // hunched, frantic
+  artillery: { gait: 0, swing: 0, bob: 0, hunch: 0, twist: 0 }, // static emplacement (no parts → no-op)
+  jetpack: { gait: 2.2, swing: 0.5, bob: 0.06, hunch: 0.12, twist: 0 }, // airborne fighter
 };
 
 export function poseEnemy(model: Object3D, cls: EnemyClass, moving: boolean, aiming: boolean, step: number, hitFlash: number, now: number): void {
