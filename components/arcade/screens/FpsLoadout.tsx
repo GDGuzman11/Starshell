@@ -41,6 +41,7 @@ export function FpsLoadout({
   onConfirm,
   onDeploy,
   onBack,
+  config,
 }: {
   astro: number;
   best: number;
@@ -49,6 +50,17 @@ export function FpsLoadout({
   onConfirm: (p1: string, p2: string, sidearm: string, thrown: string) => void;
   onDeploy: (p1: string, p2: string, sidearm: string, thrown: string) => void;
   onBack: () => void;
+  // Fresh-deploy run config (difficulty + squads). Omitted on a mid-run shop refit.
+  config?: {
+    diff: string;
+    tiers: readonly string[];
+    onDiff: (d: string) => void;
+    squads: number;
+    squadOptions: readonly number[];
+    squadSize: number;
+    onSquads: (n: number) => void;
+    rewardMult: number;
+  };
 }) {
   const [save, setSave] = useState<ArsenalSave>(() => loadArsenal());
   const marineDiv = useMemo(() => loadMarine().division ?? 'outrider', []);
@@ -57,6 +69,9 @@ export function FpsLoadout({
   // equip on click; LOCKED guns show with a 🔒 + AstroDiamond price and are BOUGHT on
   // click (see tryPick — needs level 5 + enough ◈). This is the weapon shop.
   const offered = (g: GunDef) => isWeaponForDivision(g.id, marineDiv);
+  // The loadout only shows OWNED guns (starters + guns bought in the Store); locked
+  // store guns are purchased in the Store, not here.
+  const ownedOffered = (g: GunDef) => offered(g) && isWeaponUnlocked(save, g.id);
   const [p1, setP1] = useState(initial.p1);
   const [p2, setP2] = useState(initial.p2);
   const [sa, setSa] = useState(initial.sa);
@@ -101,6 +116,25 @@ export function FpsLoadout({
         </div>
       </div>
 
+      {/* Fresh-deploy run config — difficulty + squads fold in here (was the old menu). */}
+      {config && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2">
+          <span className="font-pixel text-[6px] uppercase tracking-[0.2em] text-white/40">DIFFICULTY</span>
+          {config.tiers.map((d) => (
+            <button key={d} type="button" onClick={() => config.onDiff(d)} className={`min-h-[26px] rounded border px-2 font-pixel text-[7px] uppercase transition-colors ${config.diff === d ? 'border-[#7fdfff] bg-[#7fdfff]/20 text-[#7fdfff]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+              {d}
+            </button>
+          ))}
+          <span className="ml-1 font-pixel text-[6px] uppercase tracking-[0.2em] text-white/40">SQUADS</span>
+          {config.squadOptions.map((n) => (
+            <button key={n} type="button" onClick={() => config.onSquads(n)} className={`min-h-[26px] rounded border px-2 font-pixel text-[7px] transition-colors ${config.squads === n ? 'border-[#aef5c8] bg-[#aef5c8]/20 text-[#aef5c8]' : 'border-white/15 bg-white/[0.04] text-white/55 hover:bg-white/10'}`}>
+              {n} · {n * config.squadSize}
+            </button>
+          ))}
+          <span className="ml-auto font-pixel text-[6px] text-[#c8a8ff]/70">REWARDS ×{config.rewardMult.toFixed(2)}</span>
+        </div>
+      )}
+
       <div className="mt-2 flex min-h-0 flex-1 gap-3">
         <div className="flex w-[42%] shrink-0 flex-col sm:w-[44%]">
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-white/10 bg-gradient-to-b from-[#4a5568] to-[#26303f]">
@@ -131,9 +165,9 @@ export function FpsLoadout({
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
           {/* Each pool shows your division's weapons: recruit/owned equip on tap; locked
               ones show 🔒 + a ◈ price and are bought on tap (level 5 + enough AstroDiamonds). */}
-          <Picker label="PRIMARY" items={PRIMARIES.filter(offered)} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="HEAVY" items={SECONDARIES.filter(offered)} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
-          <Picker label="SIDEARM" items={SIDEARMS.filter(offered)} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="PRIMARY" items={PRIMARIES.filter(ownedOffered)} value={p1} focus={focus} onPick={tryPick(setP1)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="HEAVY" items={SECONDARIES.filter(ownedOffered)} value={p2} focus={focus} onPick={tryPick(setP2)} save={save} astro={astro} gateOpen={gateOpen} />
+          <Picker label="SECONDARY" items={SIDEARMS.filter(ownedOffered)} value={sa} focus={focus} onPick={tryPick(setSa)} save={save} astro={astro} gateOpen={gateOpen} />
           <div>
             <p className="font-pixel text-[7px] text-white/45 sm:text-[8px]">THROWABLE</p>
             <div className="mt-1 flex flex-wrap gap-1.5">

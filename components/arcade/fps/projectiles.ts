@@ -128,7 +128,10 @@ export class ProjectileSystem {
       const pcz = player.z;
       const distToPlayer = Math.hypot(p.x - pcx, p.y - pcy, p.z - pcz);
       const hitPlayer = distToPlayer < p.radius + PLAYER_R;
-      const hitGround = p.gravity > 0 && p.y <= 0.12;
+      // Any DESCENDING shot craters when it reaches the ground — arcing shells (gravity) and
+      // straight rounds fired downward from above (e.g. a Star Destroyer's cannons) alike.
+      // Horizontal bolts keep vy ~0 so they're unaffected.
+      const hitGround = p.y <= 0.12 && p.vy < 0;
       const hitWall = segBlocked([px, py, pz], [p.x, p.y, p.z], level, grid);
       // Roof/floor hit: an arcing shell that has entered a solid box detonates on it
       // (backs up to the surface) rather than punching through to the floor below.

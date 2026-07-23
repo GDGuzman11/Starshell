@@ -16,9 +16,9 @@ import {
   buildRifleman,
   buildScout,
   buildSuppressor,
-  buildTank,
 } from './classes';
 import { buildArtilleryGun, buildJetpackPilot } from './artillery';
+import { buildTankMech } from './mech';
 
 type Builder = (tier: RenderTier) => THREE.Group;
 
@@ -29,7 +29,7 @@ const ENEMY_BUILDERS: Record<EnemyClass, Builder> = {
   marksman: buildMarksman,
   suppressor: buildSuppressor,
   engineer: buildEngineer,
-  tank: buildTank,
+  tank: buildTankMech, // now a bespoke ~5.5 m siege mech (not the humanoid rig)
   elite: buildElite,
   commander: buildCommander,
   berserker: buildBerserker,

@@ -83,15 +83,16 @@ function skyTexture(seed: number, themeSky?: readonly [string, string, string]):
 export function buildWorld(level: Level3D, tier: RenderTier = 'desktop'): World {
   const theme = themeById(level.theme); // undefined = original seeded look
   const scene = new THREE.Scene();
-  // Slightly deeper fog gives the bloomed neon more atmosphere to read against.
-  scene.fog = new THREE.Fog(theme?.fog ?? '#0e1426', level.size * 0.5, level.size * 2.1);
+  // Fog pulled back so the map reads farther (distant enemies/landmarks stay visible)
+  // while still giving the bloomed neon atmosphere to read against.
+  scene.fog = new THREE.Fog(theme?.fog ?? '#0e1426', level.size * 0.8, level.size * 2.6);
 
-  // Bright, even lighting so the arena reads clearly.
+  // Bright, even lighting so the arena reads clearly (a touch more fill for dark pockets).
   scene.add(new THREE.HemisphereLight('#cfe0ff', '#3a4366', 1.7));
   const dir = new THREE.DirectionalLight('#f0f5ff', 1.8);
   dir.position.set(0.4, 1, 0.25);
   scene.add(dir);
-  scene.add(new THREE.AmbientLight('#6b7796', 0.9));
+  scene.add(new THREE.AmbientLight('#6b7796', 1.05));
 
   const disposables: { dispose: () => void }[] = [];
 

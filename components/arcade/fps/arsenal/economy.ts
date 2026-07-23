@@ -41,3 +41,23 @@ export function unlockWeaponPrice(gun: { dmg: number; family: string; splash?: n
   const mul = gun.family === 'pistol' ? 0.7 : gun.family === 'sniper' ? 1.3 : gun.family === 'launcher' ? 1.4 : 1;
   return clamp(Math.round((800 + gun.dmg * 6 + (gun.splash ?? 0) * 120) * mul), 1200, 6000);
 }
+
+// ── OUTLANDER STORE pricing — free-tier guns cost persistent GOLD, premium guns cost
+// AstroDiamonds. Priced by category (base) + power (dmg/splash), so within a category
+// stronger guns cost more and the categories separate. "Fair but challenging" gold.
+export type StoreCurrency = 'gold' | 'astro';
+export interface StorePrice {
+  currency: StoreCurrency;
+  amount: number;
+}
+const GOLD_BASE: Record<string, number> = { handgun: 550, assault: 1200, alienAssault: 1500, mg: 1450, sniper: 2100, rpg: 2500 };
+const ASTRO_BASE: Record<string, number> = { handgun: 900, assault: 1700, alienAssault: 2100, mg: 1900, sniper: 2700, rpg: 3100 };
+
+/** Store price + currency for a gun, by its tier + category + power. */
+export function weaponStorePrice(gun: { tier: 'free' | 'premium'; category: string; dmg: number; splash?: number }): StorePrice {
+  const power = gun.dmg * 4 + (gun.splash ?? 0) * 100;
+  if (gun.tier === 'premium') {
+    return { currency: 'astro', amount: clamp(Math.round((ASTRO_BASE[gun.category] ?? 1700) + power * 0.45), 900, 6000) };
+  }
+  return { currency: 'gold', amount: clamp(Math.round((GOLD_BASE[gun.category] ?? 1200) + power * 1.4), 500, 7000) };
+}

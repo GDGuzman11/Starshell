@@ -15,12 +15,18 @@ import { FpsArsenal } from './screens/FpsArsenal';
 import { FpsArmory } from './screens/FpsArmory';
 import { FpsDivision } from './screens/FpsDivision';
 import { FpsPremium } from './screens/FpsPremium';
+import { FpsStore } from './screens/FpsStore';
 import { AvatarPanel, LoadoutPanel } from './screens/MenuPanels';
 import { useFpsLoop, type FpsGameState, type FpsSnapshot } from './useFpsLoop';
+import { CAPITAL_CATALOG } from './fps/capital/catalog';
 import type { Level3D } from './fps/level3d';
 import { makeModularArena, buildFromLayout, makeSampleLayout } from './fps/kit/generate';
 import { resolveLevel, buildBossArena, campaignTotalLevels, isBossLevel, isGauntletLevel, bossKindFor, GAUNTLET_ORDER } from './fps/kit/levels';
 import { LevelEditor } from './screens/LevelEditor';
+import { CapitalGenerator } from './screens/CapitalGenerator';
+import { WeaponOverdrive } from './screens/WeaponOverdrive';
+import { TitleScreen } from './screens/TitleScreen';
+import { IntroSlide } from './screens/IntroSlide';
 import type { LevelLayout } from './fps/kit/layout';
 import { makePlayer3 } from './fps/physics';
 import { spawnEnemies, spawnBosses, spawnBossMinions, makeHuntMemory, assignSquadHomes, fireteamCount, BOSSES, SQUAD_SIZE, type BossKind, type Difficulty, type HuntMemory, type Squad } from './fps/enemy';
@@ -37,12 +43,15 @@ import { milestoneBonus, stageFor } from './fps/arsenal/familiarity';
 import { sfx } from './engine/audio';
 import { THEME_LIST } from './fps/kit/themes';
 
-type Mode = 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'arsenal' | 'armory' | 'division' | 'premium';
+type Mode = 'title' | 'intro' | 'hangar' | 'menu' | 'loadout' | 'play' | 'shop' | 'complete' | 'customize' | 'editor' | 'capitalgen' | 'arsenal' | 'armory' | 'division' | 'premium' | 'store';
 type Loadout = { p1: string; p2: string; sa: string; th: string };
 
 // Final gauntlet: the 5 TOUGHEST bosses (by HP), one per round, ordered hardest-last.
 const GAUNTLET_BOSSES: BossKind[] = ['leviathan', 'monolith', 'infestor', 'behemoth', 'colossus'];
 const TIERS: Difficulty[] = ['normal', 'hard', 'nightmare'];
+// Dev: every 3rd non-boss level up to 99 is a Star Destroyer level (each draws a different
+// ship from the catalog). Used by the dev "STAR DESTROYERS" warp row.
+const SD_DEV_LEVELS: number[] = Array.from({ length: 33 }, (_, i) => (i + 1) * 3).filter((l) => l % 15 !== 0);
 // Player picks a squad count at the menu; it holds for every non-boss level (the
 // map is huge). Each squad is a 5-man fireteam → soldiers = squads × SQUAD_SIZE.
 const SQUAD_OPTIONS = [2, 4, 6, 8]; // → 10 / 20 / 30 / 40 soldiers
@@ -82,7 +91,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   onRunEnd?: (id: string) => void; // the run completed → drop the slot
   onScore?: (s: ScorePayload) => void; // a run resolved (win/loss) → submit to the leaderboard
   onExit?: () => void; // back to the pilot console (site only)
-  standalone?: boolean; // running as the installed app → hide web-only "Exit to /" links
+  standalone?: boolean; // running as the installed standalone app → hide the web-only "Exit to /" links
 } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -93,16 +102,18 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const resolvedRef = useRef(false); // guards one-shot win/lose handling per level
   const sandboxRef = useRef(false); // editor "Play" sandbox → win/lose returns to the editor
   const bossOverrideRef = useRef<BossKind | null>(null); // dev: force a specific boss on warp
+  const sdSkipRef = useRef(false); // dev: on an SD warp, spawn NO ground enemies → the Star Destroyer arrives at once
   // Squad learning, persisted across a run's levels (reset on a new campaign) so
   // later fights hunt the player smarter. The SAME object feeds every level's squad.
   const huntMemRef = useRef<HuntMemory | null>(null);
-  const [mode, setMode] = useState<Mode>('menu');
+  const [mode, setMode] = useState<Mode>('title'); // land on the cinematic Title Page
+  const [reducedMotion, setReducedMotion] = useState(false);
   const [diff, setDiff] = useState<Difficulty>('normal');
   const [squads, setSquads] = useState(2); // number of enemy fireteams per non-boss level
   const [isTouch, setIsTouch] = useState(false);
   const [portrait, setPortrait] = useState(false);
   const [snap, setSnap] = useState<FpsSnapshot | null>(null);
-  const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'ar01', p2: 'rt06', sa: 'sp01', th: 'frag' }); // Standard Issue recruit kit
+  const [lastLoadout, setLastLoadout] = useState<Loadout>({ p1: 'aurora7', p2: 'm57punisher', sa: 'm7defender', th: 'frag' }); // Outlander starter kit
   const [run, setRun] = useState<{ level: number; gold: number; maxHp: number; upgrades: Record<string, Upg>; buffs?: NextBuffs }>({ level: 1, gold: 0, maxHp: 100, upgrades: {} });
   // Buy a shop item: deduct scaled gold, raise armour or arm a next-level buff.
   const buyItem = (id: string) =>
@@ -126,6 +137,9 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [runStats, setRunStats] = useState({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: 0, endedAt: 0 });
   // Per-level cinematic intro (wave title + countdown), cleared by its own timer.
   const [intro, setIntro] = useState<{ level: number; boss: boolean } | null>(null);
+  // Boss OVERDRIVE opening: after the countdown → camera reveals the boss → the 3-gun
+  // empowerment cutscene → the ×2.5 buff goes live for the fight.
+  const [overdrive, setOverdrive] = useState(false);
   // Gauntlet (lvl 20): current round 1-3, and the between-rounds recovery overlay.
   const gauntletRef = useRef(0);
   const [recovery, setRecovery] = useState<number | null>(null); // upcoming round shown during recovery
@@ -144,6 +158,20 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       return v;
     });
   }, []);
+  // Persistent GOLD wallet — the Store currency for free-tier guns. Unlike per-run
+  // `run.gold` (spent in-mission), this banks across runs: every gold earned accrues
+  // here too, so Gold is a long-term grind toward owning free-tier weapons.
+  const [goldBank, setGoldBank] = useState(0);
+  const saveGold = (v: number) => {
+    try {
+      localStorage.setItem('starshell.gold', String(v));
+    } catch {
+      /* ignore */
+    }
+    return v;
+  };
+  const spendGold = useCallback((n: number) => setGoldBank((g) => saveGold(Math.max(0, g - n))), []);
+  const earnGold = useCallback((n: number) => setGoldBank((g) => saveGold(g + n)), []);
   const [campaignLen, setCampaignLen] = useState(20); // display only; real value read on mount (client)
   const [sensitivity, setSensitivityState] = useState(1.5);
   const [fullscreen, setFullscreen] = useState(false); // real Fullscreen API active
@@ -191,6 +219,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
   const [restarts, setRestarts] = useState(0); // per-level death restarts used (max 5)
   const MAX_RESTARTS = 5;
   const [runActive, setRunActive] = useState(false); // a campaign is in progress (menu shows a live tracker instead of the run config)
+  const [devLevel, setDevLevel] = useState(3); // dev level-jump input
   const [gradReady, setGradReady] = useState(false); // Marine hit Level 5 with no division → one-time graduation
 
   // Re-check division-graduation eligibility whenever we return to the menu (a
@@ -206,11 +235,17 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     if (initialScreen === 'division') setMode('division');
   }, [initialScreen]);
 
+  // Reduced-motion (client-only, SSR-safe) for the Title Page + intro slide.
+  useEffect(() => {
+    setReducedMotion(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }, []);
+
   useEffect(() => {
     setIsTouch('ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0));
     try {
       setBest(Number(localStorage.getItem('starshell.best') || 0));
       setAstro(Number(localStorage.getItem('starshell.astro') || 0));
+      setGoldBank(Number(localStorage.getItem('starshell.gold') || 0));
       const savedLo = localStorage.getItem('starshell.loadout');
       if (savedLo) {
         const lo = JSON.parse(savedLo);
@@ -357,6 +392,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       const total = campaignTotalLevels(); // flexible campaign length (follows authored levels)
       const forcedBoss = bossOverrideRef.current; // dev: warp straight into a specific boss
       const isBoss = forcedBoss != null || isBossLevel(level, total);
+      // STAR DESTROYER — a Capital Ship looms on every 3rd non-boss level (from the 100-ship
+      // catalog, chosen deterministically by level). It sits distant during the fight, then
+      // descends overhead when the level is cleared (placement/arrival; see useFpsLoop).
+      const isSd = !isBoss && level % 3 === 0;
+      const capital = isSd && CAPITAL_CATALOG.length ? CAPITAL_CATALOG[((level * 2654435761) >>> 0) % CAPITAL_CATALOG.length] : null;
       const mapCount = isBoss ? 5 : mapCountFor(squads);
       // Level source: a forced boss (dev) → its arena; then editor sandbox preset; then
       // dev toggles (rotation sample / war-torn city); otherwise the campaign resolver.
@@ -389,7 +429,12 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       const gauntlet = forcedBoss == null && isGauntletLevel(level, total);
       const round = gauntlet ? gauntletRef.current || 1 : 0;
       const bossKinds: BossKind[] = forcedBoss ? [forcedBoss] : gauntlet ? [GAUNTLET_BOSSES[round - 1]] : [bossKindFor(level)];
-      const mobs = isBoss ? spawnBosses(lvl, bossKinds, Math.random, gauntlet) : spawnEnemies(lvl, squads, level, diff, Math.random);
+      // Dev SD warp: skip the ground fight entirely so the Star Destroyer arrives immediately.
+      const mobs = isBoss
+        ? spawnBosses(lvl, bossKinds, Math.random, gauntlet)
+        : sdSkipRef.current && isSd
+          ? []
+          : spawnEnemies(lvl, squads, level, diff, Math.random);
       // Boss encounters bring a themed minion squad.
       if (isBoss) for (const k of bossKinds) mobs.push(...spawnBossMinions(lvl, k, Math.random));
       // One shared-intel object per fireteam (boss levels are a single squad); the count
@@ -399,6 +444,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       if (!isBoss) assignSquadHomes(lvl, squadStates); // spread each squad to its own territory
       gameRef.current = {
         level: lvl,
+        capital,
         player,
         enemies: mobs,
         difficulty: diff,
@@ -429,6 +475,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
       };
       setSnap(null);
       setIntro({ level, boss: isBoss });
+      setOverdrive(false); // clear any prior boss-opening cutscene state
       setMode('play');
     },
     [squads, diff],
@@ -489,7 +536,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     setRun({ level: initialRun.level, gold: initialRun.gold, maxHp: initialRun.maxHp, upgrades: initialRun.upgrades as Record<string, Upg> });
     setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
     setRunActive(true);
-    setMode('menu'); // land in the lobby (tracker), not straight into play
+    setMode('title'); // land on the Title Page (its CONTINUE deploys the resumed run)
   }, [initialRun]);
 
   // Resume from the lobby: continue a paused level, or (re)deploy the current level.
@@ -534,6 +581,57 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     },
     [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
   );
+
+  // DEV: jump straight into any campaign LEVEL (useful for testing Star Destroyer levels).
+  const devWarpLevel = useCallback(
+    (n: number) => {
+      const lvl = Math.max(1, Math.floor(n));
+      const lo = lastLoadout;
+      const ups: Record<string, Upg> = {};
+      for (const id of [lo.p1, lo.p2, lo.sa]) ups[id] = basicUpg();
+      huntMemRef.current = makeHuntMemory();
+      gauntletRef.current = 0;
+      sandboxRef.current = false;
+      setRun({ level: lvl, gold: 0, maxHp: 100, upgrades: ups });
+      setRunStats({ kills: 0, headshots: 0, shots: 0, hits: 0, dmg: 0, startedAt: Date.now(), endedAt: 0 });
+      setRunActive(true);
+      if (isTouch && !fsActive) toggleFullscreen();
+      startLevel(lvl, lo, 100, ups);
+    },
+    [lastLoadout, startLevel, isTouch, fsActive, toggleFullscreen],
+  );
+
+  // DEV: warp to a Star Destroyer level and SKIP straight to the SD encounter (no ground
+  // fight). Each SD level draws a different ship from the 100-ship catalog, so stepping
+  // through the SD levels showcases the fleet + the arrival cinematic / dogfight.
+  const devWarpSd = useCallback(
+    (n: number) => {
+      sdSkipRef.current = true; // startLevel (called synchronously below) reads this
+      devWarpLevel(n);
+      sdSkipRef.current = false; // one-shot: only this warp skips the ground fight
+    },
+    [devWarpLevel],
+  );
+
+  // Boss OVERDRIVE opening (after the countdown): freeze the fight, pan the camera to reveal
+  // the boss, then show the 3-gun empowerment cutscene, which arms the ×2.5 buff.
+  const startBossOpening = useCallback(() => {
+    const g = gameRef.current;
+    if (!g) { setIntro(null); return; }
+    const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    g.cineLock = true;
+    g.bossCine = 'reveal';
+    window.setTimeout(() => {
+      if (gameRef.current) gameRef.current.bossCine = 'empower';
+      setOverdrive(true);
+    }, reduced ? 500 : 2500);
+  }, []);
+  const finishOverdrive = useCallback(() => {
+    const g = gameRef.current;
+    if (g) { g.weaponBuff = 2.5; g.cineLock = false; g.bossCine = null; } // buff live for this boss fight
+    setOverdrive(false);
+    setIntro(null);
+  }, []);
 
   const buyUpgrade = useCallback((gunId: string, key: UpgradeKey) => {
     setRun((r) => {
@@ -602,7 +700,11 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     }
     if (snap.status === 'won') {
       const total = campaignTotalLevels();
-      setRun((r) => ({ ...r, gold: r.gold + goldFor(r.level, snap.kills, diff, squads) }));
+      {
+        const earned = goldFor(run.level, snap.kills, diff, squads);
+        setRun((r) => ({ ...r, gold: r.gold + earned }));
+        earnGold(earned); // also bank into the persistent Store wallet
+      }
       if (run.level >= total) {
         // GAUNTLET: advance through the five enhanced bosses with a recovery window.
         if (gauntletRef.current > 0 && gauntletRef.current < GAUNTLET_BOSSES.length) {
@@ -627,7 +729,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
     }
     // Persist this operation's arsenal/marine/astro/best to the account.
     emitProgressChanged(true);
-  }, [snap, mode, run.level, diff, squads, lastLoadout, runStats, onRunEnd, onScore]);
+  }, [snap, mode, run.level, diff, squads, lastLoadout, runStats, onRunEnd, onScore, earnGold]);
 
   // Auto-dismiss the familiarity toast.
   useEffect(() => {
@@ -768,7 +870,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                   <button type="button" onClick={() => setShowSettings(true)} className="min-h-[42px] rounded-md border border-white/20 bg-white/5 px-6 text-[10px] uppercase text-white/75 transition-colors hover:bg-white/10">
                     ⚙ Settings
                   </button>
-                  <button type="button" onClick={() => { setPaused(false); setMode('menu'); }} className="min-h-[42px] rounded-md border border-[#ff5d6e]/45 bg-[#ff5d6e]/10 px-6 text-[10px] uppercase text-[#ff5d6e] transition-colors hover:bg-[#ff5d6e]/20">
+                  <button type="button" onClick={() => { setPaused(false); setMode('title'); }} className="min-h-[42px] rounded-md border border-[#ff5d6e]/45 bg-[#ff5d6e]/10 px-6 text-[10px] uppercase text-[#ff5d6e] transition-colors hover:bg-[#ff5d6e]/20">
                     ⌂ Quit to Lobby
                   </button>
                 </div>
@@ -778,7 +880,27 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
           </>
         )}
 
-        {mode === 'play' && intro && <MatchIntro key={intro.level} level={intro.level} boss={intro.boss} onDone={() => setIntro(null)} />}
+        {mode === 'title' && (
+          <TitleScreen
+            canResume={runActive}
+            onNewGame={() => { if (fullBleed && !fsActive) toggleFullscreen(); setMode('intro'); }}
+            onContinue={() => { if (fullBleed && !fsActive) toggleFullscreen(); resumeRun(); }}
+            onHangar={() => setMode('hangar')}
+            onExit={onExit}
+            reducedMotion={reducedMotion}
+            isTouch={isTouch}
+          />
+        )}
+        {mode === 'intro' && (
+          <IntroSlide
+            onDone={() => { setLoadoutReturn('campaign'); setMode('loadout'); }}
+            reducedMotion={reducedMotion}
+            volume={cfg.masterVol}
+          />
+        )}
+
+        {mode === 'play' && intro && <MatchIntro key={intro.level} level={intro.level} boss={intro.boss} onDone={() => { if (intro.boss) startBossOpening(); else setIntro(null); }} />}
+        {mode === 'play' && overdrive && <WeaponOverdrive gunId={gameRef.current?.guns[gameRef.current.active]?.id ?? lastLoadout.p1} onDone={finishOverdrive} />}
 
         {mode === 'play' && recovery != null && (
           <RecoveryOverlay key={recovery} round={recovery} onDone={() => { setRecovery(null); startLevel(campaignTotalLevels(), lastLoadout, run.maxHp, run.upgrades); }} />
@@ -789,6 +911,56 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
           <div className="pointer-events-none absolute left-1/2 top-14 z-[60] -translate-x-1/2 rounded-full border border-[#c8a8ff]/40 bg-black/70 px-4 py-1.5 text-center font-pixel backdrop-blur-sm [animation:gdg-fade-in_0.4s_ease-out]">
             <p className="text-[7px] tracking-[0.25em] text-[#c8a8ff]/80 sm:text-[8px]">WEAPON FAMILIARITY INCREASED</p>
             <p className="mt-0.5 text-[8px] text-white/85 sm:text-[10px]">{famNote}</p>
+          </div>
+        )}
+
+        {/* HANGAR — the persistent forever-gear hub (Marine[armor+division] · Arsenal · Premium),
+            reachable on EVERY screen size (replaces the xl-only side panels + buried Division). */}
+        {mode === 'hangar' && (
+          <div className="absolute inset-0 z-40 flex flex-col items-center gap-4 overflow-y-auto bg-black/70 px-4 py-10 backdrop-blur-[2px]">
+            <button type="button" onClick={() => setMode('title')} className="absolute left-4 top-4 z-50 min-h-[36px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[8px] uppercase text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:text-[9px]">
+              ◂ Title
+            </button>
+            {onExit && (
+              <button type="button" onClick={onExit} className="absolute right-4 top-4 z-50 min-h-[36px] rounded-md border border-white/20 bg-white/5 px-4 font-pixel text-[8px] uppercase text-white/60 transition-colors hover:bg-white/10 hover:text-white sm:text-[9px]">
+                ◂ Console
+              </button>
+            )}
+            <p className="font-pixel text-[16px] tracking-[0.2em] text-[#7fdfff] sm:text-[22px]">HANGAR</p>
+            <div className="flex items-center justify-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 rounded-full border border-[#ffd27a]/45 bg-[#ffd27a]/10 px-3 py-1.5">
+                <span className="text-[14px] leading-none text-[#ffd27a]">⛀</span>
+                <span className="font-pixel text-[6px] tracking-[0.15em] text-[#ffd27a]/70">GOLD</span>
+                <span className="font-pixel text-[11px] text-[#ffd27a]">{run.gold}</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full border border-[#c8a8ff]/45 bg-[#c8a8ff]/10 px-3 py-1.5">
+                <span className="text-[14px] leading-none text-[#c8a8ff]">◈</span>
+                <span className="font-pixel text-[6px] tracking-[0.15em] text-[#c8a8ff]/70">ASTRODIAMONDS</span>
+                <span className="font-pixel text-[11px] text-[#c8a8ff]">{astro}</span>
+              </div>
+            </div>
+            {/* MARINE — the avatar preview carries the Armor Bay button. */}
+            <AvatarPanel onArmory={() => setMode('armory')} />
+            {/* Forever screens — all one tap, all screen sizes. */}
+            <div className="flex w-full max-w-md flex-wrap items-center justify-center gap-2">
+              <button type="button" onClick={() => setMode('division')} className="min-h-[44px] min-w-[130px] flex-1 rounded-md border border-[#c8a8ff]/45 bg-[#c8a8ff]/10 px-4 font-pixel text-[10px] uppercase tracking-[0.12em] text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20">
+                ⬢ Division
+              </button>
+              <button type="button" onClick={() => setMode('store')} className="min-h-[44px] min-w-[130px] flex-1 rounded-md border border-[#7fdfff]/45 bg-[#7fdfff]/10 px-4 font-pixel text-[10px] uppercase tracking-[0.12em] text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20">
+                ⛁ Store
+              </button>
+              <button type="button" onClick={() => setMode('premium')} className="min-h-[44px] min-w-[130px] flex-1 rounded-md border border-[#ffd27a]/45 bg-[#ffd27a]/10 px-4 font-pixel text-[10px] uppercase tracking-[0.12em] text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20">
+                ✦ Premium
+              </button>
+            </div>
+            {dev && (
+              <button type="button" onClick={() => setMode('menu')} className="min-h-[36px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[8px] uppercase tracking-[0.15em] text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20">
+                ⚙ Dev Tools
+              </button>
+            )}
+            <button type="button" onClick={() => setShowSettings(true)} className="min-h-[36px] font-pixel text-[8px] uppercase text-white/50 transition-colors hover:text-white sm:text-[9px]">
+              ⚙ Settings
+            </button>
           </div>
         )}
 
@@ -890,16 +1062,10 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                 ⬢ Graduation available — choose your division
               </button>
             )}
-            {/* Arsenal + Armory show as side panels on wide screens; on phones/tablets
-                (below xl) they'd be unreachable, so surface them as buttons here too. */}
+            {/* Arsenal + Armory live under the Loadout / Marine previews; Combat Divisions
+                now lives on the pilot console (main page). Central grid keeps Premium. */}
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <button type="button" onClick={() => setMode('armory')} className="min-h-[40px] rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-5 font-pixel text-[9px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:text-[10px] xl:hidden">
-                ⛨ Armory
-              </button>
-              <button type="button" onClick={() => setMode('arsenal')} className="min-h-[40px] rounded-md border border-[#7fdfff]/40 bg-[#7fdfff]/10 px-5 font-pixel text-[9px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20 sm:text-[10px] xl:hidden">
-                ◆ Arsenal
-              </button>
-              <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-5 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
+              <button type="button" onClick={() => setMode('premium')} className="min-h-[40px] rounded-md border border-[#ffd27a]/40 bg-[#ffd27a]/10 px-6 font-pixel text-[9px] uppercase text-[#ffd27a] transition-colors hover:bg-[#ffd27a]/20 sm:text-[10px]">
                 ✦ Premium
               </button>
             </div>
@@ -909,9 +1075,14 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
 
             {dev && (
               <div className="mt-4 flex flex-col items-center gap-2 rounded-md border border-[#ffd27a]/30 bg-[#ffd27a]/[0.05] px-3 py-2">
-                <button type="button" onClick={() => setMode('editor')} className="min-h-[30px] rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-4 font-pixel text-[8px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
-                  ▸ Level Editor
-                </button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button type="button" onClick={() => setMode('editor')} className="min-h-[30px] rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-4 font-pixel text-[8px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">
+                    ▸ Level Editor
+                  </button>
+                  <button type="button" onClick={() => setMode('capitalgen')} className="min-h-[30px] rounded border border-[#ff7a2a]/50 bg-[#ff7a2a]/10 px-4 font-pixel text-[8px] uppercase text-[#ff7a2a] transition-colors hover:bg-[#ff7a2a]/20">
+                    ⬢ Capital Catalog
+                  </button>
+                </div>
                 <p className="font-pixel text-[7px] tracking-[0.2em] text-[#ffd27a]/80">⚙ DEV · WARP TO BOSS</p>
                 <div className="flex flex-wrap justify-center gap-1">
                   {GAUNTLET_ORDER.map((k) => (
@@ -919,6 +1090,33 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                       {k}
                     </button>
                   ))}
+                </div>
+                {/* Jump to any level — the ⬢ SD marks Star Destroyer levels (every 3rd non-boss). */}
+                <p className="font-pixel text-[7px] tracking-[0.2em] text-[#7fdfff]/80">⚙ DEV · JUMP TO LEVEL</p>
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                  {[3, 6, 9, 12, 18, 21, 24, 27].map((n) => (
+                    <button key={n} type="button" onClick={() => devWarpLevel(n)} className="min-h-[26px] rounded border border-[#7fdfff]/50 bg-[#7fdfff]/10 px-2 font-pixel text-[7px] uppercase text-[#7fdfff] transition-colors hover:bg-[#7fdfff]/20">
+                      ⬢{n}
+                    </button>
+                  ))}
+                  <input type="number" min={1} value={devLevel} onChange={(e) => setDevLevel(Math.max(1, Number(e.target.value) || 1))} className="w-12 rounded border border-white/15 bg-black/60 px-1 py-1 font-pixel text-[8px] text-white/80" />
+                  <button type="button" onClick={() => devWarpLevel(devLevel)} className="min-h-[26px] rounded border border-[#aef5c8]/50 bg-[#aef5c8]/10 px-3 font-pixel text-[7px] uppercase text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20">GO</button>
+                </div>
+                {/* Skip straight to the Star Destroyer encounter (no ground fight) — each SD level draws a different ship. */}
+                <p className="font-pixel text-[7px] tracking-[0.2em] text-[#c8a8ff]/80">⚙ DEV · STAR DESTROYERS · skip to ship</p>
+                <div className="flex flex-wrap items-center justify-center gap-1">
+                  {SD_DEV_LEVELS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      title={CAPITAL_CATALOG.length ? CAPITAL_CATALOG[((n * 2654435761) >>> 0) % CAPITAL_CATALOG.length].name : undefined}
+                      onClick={() => devWarpSd(n)}
+                      className="min-h-[26px] rounded border border-[#c8a8ff]/50 bg-[#c8a8ff]/10 px-2 font-pixel text-[7px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20"
+                    >
+                      ◈{n}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => devWarpSd(devLevel % 3 === 0 && devLevel % 15 !== 0 ? devLevel : 3)} className="min-h-[26px] rounded border border-[#c8a8ff]/50 bg-[#c8a8ff]/10 px-3 font-pixel text-[7px] uppercase text-[#c8a8ff] transition-colors hover:bg-[#c8a8ff]/20">GO</button>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -977,7 +1175,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
                 /* ignore */
               }
               emitProgressChanged();
-              setMode('menu');
+              setMode('title');
             }}
             onDeploy={(p1, p2, sa, th) => {
               const lo = { p1, p2, sa, th };
@@ -991,7 +1189,17 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
               if (loadoutReturn === 'campaign') beginCampaign(lo);
               else setMode('shop');
             }}
-            onBack={() => setMode(loadoutReturn === 'campaign' ? 'menu' : 'shop')}
+            onBack={() => setMode(loadoutReturn === 'campaign' ? 'title' : 'shop')}
+            config={loadoutReturn === 'campaign' ? {
+              diff,
+              tiers: TIERS,
+              onDiff: (d) => setDiff(d as Difficulty),
+              squads,
+              squadOptions: SQUAD_OPTIONS,
+              squadSize: SQUAD_SIZE,
+              onSquads: (n) => setSquads(n),
+              rewardMult: diffMult(diff) * squadMult(squads),
+            } : undefined}
           />
         )}
 
@@ -1005,7 +1213,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             onRefit={() => { setLoadoutReturn('shop'); setMode('loadout'); }}
             onCustomize={() => setMode('customize')}
             onNext={() => { const next = run.level + 1; if (isGauntletLevel(next)) gauntletRef.current = 1; setRestarts(0); const b = run.buffs; setRun((r) => ({ ...r, level: next, buffs: NO_BUFFS })); persistSlot(next, run.gold, run.maxHp, run.upgrades, lastLoadout); startLevel(next, lastLoadout, run.maxHp, run.upgrades, undefined, b); }}
-            onExit={() => { setRunActive(false); setMode('menu'); }}
+            onExit={() => { setRunActive(false); setMode('title'); }}
           />
         )}
 
@@ -1021,13 +1229,17 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
 
         {mode === 'editor' && <LevelEditor onPlay={playLayout} onBack={() => setMode('menu')} />}
 
-        {mode === 'arsenal' && <FpsArsenal astro={astro} onSpend={spendAstro} onBack={() => setMode('menu')} />}
+        {mode === 'capitalgen' && <CapitalGenerator onBack={() => setMode('menu')} />}
 
-        {mode === 'armory' && <FpsArmory astro={astro} onSpend={spendAstro} onBack={() => setMode('menu')} />}
+        {mode === 'store' && <FpsStore gold={goldBank} astro={astro} onSpendGold={spendGold} onSpendAstro={spendAstro} onBack={() => setMode('hangar')} />}
 
-        {mode === 'division' && <FpsDivision onBack={() => setMode('menu')} />}
+        {mode === 'arsenal' && <FpsArsenal astro={astro} onSpend={spendAstro} onBack={() => setMode('hangar')} />}
 
-        {mode === 'premium' && <FpsPremium onBack={() => setMode('menu')} />}
+        {mode === 'armory' && <FpsArmory astro={astro} onSpend={spendAstro} onBack={() => setMode('hangar')} />}
+
+        {mode === 'division' && <FpsDivision onBack={() => setMode('hangar')} />}
+
+        {mode === 'premium' && <FpsPremium astro={astro} onSpend={spendAstro} onBack={() => setMode('hangar')} />}
 
         {mode === 'complete' && (
           <RunStatsCard
@@ -1040,7 +1252,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             earnedAstro={lastAstro}
             stats={runStats}
             onRestart={() => beginCampaign(lastLoadout)}
-            onMenu={() => { setRunActive(false); setMode('menu'); }}
+            onMenu={() => { setRunActive(false); setMode('title'); }}
           />
         )}
 
@@ -1057,7 +1269,7 @@ export function FpsGame({ initialRun, initialScreen, onRunSave, onRunEnd, onScor
             restartsLeft={MAX_RESTARTS - restarts}
             onRestartLevel={() => { setRestarts((n) => n + 1); startLevel(run.level, lastLoadout, run.maxHp, run.upgrades); }}
             onRestart={() => beginCampaign(lastLoadout)}
-            onMenu={() => { setRunActive(false); setMode('menu'); }}
+            onMenu={() => { setRunActive(false); setMode('title'); }}
           />
         )}
       </CRTFrame>

@@ -165,8 +165,8 @@ function columns(boxes: Box[], cx: number, cz: number, half: number, top: number
 
 /** A wall for one story with a window band cut out (sill + lintel). */
 function windowWall(boxes: Box[], cx: number, cz: number, sx: number, sz: number, yBase: number): void {
-  boxes.push({ x: cx, y: yBase + 0.5, z: cz, sx, sy: 1, sz, tex: 1 }); // sill
-  boxes.push({ x: cx, y: yBase + 2.6, z: cz, sx, sy: 0.8, sz, tex: 1 }); // lintel
+  boxes.push({ x: cx, y: yBase + 0.5, z: cz, sx, sy: 1, sz, tex: 1 }); // sill (0–1 m)
+  boxes.push({ x: cx, y: yBase + 3.5, z: cz, sx, sy: 0.6, sz, tex: 1 }); // lintel (3.2–3.8 m — clears tall heads)
 }
 
 /** Window walls on −x, +x and +z (open front on −z) for a story. */
@@ -176,7 +176,8 @@ function shell(boxes: Box[], cx: number, cz: number, half: number, bw: number, y
   windowWall(boxes, cx, cz + half, bw, 0.3, yBase);
 }
 
-const FLOOR_H = 3; // height between floors
+const FLOOR_H = 4; // height between floors — enlarged so the taller BLACKSTAR LEGION units
+// (up to the 3.1 m Suppressor) fit under decks + through openings with headroom (was 3).
 
 /** Multi-floor walled building. Every floor is a FULL deck (walls on 3 sides,
  *  open front −z). A switchback of external front ladders connects each floor to
@@ -202,7 +203,7 @@ function towerN(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
 /** 2-floor walled perch: ground walls + open upper deck, external ladder. */
 function tower2(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: number): void {
   const half = bw / 2;
-  const F2 = 3;
+  const F2 = FLOOR_H;
   const top = F2 + 0.6;
   const slab = 0.3;
   columns(boxes, cx, cz, half, top);
@@ -215,7 +216,7 @@ function tower2(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: num
 /** Open raised platform on columns — quick sniper deck. */
 function platform(boxes: Box[], ladders: Ladder[], cx: number, cz: number, bw: number): void {
   const half = bw / 2;
-  const H = 2.6;
+  const H = 3.6; // raised so tall units clear the underside (was 2.6)
   const slab = 0.3;
   columns(boxes, cx, cz, half, H + 0.5);
   boxes.push({ x: cx, y: H - slab / 2, z: cz, sx: bw, sy: slab, sz: bw, tex: 3 });
@@ -426,7 +427,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
       const inset = 1.0;
       for (const sx of [-1, 1]) grapplePoints.push({ x: pos.x + sx * (bw / 2 - inset), y: roofY, z: pos.z - (bw / 2 - inset) });
     } else {
-      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, 3.05));
+      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, FLOOR_H + 0.05)); // 2-floor perch deck
     }
   }
   // Then smaller structures fill the gaps (platforms + bunkers).
@@ -438,7 +439,7 @@ export function makeArena3D(enemyCount: number, seed: number): Level3D {
     placed.push({ x: pos.x, z: pos.z, rad: bw });
     if (r() < 0.5) {
       platform(boxes, ladders, pos.x, pos.z, bw);
-      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, 2.65)); // platform deck edge (H=2.6)
+      grapplePoints.push(roofGrapplePoint(pos.x, pos.z, bw / 2, 3.65)); // platform deck edge (H=3.6)
     } else bunker(boxes, pos.x, pos.z, bw, r);
   }
 

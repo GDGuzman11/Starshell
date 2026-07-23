@@ -21,15 +21,24 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
   const stun = Math.max(0, 1 - (now - snap.stunAt) / 1300); // stun/concussion distortion
   const fog = Math.max(0, 1 - (now - snap.fogAt) / 4500); // Kraken void fog
   const hud = deriveHudState(snap, now); // dynamic combat HUD emphasis
+  const shake = snap.shakeMag > 0 && now - snap.shakeAt < 450 ? snap.shakeMag : 0; // blast HUD shake
+  const suppress = snap.suppressMag && now - (snap.suppressAt ?? 0) < 220 ? snap.suppressMag : 0; // suppressor pin
 
   // Radar geometry: a circular minimap, player centred, forward = up.
   const RAD = 40; // usable px radius
   const RAD_RANGE = 60; // world units shown to the edge
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 font-pixel text-white transition-opacity duration-500" style={{ opacity: hud.inCombat ? 1 : 0.62 }}>
+    <div
+      className={`pointer-events-none absolute inset-0 z-30 font-pixel text-white transition-opacity duration-500 ${shake > 0 ? 'gdg-shake' : ''}`}
+      style={{ opacity: hud.inCombat ? 1 : 0.62, ['--shake' as string]: shake.toFixed(2), animationDuration: `${(0.28 + 0.22 * (1 - shake)).toFixed(2)}s` }}
+    >
       {hurt && (
         <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 60px 20px rgba(255,40,60,0.55)' }} />
+      )}
+      {/* SUPPRESSED: a Suppressor is raking your position — edges close in, telling you to move/take cover */}
+      {suppress > 0 && (
+        <div aria-hidden className="absolute inset-0" style={{ boxShadow: `inset 0 0 ${(80 + 90 * suppress).toFixed(0)}px ${(24 + 40 * suppress).toFixed(0)}px rgba(255,120,40,${(0.14 + 0.22 * suppress).toFixed(2)})`, backdropFilter: `blur(${(0.6 * suppress).toFixed(2)}px)` }} />
       )}
       {/* boss encounter: a restrained red combat tint */}
       {hud.boss && <div aria-hidden className="absolute inset-0" style={{ boxShadow: 'inset 0 0 100px 26px rgba(255,45,55,0.12)' }} />}
@@ -154,16 +163,28 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
                     PHASE {['I', 'II', 'III', 'IV'][b.phase - 1]} · {b.status}
                   </span>
                 </div>
+                {b.shield != null && b.shield > 0 && (
+                  <div className="mb-0.5 h-1 w-full overflow-hidden rounded border border-[#7fdfff]/40 bg-black/50">
+                    <div className="h-full transition-[width] duration-200" style={{ width: `${b.shield * 100}%`, backgroundColor: '#7fdfff' }} />
+                  </div>
+                )}
                 <div className={`h-2 w-full overflow-hidden rounded border bg-black/50 ${vuln ? 'border-[#aef5c8]/70' : 'border-[#ff5d6e]/40'}`}>
                   <div
                     className="h-full transition-[width] duration-200"
                     style={{ width: `${b.ratio * 100}%`, backgroundColor: vuln ? '#aef5c8' : '#ff5d6e' }}
                   />
                 </div>
-                {b.brood > 0 && <div className="text-right text-[6px] tracking-[0.15em] text-[#9cff6a]/70 sm:text-[7px]">BROOD ACTIVE: {b.brood}</div>}
+                {b.brood > 0 && <div className="text-right text-[6px] tracking-[0.15em] text-[#9cff6a]/70 sm:text-[7px]">{b.name === 'STAR DESTROYER' ? 'FIGHTERS' : 'BROOD ACTIVE'}: {b.brood}</div>}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Boss OVERDRIVE: weapons empowered ×2.5 for the fight */}
+      {snap.overdrive && (
+        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded border border-[#ff3a3a]/60 bg-[#ff2a2a]/15 px-3 py-1 text-[8px] tracking-[0.25em] text-[#ff8a8a] sm:text-[10px]" style={{ textShadow: '0 0 8px rgba(255,50,50,0.7)' }}>
+          ⚡ OVERDRIVE ×2.5
         </div>
       )}
 
@@ -175,6 +196,7 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
         <div className="mb-1 flex items-center gap-1.5 text-[7px] text-white/55 sm:text-[8px]">
           <span>HP {Math.round(snap.health)}/{snap.maxHp}</span>
           {snap.armor > 0 && <span className="text-[#5ad0ff]">◆ {Math.round(snap.armor)}</span>}
+          {snap.shieldOverloaded && <span className="text-[#ff8a3a]">⚠ OVERLOAD</span>}
         </div>
         <div className="h-2 w-28 overflow-hidden rounded-full bg-white/15 sm:w-36">
           <div
@@ -186,6 +208,12 @@ export function FpsHud({ snap, level, gold, astro, isTouch }: { snap: FpsSnapsho
         {snap.armor > 0 && (
           <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-white/10 sm:w-36">
             <div className="h-full bg-[#5ad0ff] transition-[width] duration-150" style={{ width: `${(snap.armor / snap.maxArmor) * 100}%` }} />
+          </div>
+        )}
+        {/* stamina bar (amber) — shown while depleting/refilling */}
+        {snap.stamina != null && snap.stamina < 0.999 && (
+          <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/10 sm:w-36">
+            <div className="h-full bg-[#ffd27a] transition-[width] duration-100" style={{ width: `${snap.stamina * 100}%` }} />
           </div>
         )}
       </div>

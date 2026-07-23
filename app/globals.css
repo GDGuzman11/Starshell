@@ -140,3 +140,33 @@ body {
     animation: none !important;
   }
 }
+
+/* Starshell — blast/suppression screen-HUD shake (intensity via the --shake prop, 0..1) */
+@keyframes gdg-shake {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate(calc(var(--shake, 0) * -7px), calc(var(--shake, 0) * 5px)) rotate(calc(var(--shake, 0) * -0.6deg));
+  }
+  40% {
+    transform: translate(calc(var(--shake, 0) * 6px), calc(var(--shake, 0) * -6px)) rotate(calc(var(--shake, 0) * 0.5deg));
+  }
+  60% {
+    transform: translate(calc(var(--shake, 0) * -5px), calc(var(--shake, 0) * -4px)) rotate(calc(var(--shake, 0) * 0.4deg));
+  }
+  80% {
+    transform: translate(calc(var(--shake, 0) * 4px), calc(var(--shake, 0) * 3px)) rotate(calc(var(--shake, 0) * -0.3deg));
+  }
+}
+.gdg-shake {
+  animation-name: gdg-shake;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gdg-shake {
+    animation: none;
+  }
+}

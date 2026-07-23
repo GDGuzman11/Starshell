@@ -35,6 +35,7 @@ export interface Enemy {
   alarm: number; // seconds of "under fire" evasive behaviour after being shot
   weapon: WeaponKind;
   cls: EnemyClass;
+  bodyH?: number; // visual height factor (model scale) — scales hit-zones + health-bar height
   side: 1 | -1; // which way this bot flanks/orbits
   barUntil: number; // show a health bar until this timestamp (set on hit)
   boss: BossKind | null;
@@ -94,6 +95,23 @@ export function hurtEnemy(e: Enemy, amount: number): void {
     amount -= absorbed;
   }
   if (amount > 0) e.health -= amount;
+}
+
+/** SIEGE-TANK SHIELD PROJECTOR — the Tank's main job. Every living Tank projects a field that
+ *  keeps nearby allies' energy shields charged (fast refill, ignoring the out-of-combat delay),
+ *  so troopers + healing units sheltering by it are far harder to kill. Drop the Tank and the
+ *  field collapses — the shields deplete normally again. Cross-squad (protects ANY enemy near). */
+export const TANK_AURA_R = 12; // shield projection radius (m)
+export function tankShieldAura(enemies: Enemy[], dt: number): void {
+  for (const t of enemies) {
+    if (t.cls !== 'tank' || t.health <= 0) continue;
+    for (const e of enemies) {
+      if (e === t || e.health <= 0 || e.maxShield <= 0) continue;
+      if (Math.hypot(e.x - t.x, e.z - t.z) > TANK_AURA_R) continue;
+      if (e.shield < e.maxShield) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.5 * dt);
+      e.shieldRegenT = 0; // the projector sustains it even under fire
+    }
+  }
 }
 
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
@@ -230,7 +248,16 @@ export interface Squad {
   lastAlive?: number; // alive bot count last frame (to detect losses)
   aggroUntil?: number; // hive-screech buff window: minions surge faster/aggressive
   buffUntil?: number; // Warlord Command Beacon: legion accuracy buff while it lives
+  // ── COMMANDER orchestration (a live, alert commander DICTATES the squad's manoeuvre) ──
+  cmdUntil?: number; // command aura active until this ms (commander alive + near allies)
+  order?: SquadOrder; // the play the commander has called
+  orderT?: number; // ms of the next order re-decision
+  focus?: { x: number; z: number } | null; // called target — the squad concentrates fire here
+  volleyT?: number; // ms of the next coordinated focus-fire volley
+  push?: number; // bounding phase toggle (0/1): which half moves vs. holds base-of-fire
+  axis?: number; // this squad's assigned approach BEARING (rad) for multi-squad pincers
 }
+export type SquadOrder = 'advance' | 'hold' | 'flank';
 
 /** Active smoke cloud — blocks the aliens' line of sight. */
 export interface Smoke {
@@ -240,7 +267,7 @@ export interface Smoke {
   r: number;
 }
 
-const ENEMY_HP = 500; // 5× tougher
+export const ENEMY_HP = 500; // 5× tougher — also the reference base for capital-ship HP scaling
 
 // The aliens draw from the same weapon families the player does.
 const WEAPONS: Record<WeaponKind, { rate: number; dmg: number; accMod: number; color: number }> = {
@@ -271,7 +298,7 @@ const CLASS: Record<EnemyClass, ClassDef> = {
   suppressor: { range: 18, angle: 0.25, strafe: 0.25, speedMul: 0.75, hp: 1.8, viewMul: 1.0 }, // pins, holds
   engineer: { range: 22, angle: 0.3, strafe: 0.3, speedMul: 0.9, hp: 1.2, viewMul: 0.9 }, // hangs back (support)
   tank: { range: 6, angle: 0.0, strafe: 0.2, speedMul: 0.6, hp: 3.0, viewMul: 1.0 }, // slow, heavy push
-  elite: { range: 9, angle: 1.1, strafe: 0.7, speedMul: 1.1, hp: 1.5, viewMul: 1.15 }, // fast flank
+  elite: { range: 2.6, angle: 0.9, strafe: 0.6, speedMul: 1.2, hp: 1.5, viewMul: 1.15 }, // agile blade assassin — charges to melee
   commander: { range: 20, angle: 0.2, strafe: 0.3, speedMul: 0.85, hp: 2.0, viewMul: 1.1 }, // stays back, calm
   berserker: { range: 2.5, angle: 0.0, strafe: 0.3, speedMul: 1.3, hp: 1.6, viewMul: 1.0 }, // charges to melee
   artillery: { range: 80, angle: 0.0, strafe: 0.0, speedMul: 0.0, hp: 3.0, viewMul: 1.8 }, // static siege gun, long reach + wide sensor sight (MGs to 40 m), tanky
@@ -287,7 +314,7 @@ const HEAL_RATE = 55; // HP/s a healer restores to a nearby wounded ally
 /** Heavy-firepower classes that will SHOOT breakable cover to flush the player out when
  *  they know where you are but a wall is in the way. Line units (riflemen/scouts) won't,
  *  so cover still matters most of the time. */
-const BREAKERS = new Set<EnemyClass>(['tank', 'breacher', 'suppressor', 'commander']);
+const BREAKERS = new Set<EnemyClass>(['breacher', 'suppressor', 'commander']); // Tank is now a support anchor, not a cover-breaker
 
 const R = 0.45; // collision radius
 const EYE_H = 1.4;
@@ -408,6 +435,9 @@ function avoidWalls(e: Enemy, lvl: Level3D, dx: number, dz: number, r: number, g
 const GROUND_FOLLOW = 0.55;
 
 function moveEnemy(e: Enemy, lvl: Level3D, wx: number, wz: number, speed: number, dt: number, r = R, grid?: SpatialGrid): void {
+  // The siege Tank is a huge exterior-only anchor: a wide collision radius keeps it in the
+  // open streets — it can't fit through building fronts/interiors, so it never goes inside.
+  if (e.cls === 'tank') r = Math.max(r, 2.7);
   const l = Math.hypot(wx, wz);
   if (l < 0.01) return;
   const [dx, dz] = avoidWalls(e, lvl, wx / l, wz / l, r, grid); // path around walls, not into them
@@ -936,6 +966,35 @@ export interface BossShot {
   gravity?: number; // >0 = arcing lob (grenades); omit for straight projectiles
 }
 
+/** COMMANDER BRAIN — a live, alert Commander DICTATES the squad each frame: it holds a command
+ *  aura (buffs allies' aim while it lives + is near them), CALLS a target (focus-fires the
+ *  player's last-known spot), and picks a PLAY (advance / hold / flank) on a cadence from the
+ *  situation. Kill the Commander → orders + aura stop and the squad fights loose (degrades). */
+function squadCommand(squad: Squad, enemies: Enemy[], pspeed: number, now: number): void {
+  const cmdr = enemies.find((e) => e.cls === 'commander' && e.health > 0 && !e.boss);
+  if (!cmdr || cmdr.state !== 'alert' || squad.lastKnown == null) {
+    // No commander (or not engaged) → no orders. The squad reverts to independent fighting.
+    squad.order = undefined;
+    squad.focus = null;
+    return;
+  }
+  // Command aura: live while the Commander is near at least one ally (so isolating/killing it drops it).
+  if (enemies.some((e) => e !== cmdr && e.health > 0 && !e.boss && Math.hypot(e.x - cmdr.x, e.z - cmdr.z) < 28)) {
+    squad.cmdUntil = now + 300;
+  }
+  // Call the target — the squad concentrates fire on the last-known player position.
+  squad.focus = squad.lastKnown;
+  // Pick the PLAY on a ~2.2 s cadence, from the squad's health + how the player is behaving.
+  if ((squad.orderT ?? 0) <= now) {
+    squad.orderT = now + 2000 + Math.random() * 800;
+    const alive = enemies.filter((e) => e.health > 0 && !e.boss);
+    const avgFrac = alive.reduce((a, e) => a + e.health / e.maxHealth, 0) / Math.max(1, alive.length);
+    const timid = pspeed < 1.5; // holed up / not pushing → dislodge them with a flank
+    squad.order = avgFrac < 0.45 || alive.length <= 2 ? 'hold' : timid ? 'flank' : 'advance';
+    squad.push = squad.push ? 0 : 1; // alternate the bounding element each order
+  }
+}
+
 /** Advance all bots with squad tactics: shared sight intel, role-based standoff
  *  + flanking, spacing, and LoS-gated fire. Returns player damage, tracers, and
  *  whether any bot can currently see the player (gates regen). */
@@ -954,7 +1013,7 @@ export function updateEnemies(
   nav?: NavGraph,
   elapsed = 0, // seconds since level start (start-of-match combat lock + boss grace)
   eyeOffset = EYE, // player's CURRENT eye height (drops when crouching) — LoS keys off this
-): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean; wallHits: WallHit[] } {
+): { damage: number; tracers: EnemyTracer[]; seen: boolean; bossShots: BossShot[]; bossTelegraphs: BossTelegraph[]; bossFog: boolean; wallHits: WallHit[]; suppress: number } {
   const P = PARAMS[diff];
   // Combat lock: nobody fires until the intro countdown ends. Boss grace: on a boss
   // level the player gets 10 s to find cover before anything can SEE them.
@@ -967,6 +1026,7 @@ export function updateEnemies(
   const pspeed = Math.hypot(pvx, pvz);
   let damage = 0;
   let seen = false;
+  let suppress = 0; // 0..1 how hard a Suppressor is pinning the player this frame (→ screen debuff)
   const tracers: EnemyTracer[] = [];
   const wallHits: WallHit[] = [];
   const bossShots: BossShot[] = [];
@@ -1024,9 +1084,9 @@ export function updateEnemies(
   }
   const haveIntel = squad.lastKnown != null && now - squad.t < 5000; // lose track sooner
 
-  // CAPTAIN: while the squad's commander lives, they steady everyone's aim (reuses
-  // the Command-Beacon buff path in fireAt). Drops off the moment the captain falls.
-  if (enemies.some((e) => e.cls === 'commander' && e.health > 0 && !e.boss)) squad.buffUntil = now + 400;
+  // COMMANDER: dictate the squad — command aura, target-call, and the play (advance/hold/flank).
+  squadCommand(squad, enemies, pspeed, now);
+  const commanded = now < (squad.cmdUntil ?? 0); // the command aura is live this frame
 
   // LEARNING: build a heatmap of where the player spends time (their favourite
   // ground), model how aggressively they play, and count bots lost — all persisted
@@ -1075,7 +1135,19 @@ export function updateEnemies(
       e.retreatT = 0.9; // back off after the swing
       tracers.push({ from: [e.x, e.y + 1, e.z], to: peye, color: 0xff3344 });
       damage += 16;
+      squad.aggroUntil = Math.max(squad.aggroUntil ?? 0, now + 2500); // FEAR scream → the squad surges
       return;
+    }
+    // ELITE: dual carapace blades — a pure melee assassin (never fires; darts in, slashes, peels).
+    if (e.cls === 'elite') {
+      if (dist <= 3.0) {
+        e.fireCd = 0.5;
+        e.muzzle = 0.12;
+        e.retreatT = 0.7;
+        tracers.push({ from: [e.x, e.y + 1, e.z], to: peye, color: 0xd8b46a });
+        damage += 13;
+      }
+      return; // otherwise keep closing — no ranged fire
     }
     if (!canSee) {
       // BREAK COVER: a heavy class that KNOWS where you are but can't get a clean shot
@@ -1124,8 +1196,9 @@ export function updateEnemies(
       if (e.weapon === 'mg') acc *= 0.7; // MG suppresses, it doesn't snipe
     }
     const diffMul = 0.85 + P.acc * 0.5; // normal ~0.97 · hard ~1.03 · nightmare ~1.10
-    const zero = 0.9 + 0.1 * Math.min(1, e.track / 1.4); // small zero-in on held LoS
-    const buff = now < (squad.buffUntil ?? 0) ? 1.12 : 1; // Warlord Command Beacon (toned down)
+    // A live COMMANDER sharpens the squad: faster zero-in (track/1.0 vs 1.4) + tighter aim.
+    const zero = 0.9 + (commanded ? 0.18 : 0.1) * Math.min(1, e.track / (commanded ? 1.0 : 1.4));
+    const buff = (now < (squad.buffUntil ?? 0) ? 1.12 : 1) * (commanded ? 1.08 : 1);
     const cap = isSniper ? 0.95 : e.weapon === 'mg' ? 0.6 : 0.85; // never near-perfect
     if (Math.random() < Math.min(cap, acc * diffMul * zero * buff)) damage += W.dmg * P.dmgMul;
   };
@@ -1224,7 +1297,7 @@ export function updateEnemies(
         const v = Math.sqrt((dd * G) / Math.max(0.35, Math.sin(2 * theta))); // speed to land at range dd
         const vh = v * Math.cos(theta);
         const my = e.y + 3.2; // muzzle high on the angled barrel
-        bossShots.push({ kind: 'grenade', x: e.x, y: my, z: e.z, dir: [(dx / dd) * vh, v * Math.sin(theta), (dz / dd) * vh], speed: v, dmg: Math.round(22 * P.dmgMul), color: 0xff7a2a, splash: 4.2, gravity: G });
+        bossShots.push({ kind: 'artyshell', x: e.x, y: my, z: e.z, dir: [(dx / dd) * vh, v * Math.sin(theta), (dz / dd) * vh], speed: v, dmg: Math.round(22 * P.dmgMul), color: 0xff7a2a, splash: 4.2, gravity: G });
         bossTelegraphs.push({ kind: 'eruption', x: aimX, z: aimZ, radius: 4.8, delay: Math.min(1.6, 0.7 + dd * 0.012) });
         // WALL DESTRUCTION: chip nearby breakable boxes at the impact (bunker-buster).
         const from: Vec3 = [e.x, my, e.z];
@@ -1279,7 +1352,10 @@ export function updateEnemies(
       const tgt = e.state === 'alert' && e.lastSeen ? e.lastSeen : haveIntel ? squad.lastKnown : null;
       if (tgt) {
         e.state = 'alert';
-        const aggro = now < (squad.aggroUntil ?? 0) ? 1.3 : 1; // hive-screech surge
+        // Base surge × the Commander's called PLAY: ADVANCE pushes harder, HOLD eases off the
+        // gas (hold the line + let the base-of-fire work), FLANK stays neutral (Phase B routes it).
+        const orderMul = squad.order === 'advance' ? 1.15 : squad.order === 'hold' ? 0.8 : 1;
+        const aggro = (now < (squad.aggroUntil ?? 0) ? 1.3 : 1) * orderMul;
         const dist = Math.hypot(player.x - e.x, player.z - e.z);
         e.fireCd -= dt;
         let tx = tgt.x - e.x;
@@ -1911,9 +1987,9 @@ export function updateEnemies(
       const dx = e.x - a.x;
       const dz = e.z - a.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 < 20.25 && d2 > 0.0001) { // within 4.5 m
+      if (d2 < 42.25 && d2 > 0.0001) { // within 6.5 m — a hard no-cluster rule (never bunch up)
         const d = Math.sqrt(d2);
-        const w = (4.5 - d) / 4.5; // stronger the closer they are
+        const w = ((6.5 - d) / 6.5) * 1.6; // stronger + wider than before → distinct lanes, no grenade-bait
         sepX += (dx / d) * w;
         sepZ += (dz / d) * w;
       }
@@ -1990,6 +2066,9 @@ export function updateEnemies(
         } else if (sees[i]) {
           const [rx, rz] = wallRepulse(e, lvl, grid); // hold the shot, but don't hug the wall
           if (rx || rz) moveEnemy(e, lvl, rx, rz, P.speed * 0.5 * slow, dt, R, grid);
+          // QUICK REPOSITION: after taking a shot, relocate to a fresh perch so you can't just
+          // peek-counter the same window — the marksman keeps moving between shots.
+          if (e.muzzle > 0 && Math.random() < dt * 0.5) { e.perch = null; e.perchT = 0; }
         }
       } else if (nav) {
         const nf = navFollow(e, nav, lvl, focusS.x, focusS.z, 0, P.speed * role.speedMul * slow, dt, grid);
@@ -2036,15 +2115,26 @@ export function updateEnemies(
     if (tgt) {
       e.state = 'alert';
       const boosted = e.alarm > 0;
+      // COMBINED-ARMS MANOEUVRE — the Commander's order shapes each bot's job:
+      //  · ADVANCE = bounding: half the squad HOLDS a base-of-fire while the other half moves
+      //    (alternates every order via squad.push) → there's always covering fire.
+      //  · FLANK = the fast flankers swing WIDE to your side/rear while the base FIXES you.
+      //  · HOLD = the base-of-fire holds back and works you over from range.
+      const flankRole = e.cls === 'scout' || e.cls === 'breacher' || e.cls === 'elite' || e.cls === 'berserker';
+      let hold = false;
+      let flankWide = 0;
+      if (squad.order === 'hold') hold = !flankRole;
+      else if (squad.order === 'flank') { if (flankRole) flankWide = 11 * e.side; else hold = true; }
+      else if (squad.order === 'advance' && (slot[i] + (squad.push ?? 0)) % 2 !== 0) hold = true; // this bound's base-of-fire
       // LONG-RANGE NAV: when the target is far, route the battlefield via the nav
       // graph (around structures, up ladders, across ramps, out of trenches) and
       // hand off to the close-range standoff/orbit logic below once within reach.
       const distTgt = Math.hypot(tgt.x - e.x, tgt.z - e.z);
-      if (nav && distTgt > NAV_NEAR) {
+      if (nav && distTgt > NAV_NEAR && !hold) {
         const tgtY = player.y > e.y + 2 ? player.y : 0;
-        // Approach from a SPREAD bearing (per squad slot) so the team surrounds and
-        // corners the player from different sides instead of single-filing to one spot.
-        const off = ((slot[i] % 5) - 2) * 4; // −8..+8 m lateral offset on the goal
+        // Approach from a SPREAD bearing (per squad slot) + a wide FLANK offset when ordered,
+        // so the team surrounds/pincers instead of single-filing to one spot.
+        const off = ((slot[i] % 5) - 2) * 4 + flankWide; // −8..+8 m spread + wide flank
         const pl2 = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
         const gX = tgt.x + (-(tgt.z - e.z) / pl2) * off;
         const gZ = tgt.z + ((tgt.x - e.x) / pl2) * off;
@@ -2074,7 +2164,8 @@ export function updateEnemies(
       // Hit-and-run: while retreating after a melee strike, hold a much wider standoff
       // so the bot peels away, then closes back in for the next swing.
       if (e.retreatT) e.retreatT = Math.max(0, e.retreatT - dt);
-      const standRange = (e.retreatT ?? 0) > 0 ? role.range + 8 : role.range;
+      // Base-of-fire (holding) sits back a bit and works from range; retreating peels wider.
+      const standRange = (e.retreatT ?? 0) > 0 ? role.range + 8 : hold ? role.range + 7 : role.range;
       const standX = tgt.x + Math.cos(ang) * standRange;
       const standZ = tgt.z + Math.sin(ang) * standRange;
       let wx = standX - e.x;
@@ -2164,5 +2255,12 @@ export function updateEnemies(
       }
     }
   }
-  return { damage, tracers, seen, bossShots, bossTelegraphs, bossFog, wallHits };
+  // SUPPRESSION: a Suppressor with a clean line + in MG range PINS the player — sustained fire
+  // applies a screen debuff (handled in the loop), stacking a little with each suppressor.
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.cls !== 'suppressor' || e.health <= 0 || !sees[i]) continue;
+    if (Math.hypot(player.x - e.x, player.z - e.z) < WEAPON_RANGE.mg + 6) suppress = Math.min(1, suppress + 0.7);
+  }
+  return { damage, tracers, seen, bossShots, bossTelegraphs, bossFog, wallHits, suppress };
 }

@@ -13,6 +13,7 @@ import type { RenderTier } from './materials';
 import { buildGun, disposeModel } from './models';
 import { buildEngineeredGun } from './arsenal/partModel';
 import type { EngPart } from './arsenal/parts';
+import { gunById } from './weapons';
 
 // Rest pose + framing — all one-line tunable (bottom-right, barrel angled inward).
 const REST = { x: 0.2, y: -0.17, z: -0.36, ry: 0.16, rx: 0.03, size: 0.52 };
@@ -24,12 +25,16 @@ export class Viewmodel {
   private model: THREE.Group | null = null;
   private spins: THREE.Object3D[] = [];
   private glows: { mat: THREE.MeshStandardMaterial; base: number }[] = [];
+  private scans: { o: THREE.Object3D; from: number; to: number; speed: number }[] = [];
+  private bobs: { o: THREE.Object3D; amp: number; speed: number; base: number }[] = [];
   private bolt: THREE.Object3D | null = null;
   private boltBaseZ = 0;
   private flash: THREE.Mesh;
   private tier: RenderTier;
   private reduced: boolean;
   private kick = 0; // recoil 1→0
+  private empowered = false; // OVERDRIVE: flood the gun red for the boss fight
+  private redMats: { mat: THREE.MeshStandardMaterial; emissive: number; intensity: number }[] = []; // originals to restore
   private bob = 0; // bob phase
   private reloadDur = 0;
   private flashT = 0;
@@ -64,6 +69,7 @@ export class Viewmodel {
     if (this.model) {
       this.holder.remove(this.model);
       disposeModel(this.model);
+      this.redMats = []; // old materials are gone
     }
     // Build the ENGINEERED model when components are equipped so installed parts are
     // visible first-person (same builder the loadout preview uses); else the base gun.
@@ -81,15 +87,23 @@ export class Viewmodel {
 
     this.spins = [];
     this.glows = [];
+    this.scans = [];
+    this.bobs = [];
     m.traverse((o) => {
       if (o.name === 'spin') this.spins.push(o);
-      else if (o.name === 'coil' || o.name === 'glow') {
+      if (o.name === 'scan' && o.userData.scan) this.scans.push({ o, ...(o.userData.scan as { from: number; to: number; speed: number }) });
+      if (o.name === 'bob' && o.userData.bob) this.bobs.push({ o, base: o.position.y, ...(o.userData.bob as { amp: number; speed: number }) });
+      if (o.name === 'coil' || o.name === 'glow' || o.name === 'scan') {
         const mat = (o as THREE.Mesh).material;
         if (mat instanceof THREE.MeshStandardMaterial) this.glows.push({ mat, base: mat.emissiveIntensity });
       }
     });
     this.bolt = m.getObjectByName('bolt') ?? null;
     this.boltBaseZ = this.bolt ? this.bolt.position.z : 0;
+
+    // Muzzle flash takes the gun's own colour (from the reference sheet) so energy
+    // weapons flash their hue and ballistics flash warm — per Gabe's spec.
+    (this.flash.material as THREE.MeshBasicMaterial).color.setHex(gunById(id).color);
 
     // Park the flash at the muzzle (in holder space, so it tracks the gun pose).
     this.holder.updateWorldMatrix(true, true);
@@ -101,6 +115,34 @@ export class Viewmodel {
     } else {
       this.flash.position.set(0, 0, -REST.size * 0.6);
     }
+
+    if (this.empowered) this.applyEmpowerTint(); // a weapon switch during OVERDRIVE stays red
+  }
+
+  /** OVERDRIVE red state: flood the gun's materials with a red emissive so every held
+   *  weapon glows red during a boss fight. Toggled by the loop from `g.weaponBuff`. */
+  setEmpowered(on: boolean): void {
+    this.empowered = on;
+    this.applyEmpowerTint();
+  }
+
+  private applyEmpowerTint(): void {
+    for (const r of this.redMats) { r.mat.emissive.setHex(r.emissive); r.mat.emissiveIntensity = r.intensity; } // restore
+    this.redMats = [];
+    if (!this.empowered || !this.model) return;
+    const seen = new Set<THREE.MeshStandardMaterial>();
+    this.model.traverse((o) => {
+      const mat = (o as THREE.Mesh).material;
+      const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
+      for (const m of mats) {
+        if (m instanceof THREE.MeshStandardMaterial && !seen.has(m)) {
+          seen.add(m);
+          this.redMats.push({ mat: m, emissive: m.emissive.getHex(), intensity: m.emissiveIntensity });
+          m.emissive.setHex(0xff0808); // bright red
+          m.emissiveIntensity = Math.max(m.emissiveIntensity, 2.2);
+        }
+      }
+    });
   }
 
   fire(): void {
@@ -141,8 +183,13 @@ export class Viewmodel {
     for (const o of this.spins) o.rotation.z += dt * (this.spinV + 0.4);
 
     // Pulsing coils.
-    const t = (typeof performance !== 'undefined' ? performance.now() : 0) * 0.003;
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const t = now * 0.003;
     for (const g of this.glows) g.mat.emissiveIntensity = g.base * (0.7 + 0.4 * (0.5 + 0.5 * Math.sin(t)));
+    // Traveling laser + levitating parts, so the premium/animated graphics show in-game too.
+    const ts = now / 1000;
+    for (const sc of this.scans) sc.o.position.z = sc.from + (sc.to - sc.from) * (0.5 + 0.5 * Math.sin(ts * sc.speed));
+    for (const b of this.bobs) b.o.position.y = b.base + b.amp * Math.sin(ts * b.speed);
 
     // Bolt cycle on recoil.
     if (this.bolt) this.bolt.position.z = this.boltBaseZ + this.kick * 0.03;

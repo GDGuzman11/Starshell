@@ -41,12 +41,16 @@ export function buildCarbine(tier: RenderTier): THREE.Group {
   const hot = accent(ACCENT.amber, tier, 1.1);
   const receiver = box(0.07, 0.09, 0.36, body, 0, 0, 0.04); // slim receiver
   const barrel = cylZ(0.022, 0.6, dark, 0, 0.02, -0.42); // long barrel
+  barrel.name = 'base:barrel'; // engineering barrel slot replaces this
   const handguard = box(0.06, 0.06, 0.26, body, 0, 0.01, -0.22);
   const frontSight = box(0.015, 0.05, 0.02, hot, 0, 0.07, -0.66);
-  // skeleton stock: an open thin frame at the rear
+  // skeleton stock: an open thin frame at the rear (rear/stock slot replaces this)
   const stockTop = box(0.03, 0.02, 0.18, dark, 0, 0.05, 0.3);
+  stockTop.name = 'base:stock';
   const stockBot = box(0.03, 0.02, 0.18, dark, 0, -0.06, 0.3);
+  stockBot.name = 'base:stock';
   const stockEnd = box(0.03, 0.13, 0.02, dark, 0, 0, 0.38);
+  stockEnd.name = 'base:stock';
   const mag = box(0.05, 0.16, 0.07, dark, 0, -0.13, 0.06); // straight box mag
   mag.name = 'mag';
   const grp = grip(0.05, 0.13, 0.06, dark, 0, -0.11, 0.16);
@@ -60,6 +64,7 @@ export function buildAssaultX(tier: RenderTier): THREE.Group {
   const hot = accent(ACCENT.orange, tier);
   const receiver = box(0.12, 0.12, 0.4, body, 0, 0, 0.02); // large chunky receiver
   const barrel = cylZ(0.04, 0.4, dark, 0, 0.01, -0.34); // thick barrel
+  barrel.name = 'base:barrel';
   const shroud = box(0.1, 0.09, 0.2, body, 0, 0.01, -0.24);
   const ventL = finStack(4, 0.04, 0.02, 0.08, hot, -0.065, 0.02, -0.18); // dual cooling vents
   const ventR = finStack(4, 0.04, 0.02, 0.08, hot, 0.065, 0.02, -0.18);
@@ -67,6 +72,8 @@ export function buildAssaultX(tier: RenderTier): THREE.Group {
   mag.name = 'mag';
   const grp = grip(0.07, 0.15, 0.08, dark, 0, -0.14, 0.18);
   const stock = box(0.08, 0.1, 0.16, body, 0, -0.01, 0.3);
+  stock.name = 'base:stock';
   const optic = box(0.05, 0.04, 0.14, hot, 0, 0.1, 0.02);
+  optic.name = 'base:optic';
   return model([receiver, barrel, shroud, ventL, ventR, mag, grp, stock, optic, muzzleAt(-0.56, 0.01)]);
 }
