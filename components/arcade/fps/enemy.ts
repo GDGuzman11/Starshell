@@ -990,7 +990,10 @@ function squadCommand(squad: Squad, enemies: Enemy[], pspeed: number, now: numbe
     const alive = enemies.filter((e) => e.health > 0 && !e.boss);
     const avgFrac = alive.reduce((a, e) => a + e.health / e.maxHealth, 0) / Math.max(1, alive.length);
     const timid = pspeed < 1.5; // holed up / not pushing → dislodge them with a flank
-    squad.order = avgFrac < 0.45 || alive.length <= 2 ? 'hold' : timid ? 'flank' : 'advance';
+    // ADAPT (learned from level 1): the player's aggression profile shapes the play — punish a
+    // RUSHER by holding a base-of-fire, chase a camper down with a flank, else bound forward.
+    const aggr = squad.mem?.aggression ?? 0.5;
+    squad.order = avgFrac < 0.45 || alive.length <= 2 ? 'hold' : aggr > 0.55 && Math.random() < 0.5 ? 'hold' : timid ? 'flank' : 'advance';
     squad.push = squad.push ? 0 : 1; // alternate the bounding element each order
   }
 }
@@ -2130,14 +2133,30 @@ export function updateEnemies(
       // graph (around structures, up ladders, across ramps, out of trenches) and
       // hand off to the close-range standoff/orbit logic below once within reach.
       const distTgt = Math.hypot(tgt.x - e.x, tgt.z - e.z);
+      // LEAP / LUNGE: the melee assassins (Elite / Berserker) close the gap in fast BURSTS — a
+      // dash rather than a steady jog — so they're genuinely threatening against a kiting player.
+      if ((e.cls === 'elite' || e.cls === 'berserker') && sees[i] && distTgt > 3.5 && distTgt < 16 && Math.sin(now * 0.0035 + e.wander * 3) > 0.8) {
+        moveEnemy(e, lvl, tgt.x - e.x + sepX * 0.4, tgt.z - e.z + sepZ * 0.4, P.speed * role.speedMul * 2.2 * slow, dt, R, grid);
+        fireAt(e, sees[i]);
+        continue;
+      }
       if (nav && distTgt > NAV_NEAR && !hold) {
         const tgtY = player.y > e.y + 2 ? player.y : 0;
+        // MULTI-SQUAD PINCER: stage the approach on this squad's assigned bearing so 2+ groups
+        // converge from different sides; the stage offset shrinks as they close, funnelling in.
+        let baseX = tgt.x;
+        let baseZ = tgt.z;
+        if (squad.axis != null && distTgt > 14) {
+          const stage = Math.min(16, distTgt * 0.45);
+          baseX = tgt.x + Math.cos(squad.axis) * stage;
+          baseZ = tgt.z + Math.sin(squad.axis) * stage;
+        }
         // Approach from a SPREAD bearing (per squad slot) + a wide FLANK offset when ordered,
         // so the team surrounds/pincers instead of single-filing to one spot.
         const off = ((slot[i] % 5) - 2) * 4 + flankWide; // −8..+8 m spread + wide flank
-        const pl2 = Math.hypot(tgt.x - e.x, tgt.z - e.z) || 1;
-        const gX = tgt.x + (-(tgt.z - e.z) / pl2) * off;
-        const gZ = tgt.z + ((tgt.x - e.x) / pl2) * off;
+        const pl2 = Math.hypot(baseX - e.x, baseZ - e.z) || 1;
+        const gX = baseX + (-(baseZ - e.z) / pl2) * off;
+        const gZ = baseZ + ((baseX - e.x) / pl2) * off;
         const nf = navFollow(e, nav, lvl, gX, gZ, tgtY, P.speed * role.speedMul * slow, dt, grid);
         if (nf === 'climb') {
           fireAt(e, sees[i]);

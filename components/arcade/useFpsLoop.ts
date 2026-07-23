@@ -2183,6 +2183,14 @@ export function useFpsLoop(
           let totalDamage = 0;
           let anySeen = false;
           let suppress = 0; // strongest Suppressor pin this frame (→ screen debuff)
+          // MULTI-SQUAD battlefield: when 2+ squads are engaged, give each a DISTINCT approach
+          // BEARING toward the player so the force converges from different sides (a pincer, not a
+          // conga line). Each squad's Commander then manoeuvres its members along that axis.
+          if (!frozen) {
+            const engaged = g.squads.filter((sq) => sq.lastKnown && now - sq.t < 5000);
+            if (engaged.length > 1) engaged.forEach((sq, k) => (sq.axis = (k / engaged.length) * Math.PI * 2 + now / 30000));
+            else for (const sq of g.squads) sq.axis = undefined;
+          }
           // Freeze enemy AI (movement + fire) during the boss-opening cinematic.
           if (!frozen) for (let s = 0; s < g.squads.length; s++) {
             const group = squadGroups[s];

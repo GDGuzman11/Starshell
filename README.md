@@ -67,10 +67,12 @@ npm run build && npm run start   # production build
   advances** (always covering fire) and **wide pincer flanks**, keep **dispersed** (never
   cluster), the **Suppressor actually pins you** (a screen suppression debuff) while
   flankers move, the **Tank** projects a shield over nearby allies, the **Berserker's
-  fear scream** surges the squad, and the **Marksman repositions** between shots — on top
-  of the existing LoS/crouch-aware perception, shared intel, zero-in aim, climbing, and
-  cross-fight learning. *(Deeper "thinking" utility movement + multi-squad strategy +
-  level-1 player-pattern learning are in progress.)*
+  fear scream** surges the squad, and the **Marksman repositions** between shots. **2+ squads
+  coordinate as a force** — each converges from a **different bearing** (a real pincer, not
+  single-file) — the **Elite/Berserker leap** in fast bursts to close on a kiter, and the squad
+  **adapts from level 1** to your playstyle (learned aggression → punish a rusher by holding a
+  base-of-fire, chase a camper with a flank) — on top of the existing LoS/crouch-aware
+  perception, shared intel, zero-in aim, and climbing.
 - **Bosses + OVERDRIVE:** distinct 3D boss encounters (Xenomorph hive predator · Warlord
   battlefield commander with a Command Beacon + Shield Wall · Kraken living arena · a
   final **GAUNTLET**), each a coordinated command unit with themed minions, HP phases,
