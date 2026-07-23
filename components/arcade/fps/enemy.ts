@@ -114,6 +114,13 @@ export function tankShieldAura(enemies: Enemy[], dt: number): void {
   }
 }
 
+/** ENGINEER REPAIR-SHIELD DRONE FIELD — the Engineer's constructor drones project a
+ *  continuous field that tops up nearby allies' shields (a second protection layer under
+ *  the Tank's, and a reason to keep the medic alive). Weaker + shorter-ranged than the
+ *  Tank's, and it does NOT clear the regen delay, so it stacks without trivialising. */
+export const ENG_DRONE_R = 8; // repair-field radius (m)
+export const ENG_DRONE_RATE = 0.28; // fraction of maxShield restored per second
+
 /** The four boss aliens (levels 5/10/15/20). Bigger, faster, smarter; each has
  *  a ranged attack + a melee attack when you get close. */
 export type BossKind = 'xeno' | 'warrior' | 'octopus' | 'archon' | 'behemoth' | 'specter' | 'leviathan' | 'monolith' | 'oblivion' | 'colossus' | 'chimera' | 'oracle' | 'infestor';
@@ -256,6 +263,7 @@ export interface Squad {
   volleyT?: number; // ms of the next coordinated focus-fire volley
   push?: number; // bounding phase toggle (0/1): which half moves vs. holds base-of-fire
   axis?: number; // this squad's assigned approach BEARING (rad) for multi-squad pincers
+  relayT?: number; // ms of the last SCOUT sighting — a live spotter keeps intel fresh longer
 }
 export type SquadOrder = 'advance' | 'hold' | 'flank';
 
@@ -1069,6 +1077,9 @@ export function updateEnemies(
       enemies[i].lastSeen = { x: player.x, z: player.z };
       squad.lastKnown = { x: player.x, z: player.z };
       squad.t = now;
+      // SCOUT RELAY: a Scout is a dedicated spotter — while one has eyes on you the
+      // whole squad keeps tracking you for longer after you break line of sight.
+      if (enemies[i].cls === 'scout') squad.relayT = now;
       if (mem) {
         // NOTIFY THE LEGION: the instant one bot sights the player, every squad learns
         // the spot (independent patrol UNTIL first contact, then all converge to chase).
@@ -1085,7 +1096,9 @@ export function updateEnemies(
     squad.lastKnown = mem.alertPos;
     squad.t = mem.alertT!;
   }
-  const haveIntel = squad.lastKnown != null && now - squad.t < 5000; // lose track sooner
+  // A fresh Scout relay stretches the squad's memory of your position (8.5s vs 5s).
+  const relayFresh = now - (squad.relayT ?? -1e9) < 3500;
+  const haveIntel = squad.lastKnown != null && now - squad.t < (relayFresh ? 8500 : 5000);
 
   // COMMANDER: dictate the squad — command aura, target-call, and the play (advance/hold/flank).
   squadCommand(squad, enemies, pspeed, now);
@@ -2002,6 +2015,13 @@ export function updateEnemies(
     // green beam (health first, then shield). Only when someone actually needs it —
     // otherwise it falls through to normal hang-back support behaviour.
     if (e.cls === 'engineer') {
+      // REPAIR-SHIELD DRONE FIELD: constructor drones top up nearby allies' shields
+      // every frame (esp. the Tank up front), independent of whether anyone's wounded.
+      for (let j = 0; j < enemies.length; j++) {
+        const a = enemies[j];
+        if (j === i || a.health <= 0 || a.boss || a.maxShield <= 0 || a.shield >= a.maxShield) continue;
+        if (Math.hypot(a.x - e.x, a.z - e.z) < ENG_DRONE_R) a.shield = Math.min(a.maxShield, a.shield + a.maxShield * ENG_DRONE_RATE * dt);
+      }
       let mend: Enemy | null = null;
       let worst = 0.985; // ignore ~full-health allies
       for (let j = 0; j < enemies.length; j++) {
