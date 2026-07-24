@@ -18,6 +18,7 @@ const AUTO_MS = 8000;
 
 export function IntroSlide({ onDone, reducedMotion = false, volume = 0.85 }: { onDone: () => void; reducedMotion?: boolean; volume?: number }) {
   const [leaving, setLeaving] = useState(false);
+  const [imgOk, setImgOk] = useState(true); // broken/missing art → on-brand procedural fallback (no question-mark)
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const doneRef = useRef(false);
 
@@ -67,22 +68,34 @@ export function IntroSlide({ onDone, reducedMotion = false, volume = 0.85 }: { o
     <div className={`absolute inset-0 z-[80] bg-black ${leaving ? 'opacity-0' : 'opacity-100'} transition-opacity duration-[420ms]`}>
       {/* Keyframe inlined so it ports with the component (globals.css isn't synced to the standalone repo). */}
       <style>{'@keyframes ss-kenburns{from{transform:scale(1) translateY(0)}to{transform:scale(1.09) translateY(-1.5%)}}'}</style>
-      {/* The panel — contain on black letterbox so the whole art + its baked caption show. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- full-screen cinematic in the code-split /arcade chunk; next/image adds no value here */}
-      <img
-        src={IMG}
-        alt="The Outlander stands alone over the fallen as the alien fleet fills the sky."
-        className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
-        style={reducedMotion ? undefined : { animation: 'ss-kenburns 14s ease-out both' }}
-        draggable={false}
-      />
+      {imgOk ? (
+        <>
+          {/* The panel — contain on black letterbox so the whole art + its baked caption show. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- full-screen cinematic in the code-split /arcade chunk; next/image adds no value here */}
+          <img
+            src={IMG}
+            alt="The Outlander stands alone over the fallen as the alien fleet fills the sky."
+            className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+            style={reducedMotion ? undefined : { animation: 'ss-kenburns 14s ease-out both' }}
+            draggable={false}
+            onError={() => setImgOk(false)}
+          />
+        </>
+      ) : (
+        // Missing art → a procedural fallback backdrop (deep-space glow) so the slide never
+        // shows a broken-image icon; the blurb + buttons still read cleanly over it.
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(130% 100% at 50% 30%, #1a2740 0%, #0b1120 45%, #05060c 100%)' }}
+        />
+      )}
       {/* Subtle vignette for depth. */}
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,0.55) 100%)' }} />
 
-      {/* Outlander-POV blurb — bottom-right. */}
-      <div className="absolute bottom-6 right-4 max-w-[min(88vw,420px)] border-l-2 border-[#ff7a2a]/80 bg-black/55 px-4 py-3 backdrop-blur-sm sm:bottom-10 sm:right-8">
+      {/* Outlander-POV blurb — sits above the Continue button on mobile, bottom-right on larger screens. */}
+      <div className="absolute bottom-[76px] right-3 left-3 max-w-[min(92vw,420px)] border-l-2 border-[#ff7a2a]/80 bg-black/55 px-4 py-3 backdrop-blur-sm sm:left-auto sm:bottom-10 sm:right-8">
         <p className="font-pixel text-[8px] uppercase tracking-[0.28em] text-[#ff7a2a]/90">{'// OUTLANDER'}</p>
-        <p className="mt-2 text-[12px] leading-relaxed text-white/90 sm:text-[13px]">
+        <p className="mt-2 text-[11px] leading-relaxed text-white/90 sm:text-[13px]">
           Okay so &mdash; everyone&rsquo;s dead, there&rsquo;s a warship the size of my problems parked in the sky,
           and I&rsquo;m standing on what&rsquo;s left of my squad. Command&rsquo;s not answering. Reinforcements aren&rsquo;t
           coming. Fresh out of people to disappoint. Cool. Fuck it &mdash; let&rsquo;s see what I can do.
@@ -90,13 +103,13 @@ export function IntroSlide({ onDone, reducedMotion = false, volume = 0.85 }: { o
       </div>
 
       {/* Skip (top-right) + Continue (bottom-center). */}
-      <button type="button" onClick={finish} className="absolute right-3 top-3 z-[81] font-pixel text-[9px] uppercase tracking-[0.2em] text-white/50 transition-colors hover:text-white">
+      <button type="button" onClick={finish} className="absolute right-3 top-3 z-[81] min-h-[36px] px-2 font-pixel text-[9px] uppercase tracking-[0.2em] text-white/50 transition-colors hover:text-white">
         Skip ▸
       </button>
       <button
         type="button"
         onClick={finish}
-        className="absolute bottom-6 left-1/2 z-[81] min-h-[44px] -translate-x-1/2 rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase tracking-[0.15em] text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:bottom-8"
+        className="absolute bottom-4 left-1/2 z-[81] min-h-[44px] -translate-x-1/2 rounded-md border border-[#aef5c8]/40 bg-[#aef5c8]/10 px-8 font-pixel text-[11px] uppercase tracking-[0.15em] text-[#aef5c8] transition-colors hover:bg-[#aef5c8]/20 sm:bottom-8"
       >
         Continue ▸
       </button>
